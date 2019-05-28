@@ -1,0 +1,17 @@
+target
+local.properties
+.idea
+*.iml
+run.sh
+*~
+local.yml
+config/production.yml
+config/federated.yml
+config/staging.yml
+config/testing.yml
+service/config/production.yml
+service/config/federated.yml
+service/config/staging.yml
+service/config/testing.yml
+.opsmanage
+put.sh
