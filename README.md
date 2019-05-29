@@ -1,12 +1,15 @@
-Signal-Server
+Shadow-Server
 =================
+
+This product is a modified version of Signal-Server by Open Whisper Systems https://github.com/signalapp/Signal-Server and is aimed at corporate environments.
 
 Documentation
 -------------
 
-Looking for protocol documentation? Check out the website!
+Some protocol and implementation documentation is available here: https://signal.org/docs/
 
-https://signal.org/docs/
+Installation and operation documentation is coming soon.
+
 
 Cryptography Notice
 ------------
@@ -20,7 +23,10 @@ The form and manner of this distribution makes it eligible for export under the 
 
 License
 ---------------------
-
+Original product:
 Copyright 2013-2016 Open Whisper Systems
+
+Modified product:
+Copyright 2019 Sophisticated Research
 
 Licensed under the AGPLv3: https://www.gnu.org/licenses/agpl-3.0.html
