@@ -37,10 +37,10 @@ import javax.ws.rs.QueryParam;
 import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
-import java.io.IOException;
+// import java.io.IOException;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
-import java.util.Arrays;
+// import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -62,7 +62,7 @@ import su.sres.shadowserver.entities.RegistrationLock;
 import su.sres.shadowserver.entities.RegistrationLockFailure;
 import su.sres.shadowserver.limits.RateLimiters;
 import su.sres.shadowserver.recaptcha.RecaptchaClient;
-import su.sres.shadowserver.sms.SmsSender;
+// import su.sres.shadowserver.sms.SmsSender;
 import su.sres.shadowserver.storage.AbusiveHostRule;
 import su.sres.shadowserver.storage.AbusiveHostRules;
 import su.sres.shadowserver.storage.Account;
@@ -92,7 +92,8 @@ public class AccountController {
   private final AccountsManager                       accounts;
   private final AbusiveHostRules                      abusiveHostRules;
   private final RateLimiters                          rateLimiters;
-  private final SmsSender                             smsSender;
+// remove SMS  
+//  private final SmsSender                             smsSender;
   private final MessagesManager                       messagesManager;
   private final TurnTokenGenerator                    turnTokenGenerator;
   private final Map<String, Integer>                  testDevices;
@@ -102,7 +103,7 @@ public class AccountController {
                            AccountsManager accounts,
                            AbusiveHostRules abusiveHostRules,
                            RateLimiters rateLimiters,
-                           SmsSender smsSenderFactory,
+//                           SmsSender smsSenderFactory,
                            MessagesManager messagesManager,
                            TurnTokenGenerator turnTokenGenerator,
                            Map<String, Integer> testDevices,
@@ -112,7 +113,7 @@ public class AccountController {
     this.accounts           = accounts;
     this.abusiveHostRules   = abusiveHostRules;
     this.rateLimiters       = rateLimiters;
-    this.smsSender          = smsSenderFactory;
+//    this.smsSender          = smsSenderFactory;
     this.messagesManager    = messagesManager;
     this.testDevices        = testDevices;
     this.turnTokenGenerator = turnTokenGenerator;
@@ -176,13 +177,16 @@ String requester = "127.0.0.66";
 // store the pair of phone number and generated verification code in pending accounts
     pendingAccounts.store(number, storedVerificationCode);
 
-    if (testDevices.containsKey(number)) {
+// remove outgoing SMS
+    
+/*    if (testDevices.containsKey(number)) {
       // noop
     } else if (transport.equals("sms")) {
       smsSender.deliverSmsVerification(number, client, verificationCode.getVerificationCodeDisplay());
     } else if (transport.equals("voice")) {
     	smsSender.deliverVoxVerification(number, verificationCode.getVerificationCode(), locale);
     }
+*/    
     
     metricRegistry.meter(name(AccountController.class, "create", Util.getCountryCode(number))).mark();
 
