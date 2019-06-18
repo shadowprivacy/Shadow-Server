@@ -98,6 +98,7 @@ import su.sres.shadowserver.websocket.DeadLetterHandler;
 import su.sres.shadowserver.websocket.ProvisioningConnectListener;
 import su.sres.shadowserver.websocket.WebSocketAccountAuthenticator;
 import su.sres.shadowserver.workers.CertificateCommand;
+import su.sres.shadowserver.workers.CreatePendingAccountCommand;
 import su.sres.shadowserver.workers.DeleteUserCommand;
 import su.sres.shadowserver.workers.DirectoryCommand;
 import su.sres.shadowserver.workers.VacuumCommand;
@@ -119,6 +120,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 	  
     bootstrap.addCommand(new DirectoryCommand());
     bootstrap.addCommand(new VacuumCommand());
+    bootstrap.addCommand(new CreatePendingAccountCommand());
     bootstrap.addCommand(new DeleteUserCommand());
     bootstrap.addCommand(new CertificateCommand());
     bootstrap.addBundle(new NameableMigrationsBundle<WhisperServerConfiguration>("accountdb", "accountsdb.xml") {
