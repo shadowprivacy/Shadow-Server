@@ -66,7 +66,8 @@ import su.sres.shadowserver.controllers.ProvisioningController;
 // import su.sres.shadowserver.federation.FederatedClientManager;
 // import su.sres.shadowserver.federation.FederatedPeer;
 import su.sres.shadowserver.controllers.TransparentDataController;
-import su.sres.shadowserver.controllers.VoiceVerificationController;
+// not needed now
+// import su.sres.shadowserver.controllers.VoiceVerificationController;
 import su.sres.shadowserver.limits.RateLimiters;
 import su.sres.shadowserver.liquibase.NameableMigrationsBundle;
 import su.sres.shadowserver.mappers.DeviceLimitExceededExceptionMapper;
@@ -88,8 +89,8 @@ import su.sres.shadowserver.push.ReceiptSender;
 import su.sres.shadowserver.push.WebsocketSender;
 import su.sres.shadowserver.recaptcha.RecaptchaClient;
 import su.sres.shadowserver.redis.ReplicatedJedisPool;
-import su.sres.shadowserver.sms.SmsSender;
-import su.sres.shadowserver.sms.TwilioSmsSender;
+// import su.sres.shadowserver.sms.SmsSender;
+// import su.sres.shadowserver.sms.TwilioSmsSender;
 import su.sres.shadowserver.storage.*;
 import su.sres.shadowserver.util.Constants;
 import su.sres.shadowserver.websocket.AuthenticatedConnectListener;
@@ -97,6 +98,7 @@ import su.sres.shadowserver.websocket.DeadLetterHandler;
 import su.sres.shadowserver.websocket.ProvisioningConnectListener;
 import su.sres.shadowserver.websocket.WebSocketAccountAuthenticator;
 import su.sres.shadowserver.workers.CertificateCommand;
+import su.sres.shadowserver.workers.CreatePendingAccountCommand;
 import su.sres.shadowserver.workers.DeleteUserCommand;
 import su.sres.shadowserver.workers.DirectoryCommand;
 import su.sres.shadowserver.workers.VacuumCommand;
@@ -118,6 +120,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 	  
     bootstrap.addCommand(new DirectoryCommand());
     bootstrap.addCommand(new VacuumCommand());
+    bootstrap.addCommand(new CreatePendingAccountCommand());
     bootstrap.addCommand(new DeleteUserCommand());
     bootstrap.addCommand(new CertificateCommand());
     bootstrap.addBundle(new NameableMigrationsBundle<WhisperServerConfiguration>("accountdb", "accountsdb.xml") {
@@ -202,8 +205,10 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     RateLimiters               rateLimiters               = new RateLimiters(config.getLimitsConfiguration(), cacheClient);
 
 //    ApnFallbackManager       apnFallbackManager  = new ApnFallbackManager(pushSchedulerClient, apnSender, accountsManager);
-    TwilioSmsSender          twilioSmsSender     = new TwilioSmsSender(config.getTwilioConfiguration());
-    SmsSender                smsSender           = new SmsSender(twilioSmsSender);
+    
+// remove SMS
+//    TwilioSmsSender          twilioSmsSender     = new TwilioSmsSender(config.getTwilioConfiguration());
+//    SmsSender                smsSender           = new SmsSender(twilioSmsSender);
     PushSender               pushSender          = new PushSender(null, gcmSender, null, websocketSender, config.getPushConfiguration().getQueueSize());
 // excluded federation, reserved for future purposes
     //    ReceiptSender            receiptSender       = new ReceiptSender(accountsManager, pushSender, federatedClientManager);
@@ -255,7 +260,9 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     
     environment.jersey().register(new AuthValueFactoryProvider.Binder<>(Account.class));
 
-    environment.jersey().register(new AccountController(pendingAccountsManager, accountsManager, abusiveHostRules, rateLimiters, smsSender, messagesManager, turnTokenGenerator, config.getTestDevices(), recaptchaClient));
+ // remove SMS
+    // environment.jersey().register(new AccountController(pendingAccountsManager, accountsManager, abusiveHostRules, rateLimiters, smsSender, messagesManager, turnTokenGenerator, config.getTestDevices(), recaptchaClient));
+    environment.jersey().register(new AccountController(pendingAccountsManager, accountsManager, abusiveHostRules, rateLimiters, messagesManager, turnTokenGenerator, config.getTestDevices(), recaptchaClient));
     environment.jersey().register(new DeviceController(pendingDevicesManager, accountsManager, messagesManager, rateLimiters, config.getMaxDevices()));
     environment.jersey().register(new DirectoryController(rateLimiters, directory));
  // excluded federation (?), reserved for future purposes
@@ -263,7 +270,8 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
    // environment.jersey().register(new FederationControllerV2(accountsManager, attachmentController, messageController, keysController));
     environment.jersey().register(new ProvisioningController(rateLimiters, pushSender));
     environment.jersey().register(new CertificateController(new CertificateGenerator(config.getDeliveryCertificate().getCertificate(), config.getDeliveryCertificate().getPrivateKey(), config.getDeliveryCertificate().getExpiresDays())));
-    environment.jersey().register(new VoiceVerificationController(config.getVoiceVerificationConfiguration().getUrl(), config.getVoiceVerificationConfiguration().getLocales()));
+// not needed now
+    //    environment.jersey().register(new VoiceVerificationController(config.getVoiceVerificationConfiguration().getUrl(), config.getVoiceVerificationConfiguration().getLocales()));
     environment.jersey().register(new TransparentDataController(accountsManager, config.getTransparentDataIndex()));
     environment.jersey().register(attachmentControllerV1);
     environment.jersey().register(attachmentControllerV2);
