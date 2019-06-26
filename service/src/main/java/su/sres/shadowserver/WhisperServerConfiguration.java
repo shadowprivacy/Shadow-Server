@@ -35,10 +35,12 @@ import su.sres.shadowserver.configuration.*;
 /** @noinspection MismatchedQueryAndUpdateOfCollection, WeakerAccess */
 public class WhisperServerConfiguration extends Configuration {
 
-  @NotNull
-  @Valid
-  @JsonProperty
-  private TwilioConfiguration twilio;
+
+// remove Twilio	
+//  @NotNull
+//  @Valid
+//  @JsonProperty
+//  private TwilioConfiguration twilio;
 
   @NotNull
   @Valid
@@ -151,11 +153,12 @@ public class WhisperServerConfiguration extends Configuration {
   @NotNull
   @JsonProperty
   private UnidentifiedDeliveryConfiguration unidentifiedDelivery;
-  
-  @Valid
-  @NotNull
-  @JsonProperty
-  private VoiceVerificationConfiguration voiceVerification;
+
+// not needed now  
+//  @Valid
+//  @NotNull
+//  @JsonProperty
+//  private VoiceVerificationConfiguration voiceVerification;
   
   @Valid
   @NotNull
@@ -168,17 +171,19 @@ public class WhisperServerConfiguration extends Configuration {
 	    return recaptcha;
 	  }
 
-  public VoiceVerificationConfiguration getVoiceVerificationConfiguration() {
-    return voiceVerification;
-  }
+// not needed now  
+// public VoiceVerificationConfiguration getVoiceVerificationConfiguration() {
+//    return voiceVerification;
+//  }
 
   public WebSocketConfiguration getWebSocketConfiguration() {
     return webSocket;
   }
 
-  public TwilioConfiguration getTwilioConfiguration() {
-    return twilio;
-  }
+// remove Twilio  
+//  public TwilioConfiguration getTwilioConfiguration() {
+//    return twilio;
+//  }
 
   public PushConfiguration getPushConfiguration() {
     return push;

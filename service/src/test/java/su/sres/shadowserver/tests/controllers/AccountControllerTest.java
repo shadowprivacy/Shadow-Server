@@ -28,7 +28,7 @@ import su.sres.shadowserver.limits.RateLimiters;
 import su.sres.shadowserver.mappers.RateLimitExceededExceptionMapper;
 import su.sres.shadowserver.providers.TimeProvider;
 import su.sres.shadowserver.recaptcha.RecaptchaClient;
-import su.sres.shadowserver.sms.SmsSender;
+// import su.sres.shadowserver.sms.SmsSender;
 import su.sres.shadowserver.storage.AbusiveHostRule;
 import su.sres.shadowserver.storage.AbusiveHostRules;
 import su.sres.shadowserver.storage.Account;
@@ -69,7 +69,8 @@ public class AccountControllerTest {
   private        RateLimiter            smsVoiceIpLimiter      = mock(RateLimiter.class           );
   private        RateLimiter            smsVoicePrefixLimiter  = mock(RateLimiter.class);
   private        RateLimiter            autoBlockLimiter       = mock(RateLimiter.class);
-  private        SmsSender              smsSender              = mock(SmsSender.class             );
+// remove SMS
+  //  private        SmsSender              smsSender              = mock(SmsSender.class             );
   private        MessagesManager        storedMessages         = mock(MessagesManager.class       );
   private        TimeProvider           timeProvider           = mock(TimeProvider.class          );
   private        TurnTokenGenerator     turnTokenGenerator     = mock(TurnTokenGenerator.class);
@@ -87,7 +88,7 @@ public class AccountControllerTest {
                                                                                                accountsManager,
                                                                                                abusiveHostRules,
                                                                                                rateLimiters,
-                                                                                               smsSender,
+ //                                                                                              smsSender,
                                                                                                storedMessages,
                                                                                                turnTokenGenerator,
                                                                                                new HashMap<>(),
@@ -150,7 +151,7 @@ public class AccountControllerTest {
 
     assertThat(response.getStatus()).isEqualTo(200);
 
-    verify(smsSender).deliverSmsVerification(eq(SENDER), eq(Optional.empty()), anyString());
+//    verify(smsSender).deliverSmsVerification(eq(SENDER), eq(Optional.empty()), anyString());
     verify(abusiveHostRules).getAbusiveHostRulesFor(eq(NICE_HOST));
   }
   
@@ -166,7 +167,7 @@ public class AccountControllerTest {
 
     assertThat(response.getStatus()).isEqualTo(200);
 
-    verify(smsSender).deliverSmsVerification(eq(SENDER), eq(Optional.of("ios")), anyString());
+//    verify(smsSender).deliverSmsVerification(eq(SENDER), eq(Optional.of("ios")), anyString());
   }
   
   @Test
@@ -181,7 +182,7 @@ public class AccountControllerTest {
 
     assertThat(response.getStatus()).isEqualTo(200);
 
-    verify(smsSender).deliverSmsVerification(eq(SENDER), eq(Optional.of("android-ng")), anyString());
+//    verify(smsSender).deliverSmsVerification(eq(SENDER), eq(Optional.of("android-ng")), anyString());
   }
 
   @Test
@@ -196,7 +197,7 @@ public class AccountControllerTest {
     assertThat(response.getStatus()).isEqualTo(402);
 
     verify(abusiveHostRules).getAbusiveHostRulesFor(eq(ABUSIVE_HOST));
-    verifyNoMoreInteractions(smsSender);
+//    verifyNoMoreInteractions(smsSender);
   }
   
   @Test
@@ -213,7 +214,7 @@ public class AccountControllerTest {
 
     verifyNoMoreInteractions(abusiveHostRules);
     verify(recaptchaClient).verify(eq(VALID_CAPTCHA_TOKEN));
-    verify(smsSender).deliverSmsVerification(eq(SENDER), eq(Optional.empty()), anyString());
+//    verify(smsSender).deliverSmsVerification(eq(SENDER), eq(Optional.empty()), anyString());
   }
 
   @Test
@@ -230,7 +231,7 @@ public class AccountControllerTest {
 
     verifyNoMoreInteractions(abusiveHostRules);
     verify(recaptchaClient).verify(eq(INVALID_CAPTCHA_TOKEN));
-    verifyNoMoreInteractions(smsSender);
+//    verifyNoMoreInteractions(smsSender);
   }
   
   @Test
@@ -249,7 +250,7 @@ public class AccountControllerTest {
     verifyNoMoreInteractions(abusiveHostRules);
 
     verifyNoMoreInteractions(recaptchaClient);
-    verifyNoMoreInteractions(smsSender);
+//    verifyNoMoreInteractions(smsSender);
   }
 
   @Test
@@ -268,7 +269,7 @@ public class AccountControllerTest {
     verifyNoMoreInteractions(abusiveHostRules);
 
     verifyNoMoreInteractions(recaptchaClient);
-    verifyNoMoreInteractions(smsSender);
+//    verifyNoMoreInteractions(smsSender);
   }
 
   @Test
@@ -286,7 +287,7 @@ public class AccountControllerTest {
     verifyNoMoreInteractions(abusiveHostRules);
 
     verifyNoMoreInteractions(recaptchaClient);
-    verifyNoMoreInteractions(smsSender);
+//    verifyNoMoreInteractions(smsSender);
   }
   
   @Test
@@ -303,7 +304,7 @@ public class AccountControllerTest {
     verify(abusiveHostRules, times(1)).getAbusiveHostRulesFor(eq(ABUSIVE_HOST));
     
     verifyNoMoreInteractions(abusiveHostRules);
-    verifyNoMoreInteractions(smsSender);
+//    verifyNoMoreInteractions(smsSender);
   }
 
   @Test
@@ -318,7 +319,7 @@ public class AccountControllerTest {
     assertThat(response.getStatus()).isEqualTo(402);
 
     verify(abusiveHostRules).getAbusiveHostRulesFor(eq(RESTRICTED_HOST));
-    verifyNoMoreInteractions(smsSender);
+ //   verifyNoMoreInteractions(smsSender);
   }
 
   @Test
@@ -332,7 +333,7 @@ public class AccountControllerTest {
 
     assertThat(response.getStatus()).isEqualTo(200);
 
-    verify(smsSender).deliverSmsVerification(eq("+12345678901"), eq(Optional.empty()), anyString());
+ //   verify(smsSender).deliverSmsVerification(eq("+12345678901"), eq(Optional.empty()), anyString());
   }
 
   @Test
