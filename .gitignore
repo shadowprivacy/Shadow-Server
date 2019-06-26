@@ -15,7 +15,3 @@ service/config/staging.yml
 service/config/testing.yml
 .opsmanage
 put.sh
-service/src/main/java/su/sres/shadowserver/entities/MessageProtos.java
-service/src/main/java/su/sres/shadowserver/storage/PubSubProtos.java
-.project
-.settings
