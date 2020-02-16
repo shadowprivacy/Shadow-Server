@@ -27,6 +27,9 @@ public class OutgoingMessageEntity {
 
   @JsonProperty
   private String source;
+  
+  @JsonProperty
+  private UUID sourceUuid;
 
   @JsonProperty
   private int sourceDevice;
@@ -44,8 +47,8 @@ public class OutgoingMessageEntity {
 
   public OutgoingMessageEntity(long id, boolean cached,
           UUID guid, int type, String relay, long timestamp,
-                               String source, int sourceDevice, byte[] message,
-                               byte[] content, long serverTimestamp)
+          String source, UUID sourceUuid, int sourceDevice,
+          byte[] message, byte[] content, long serverTimestamp)
   {
 	  this.id              = id;
 	    this.cached          = cached;
@@ -54,6 +57,7 @@ public class OutgoingMessageEntity {
 	    this.relay           = relay;
 	    this.timestamp       = timestamp;
 	    this.source          = source;
+	    this.sourceUuid      = sourceUuid;
 	    this.sourceDevice    = sourceDevice;
 	    this.message         = message;
 	    this.content         = content;
@@ -79,6 +83,10 @@ public class OutgoingMessageEntity {
   public String getSource() {
     return source;
   }
+  
+  public UUID getSourceUuid() {
+	    return sourceUuid;
+	  }
 
   public int getSourceDevice() {
     return sourceDevice;

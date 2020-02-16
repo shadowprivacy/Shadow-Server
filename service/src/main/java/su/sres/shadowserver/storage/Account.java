@@ -16,226 +16,269 @@
  */
 package su.sres.shadowserver.storage;
 
-
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.annotations.VisibleForTesting;
+
+import su.sres.shadowserver.auth.AmbiguousIdentifier;
+
 import javax.security.auth.Subject;
 import java.security.Principal;
 
 import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
-public class Account implements Principal  {
+public class Account implements Principal {
+	
+	@JsonIgnore
+	private UUID uuid;
 
-	static final int MEMCACHE_VERION = 5;
+	@JsonProperty
+	private String number;
 
-  @JsonIgnore
-  private String number;
+	@JsonProperty
+	private Set<Device> devices = new HashSet<>();
 
-  @JsonProperty
-  private Set<Device> devices = new HashSet<>();
+	@JsonProperty
+	private String identityKey;
 
-  @JsonProperty
-  private String identityKey;
+	@JsonProperty
+	private String name;
 
-  @JsonProperty
-  private String name;
+	@JsonProperty
+	private String avatar;
 
-  @JsonProperty
-  private String avatar;
+	@JsonProperty
+	private String avatarDigest;
 
-  @JsonProperty
-  private String avatarDigest;
+	@JsonProperty
+	private String pin;
 
-  @JsonProperty
-  private String pin;
-  
-  @JsonProperty("uak")
-  private byte[] unidentifiedAccessKey;
+	@JsonProperty
+	private String registrationLock;
 
-  @JsonProperty("uua")
-  private boolean unrestrictedUnidentifiedAccess;
+	@JsonProperty
+	private String registrationLockSalt;
 
-  @JsonIgnore
-  private Device authenticatedDevice;
+	@JsonProperty("uak")
+	private byte[] unidentifiedAccessKey;
 
-  public Account() {}
+	@JsonProperty("uua")
+	private boolean unrestrictedUnidentifiedAccess;
 
-  @VisibleForTesting
-  public Account(String number, Set<Device> devices, byte[] unidentifiedAccessKey) {
-	    this.number                = number;
-	    this.devices               = devices;
-	    this.unidentifiedAccessKey = unidentifiedAccessKey;
-  }
+	@JsonIgnore
+	private Device authenticatedDevice;
 
-  public Optional<Device> getAuthenticatedDevice() {
-	  return Optional.ofNullable(authenticatedDevice);
-  }
+	public Account() {
+	}
 
-  public void setAuthenticatedDevice(Device device) {
-    this.authenticatedDevice = device;
-  }
+	@VisibleForTesting
+	public Account(String number, UUID uuid, Set<Device> devices, byte[] unidentifiedAccessKey) {
+		this.number = number;
+		this.uuid                  = uuid;
+		this.devices = devices;
+		this.unidentifiedAccessKey = unidentifiedAccessKey;
+	}
 
-  public void setNumber(String number) {
-    this.number = number;
-  }
+	public Optional<Device> getAuthenticatedDevice() {
+		return Optional.ofNullable(authenticatedDevice);
+	}
 
-  public String getNumber() {
-    return number;
-  }
+	public void setAuthenticatedDevice(Device device) {
+		this.authenticatedDevice = device;
+	}
+	
+	public UUID getUuid() {
+	    return uuid;
+	  }
 
-  public void addDevice(Device device) {
-    this.devices.remove(device);
-    this.devices.add(device);
-  }
+	  public void setUuid(UUID uuid) {
+	    this.uuid = uuid;
+	  }
 
-  public void removeDevice(long deviceId) {
-	  this.devices.remove(new Device(deviceId, null, null, null, null, null, null, null, false, 0, null, 0, 0, "NA", false));
-  }
+	public void setNumber(String number) {
+		this.number = number;
+	}
 
-  public Set<Device> getDevices() {
-    return devices;
-  }
+	public String getNumber() {
+		return number;
+	}
 
-  public Optional<Device> getMasterDevice() {
-    return getDevice(Device.MASTER_ID);
-  }
+	public void addDevice(Device device) {
+		this.devices.remove(device);
+		this.devices.add(device);
+	}
 
-  public Optional<Device> getDevice(long deviceId) {
-    for (Device device : devices) {
-      if (device.getId() == deviceId) {
-        return Optional.of(device);
-      }
-    }
+	public void removeDevice(long deviceId) {
+		this.devices.remove(new Device(deviceId, null, null, null, null, null, null, null, false, 0, null, 0, 0, "NA", 0, null));
+	}
 
-    return Optional.empty();
-  }
+	public Set<Device> getDevices() {
+		return devices;
+	}
 
-  public boolean isUnauthenticatedDeliverySupported() {
-	    return devices.stream().filter(Device::isActive).allMatch(Device::isUnauthenticatedDeliverySupported);
-  }
+	public Optional<Device> getMasterDevice() {
+		return getDevice(Device.MASTER_ID);
+	}
 
-  public boolean isActive() {
-    return
-        getMasterDevice().isPresent() &&
-        getMasterDevice().get().isActive() &&
-        getLastSeen() > (System.currentTimeMillis() - TimeUnit.DAYS.toMillis(365));
-  }
+	public Optional<Device> getDevice(long deviceId) {
+		for (Device device : devices) {
+			if (device.getId() == deviceId) {
+				return Optional.of(device);
+			}
+		}
 
-  public long getNextDeviceId() {
-    long highestDevice = Device.MASTER_ID;
+		return Optional.empty();
+	}
 
-    for (Device device : devices) {
-      if (!device.isActive()) {
-        return device.getId();
-      } else if (device.getId() > highestDevice) {
-        highestDevice = device.getId();
-      }
-    }
+	  public boolean isUuidAddressingSupported() {
+		  return devices.stream()
+                  .filter(Device::isEnabled)
+                  .allMatch(device -> device.getCapabilities() != null && device.getCapabilities().isUuid());
+	}
 
-    return highestDevice + 1;
-  }
+	public boolean isEnabled() {
+		return getMasterDevice().isPresent() && getMasterDevice().get().isEnabled()
+				&& getLastSeen() > (System.currentTimeMillis() - TimeUnit.DAYS.toMillis(365));
+	}
 
-  public int getActiveDeviceCount() {
-    int count = 0;
+	public long getNextDeviceId() {
+		long highestDevice = Device.MASTER_ID;
 
-    for (Device device : devices) {
-      if (device.isActive()) count++;
-    }
+		for (Device device : devices) {
+			if (!device.isEnabled()) {
+				return device.getId();
+			} else if (device.getId() > highestDevice) {
+				highestDevice = device.getId();
+			}
+		}
 
-    return count;
-  }
+		return highestDevice + 1;
+	}
 
-  public boolean isRateLimited() {
-    return true;
-  }
+	public int getEnabledDeviceCount() {
+		int count = 0;
 
-  public Optional<String> getRelay() {
-	  return Optional.empty();
-  }
+		for (Device device : devices) {
+			if (device.isEnabled())
+				count++;
+		}
 
-  public void setIdentityKey(String identityKey) {
-    this.identityKey = identityKey;
-  }
+		return count;
+	}
 
-  public String getIdentityKey() {
-    return identityKey;
-  }
+	public boolean isRateLimited() {
+		return true;
+	}
 
-  public long getLastSeen() {
-    long lastSeen = 0;
+	public Optional<String> getRelay() {
+		return Optional.empty();
+	}
 
-    for (Device device : devices) {
-      if (device.getLastSeen() > lastSeen) {
-        lastSeen = device.getLastSeen();
-      }
-    }
+	public void setIdentityKey(String identityKey) {
+		this.identityKey = identityKey;
+	}
 
-    return lastSeen;
-  }
+	public String getIdentityKey() {
+		return identityKey;
+	}
 
-  public String getProfileName() {
-    return name;
-  }
+	public long getLastSeen() {
+		long lastSeen = 0;
 
-  public void setProfileName(String name) {
-    this.name = name;
-  }
+		for (Device device : devices) {
+			if (device.getLastSeen() > lastSeen) {
+				lastSeen = device.getLastSeen();
+			}
+		}
 
-  public String getAvatar() {
-    return avatar;
-  }
+		return lastSeen;
+	}
 
-  public void setAvatar(String avatar) {
-    this.avatar = avatar;
-  }
+	public String getProfileName() {
+		return name;
+	}
 
-  public String getAvatarDigest() {
-    return avatarDigest;
-  }
+	public void setProfileName(String name) {
+		this.name = name;
+	}
 
-  public void setAvatarDigest(String avatarDigest) {
-    this.avatarDigest = avatarDigest;
-  }
+	public String getAvatar() {
+		return avatar;
+	}
 
-  public Optional<String> getPin() {
-	  return Optional.ofNullable(pin);
-  }
+	public void setAvatar(String avatar) {
+		this.avatar = avatar;
+	}
 
-  public void setPin(String pin) {
-    this.pin = pin;
-  }  
+	public String getAvatarDigest() {
+		return avatarDigest;
+	}
 
-  public Optional<byte[]> getUnidentifiedAccessKey() {
-    return Optional.ofNullable(unidentifiedAccessKey);
-  }
+	public void setAvatarDigest(String avatarDigest) {
+		this.avatarDigest = avatarDigest;
+	}
 
-  public void setUnidentifiedAccessKey(byte[] unidentifiedAccessKey) {
-    this.unidentifiedAccessKey = unidentifiedAccessKey;
-  }
+	public Optional<String> getPin() {
+		return Optional.ofNullable(pin);
+	}
 
-  public boolean isUnrestrictedUnidentifiedAccess() {
-    return unrestrictedUnidentifiedAccess;
-  }
+	public void setPin(String pin) {
+		this.pin = pin;
+	}
 
-  public void setUnrestrictedUnidentifiedAccess(boolean unrestrictedUnidentifiedAccess) {
-    this.unrestrictedUnidentifiedAccess = unrestrictedUnidentifiedAccess;
-  }
+	public void setRegistrationLock(String registrationLock) {
+		this.registrationLock = registrationLock;
+	}
 
-  // Principal implementation
+	public Optional<String> getRegistrationLock() {
+		return Optional.ofNullable(registrationLock);
+	}
 
-  @Override
-  @JsonIgnore
-  public String getName() {
-    return null;
-  }
+	public void setRegistrationLockSalt(String registrationLockSalt) {
+		this.registrationLockSalt = registrationLockSalt;
+	}
 
-  @Override
-  @JsonIgnore
-  public boolean implies(Subject subject) {
-    return false;
-  }
+	public Optional<String> getRegistrationLockSalt() {
+		return Optional.ofNullable(registrationLockSalt);
+	}
+
+	public Optional<byte[]> getUnidentifiedAccessKey() {
+		return Optional.ofNullable(unidentifiedAccessKey);
+	}
+
+	public void setUnidentifiedAccessKey(byte[] unidentifiedAccessKey) {
+		this.unidentifiedAccessKey = unidentifiedAccessKey;
+	}
+
+	public boolean isUnrestrictedUnidentifiedAccess() {
+		return unrestrictedUnidentifiedAccess;
+	}
+
+	public void setUnrestrictedUnidentifiedAccess(boolean unrestrictedUnidentifiedAccess) {
+		this.unrestrictedUnidentifiedAccess = unrestrictedUnidentifiedAccess;
+	}
+	
+	 public boolean isFor(AmbiguousIdentifier identifier) {
+		    if      (identifier.hasUuid())   return identifier.getUuid().equals(uuid);
+		    else if (identifier.hasNumber()) return identifier.getNumber().equals(number);
+		    else                             throw new AssertionError();
+		  }
+
+	// Principal implementation
+
+	@Override
+	@JsonIgnore
+	public String getName() {
+		return null;
+	}
+
+	@Override
+	@JsonIgnore
+	public boolean implies(Subject subject) {
+		return false;
+	}
 }

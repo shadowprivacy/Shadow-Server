@@ -33,19 +33,16 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
-public class ActiveUserCounter implements AccountDatabaseCrawlerListener {
+public class ActiveUserCounter extends AccountDatabaseCrawlerListener {
 
   private static final String TALLY_KEY         = "active_user_tally";
 
   private static final String PLATFORM_IOS     = "ios";
   private static final String PLATFORM_ANDROID = "android";
-
-  private static final String FIRST_FROM_NUMBER = "+";
-
+  
   private static final String INTERVALS[] = {"daily", "weekly", "monthly", "quarterly", "yearly"};
 
   private final MetricsFactory      metricsFactory;
@@ -58,13 +55,51 @@ public class ActiveUserCounter implements AccountDatabaseCrawlerListener {
     this.mapper          = SystemMapper.getMapper();
   }
 
+  @Override
   public void onCrawlStart() {
     try (Jedis jedis = jedisPool.getWriteResource()) {
       jedis.del(TALLY_KEY);
     }
   }
 
-  public void onCrawlChunk(Optional<String> fromNumber, List<Account> chunkAccounts) {
+  @Override
+  public void onCrawlEnd(Optional<UUID> fromNumber) {
+	    MetricRegistry      metrics           = new MetricRegistry();
+	    long                intervalTallies[] = new long[INTERVALS.length];
+	    ActiveUserTally     activeUserTally   = getFinalTallies();
+	    Map<String, long[]> platforms         = activeUserTally.getPlatforms();
+
+	    platforms.forEach((platform, platformTallies) -> {
+	      for (int i = 0; i < INTERVALS.length; i++) {
+	        final long tally = platformTallies[i];
+	        metrics.register(metricKey(platform, INTERVALS[i]),
+	                         (Gauge<Long>) () -> tally);
+	        intervalTallies[i] += tally;
+	      }
+	    });
+
+	    Map<String, long[]> countries = activeUserTally.getCountries();
+	    countries.forEach((country, countryTallies) -> {
+	      for (int i = 0; i < INTERVALS.length; i++) {
+	        final long tally = countryTallies[i];
+	        metrics.register(metricKey(country, INTERVALS[i]),
+	                         (Gauge<Long>) () -> tally);
+	      }
+	    });
+
+	    for (int i = 0; i < INTERVALS.length; i++) {
+	      final long intervalTotal = intervalTallies[i];
+	      metrics.register(metricKey(INTERVALS[i]),
+	                       (Gauge<Long>) () -> intervalTotal);
+	    }
+
+	    for (ReporterFactory reporterFactory : metricsFactory.getReporters()) {
+	      reporterFactory.build(metrics).report();
+	    }
+	  }
+
+	  @Override
+	  protected void onCrawlChunk(Optional<UUID> fromNumber, List<Account> chunkAccounts) {
     long nowDays  = TimeUnit.MILLISECONDS.toDays(System.currentTimeMillis());
     long agoMs[]  = {TimeUnit.DAYS.toMillis(nowDays - 1),
                      TimeUnit.DAYS.toMillis(nowDays - 7),
@@ -107,50 +142,8 @@ public class ActiveUserCounter implements AccountDatabaseCrawlerListener {
       }
     }
 
-    incrementTallies(fromNumber.orElse(FIRST_FROM_NUMBER), platformIncrements, countryIncrements);
+    incrementTallies(fromNumber.orElse(UUID.randomUUID()), platformIncrements, countryIncrements);
 
-  }
-
-  public void onCrawlEnd(Optional<String> fromNumber) {
-    MetricRegistry metrics = new MetricRegistry();
-    long intervalTallies[] = new long[INTERVALS.length];
-    ActiveUserTally activeUserTally = getFinalTallies();
-    Map<String, long[]> platforms = activeUserTally.getPlatforms();
-    platforms.forEach((platform, platformTallies) -> {
-        for (int i = 0; i < INTERVALS.length; i++) {
-          final long tally = platformTallies[i];
-          metrics.register(metricKey(platform, INTERVALS[i]),
-                           new Gauge<Long>() {
-                             @Override
-                             public Long getValue() { return tally; }
-                           });
-          intervalTallies[i] += tally;
-        }
-      });
-
-    Map<String, long[]> countries = activeUserTally.getCountries();
-    countries.forEach((country, countryTallies) -> {
-        for (int i = 0; i < INTERVALS.length; i++) {
-          final long tally = countryTallies[i];
-          metrics.register(metricKey(country, INTERVALS[i]),
-                           new Gauge<Long>() {
-                             @Override
-                             public Long getValue() { return tally; }
-                           });
-        }
-      });
-
-    for (int i = 0; i < INTERVALS.length; i++) {
-      final long intervalTotal = intervalTallies[i];
-      metrics.register(metricKey(INTERVALS[i]),
-                              new Gauge<Long>() {
-                                @Override
-                                public Long getValue() { return intervalTotal; }
-                              });
-    }
-    for (ReporterFactory reporterFactory : metricsFactory.getReporters()) {
-      reporterFactory.build(metrics).report();
-    }
   }
 
   private long[] getTallyFromMap(Map<String, long[]> map, String key) {
@@ -162,22 +155,25 @@ public class ActiveUserCounter implements AccountDatabaseCrawlerListener {
     return tally;
   }
 
-  private void incrementTallies(String fromNumber, Map<String, long[]> platformIncrements, Map<String, long[]> countryIncrements) {
+  private void incrementTallies(UUID fromUuid, Map<String, long[]> platformIncrements, Map<String, long[]> countryIncrements) {
     try (Jedis jedis = jedisPool.getWriteResource()) {
       String tallyValue = jedis.get(TALLY_KEY);
       ActiveUserTally activeUserTally;
+      
       if (tallyValue == null) {
-        activeUserTally = new ActiveUserTally(fromNumber, platformIncrements, countryIncrements);
+    	  activeUserTally = new ActiveUserTally(fromUuid, platformIncrements, countryIncrements);
       } else {
         activeUserTally = mapper.readValue(tallyValue, ActiveUserTally.class);
-        if (activeUserTally.getFromNumber() != fromNumber) {
-          activeUserTally.setFromNumber(fromNumber);
+        
+        if (!fromUuid.equals(activeUserTally.getFromUuid())) {
+            activeUserTally.setFromUuid(fromUuid);
           Map<String, long[]> platformTallies = activeUserTally.getPlatforms();
           addTallyMaps(platformTallies, platformIncrements);
           Map<String, long[]> countryTallies = activeUserTally.getCountries();
           addTallyMaps(countryTallies, countryIncrements);
         }
       }
+      
       jedis.set(TALLY_KEY, mapper.writeValueAsString(activeUserTally));
     } catch (JsonProcessingException e) {
       throw new IllegalArgumentException(e);
@@ -188,15 +184,15 @@ public class ActiveUserCounter implements AccountDatabaseCrawlerListener {
 
   private void addTallyMaps(Map<String, long[]> tallyMap, Map<String, long[]> incrementMap) {
     incrementMap.forEach((key, increments) -> {
-        long[] tallies = tallyMap.get(key);
+    	long[] tallies = tallyMap.get(key);
         if (tallies == null) {
           tallyMap.put(key, increments);
         } else {
           for (int i = 0; i < INTERVALS.length; i++) {
             tallies[i] += increments[i];
-          }
         }
-      });
+        }
+    });
   }
 
   private ActiveUserTally getFinalTallies() {

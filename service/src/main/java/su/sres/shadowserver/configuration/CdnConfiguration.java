@@ -3,7 +3,7 @@ package su.sres.shadowserver.configuration;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.hibernate.validator.constraints.NotEmpty;
 
-public class ProfilesConfiguration {
+public class CdnConfiguration {
   @NotEmpty
   @JsonProperty
   private String accessKey;

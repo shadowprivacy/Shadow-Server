@@ -1,24 +1,32 @@
 package su.sres.shadowserver.tests.controllers;
 
+import com.google.common.collect.ImmutableSet;
 import org.glassfish.jersey.test.grizzly.GrizzlyWebTestContainerFactory;
 import org.junit.ClassRule;
 import org.junit.Test;
 
+import javax.ws.rs.core.Response;
+import java.io.IOException;
 import java.net.MalformedURLException;
 
-import io.dropwizard.auth.AuthValueFactoryProvider;
+import io.dropwizard.auth.PolymorphicAuthValueFactoryProvider;
 import io.dropwizard.testing.junit.ResourceTestRule;
+
+import su.sres.shadowserver.auth.DisabledPermittedAccount;
 import su.sres.shadowserver.controllers.AttachmentControllerV1;
 import su.sres.shadowserver.controllers.AttachmentControllerV2;
 import su.sres.shadowserver.entities.AttachmentDescriptorV1;
 import su.sres.shadowserver.entities.AttachmentDescriptorV2;
 import su.sres.shadowserver.entities.AttachmentUri;
+
 // federation excluded, reserved for future use
 // import su.sres.shadowserver.federation.FederatedClientManager;
+
 import su.sres.shadowserver.limits.RateLimiter;
 import su.sres.shadowserver.limits.RateLimiters;
 import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.tests.util.AuthHelper;
+import su.sres.shadowserver.util.Base64;
 import su.sres.shadowserver.util.SystemMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -40,7 +48,7 @@ public class AttachmentControllerTest {
   @ClassRule
   public static final ResourceTestRule resources = ResourceTestRule.builder()
                                                                    .addProvider(AuthHelper.getAuthFilter())
-                                                                   .addProvider(new AuthValueFactoryProvider.Binder<>(Account.class))
+                                                                   .addProvider(new PolymorphicAuthValueFactoryProvider.Binder<>(ImmutableSet.of(Account.class, DisabledPermittedAccount.class)))
                                                                    .setMapper(SystemMapper.getMapper())
                                                                    .setTestContainerFactory(new GrizzlyWebTestContainerFactory())
                                          //federation excluded, reserved for future use
@@ -50,7 +58,7 @@ public class AttachmentControllerTest {
                                                                    .build();
 
   @Test
-  public void testV2Form() {
+  public void testV2Form() throws IOException {
     AttachmentDescriptorV2 descriptor = resources.getJerseyTest()
                                                  .target("/v2/attachments/form/upload")
                                                  .request()
@@ -73,6 +81,19 @@ public class AttachmentControllerTest {
     assertThat(descriptor.getDate()).isNotBlank();
     assertThat(descriptor.getPolicy()).isNotBlank();
     assertThat(descriptor.getSignature()).isNotBlank();
+    
+    assertThat(new String(Base64.decode(descriptor.getPolicy()))).contains("[\"content-length-range\", 1, 104857600]");
+  }
+  
+  @Test
+  public void testV2FormDisabled() {
+    Response response = resources.getJerseyTest()
+                                 .target("/v2/attachments/form/upload")
+                                 .request()
+                                 .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.DISABLED_NUMBER, AuthHelper.DISABLED_PASSWORD))
+                                 .get();
+
+    assertThat(response.getStatus()).isEqualTo(401);
   }
   
   @Test

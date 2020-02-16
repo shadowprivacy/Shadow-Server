@@ -1,21 +1,20 @@
 package su.sres.shadowserver.tests.push;
 
-import com.google.common.util.concurrent.SettableFuture;
-
 import su.sres.shadowserver.push.GCMSender;
 import su.sres.shadowserver.push.GcmMessage;
 import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.storage.AccountsManager;
 import su.sres.shadowserver.storage.Device;
 import su.sres.shadowserver.tests.util.SynchronousExecutorService;
+import su.sres.shadowserver.util.Util;
 
 import org.junit.Test;
-import org.mockito.Matchers;
-import org.whispersystems.gcm.server.Message;
-import org.whispersystems.gcm.server.Result;
-import org.whispersystems.gcm.server.Sender;
+import su.sres.gcm.server.Message;
+import su.sres.gcm.server.Result;
+import su.sres.gcm.server.Sender;
 
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.*;
@@ -34,22 +33,19 @@ public class GCMSenderTest {
     when(successResult.hasCanonicalRegistrationId()).thenReturn(false);
     when(successResult.isSuccess()).thenReturn(true);
 
-    GcmMessage message = new GcmMessage("foo", "+12223334444", 1, false);
+    GcmMessage message = new GcmMessage("foo", "+12223334444", 1, GcmMessage.Type.NOTIFICATION, Optional.empty());
     GCMSender gcmSender = new GCMSender(accountsManager, sender, executorService);
 
-    SettableFuture<Result> successFuture = SettableFuture.create();
-    successFuture.set(successResult);
+    CompletableFuture<Result> successFuture = CompletableFuture.completedFuture(successResult);
 
-    when(sender.send(any(Message.class), Matchers.anyObject())).thenReturn(successFuture);
-    when(successResult.getContext()).thenReturn(message);
+    when(sender.send(any(Message.class))).thenReturn(successFuture);
 
     gcmSender.sendMessage(message);
 
-    verify(sender, times(1)).send(any(Message.class), eq(message));
+    verify(sender, times(1)).send(any(Message.class));
   }
-
   @Test
-  public void testSendError() {
+  public void testSendUninstalled() {
     String destinationNumber = "+12223334444";
     String gcmId             = "foo";
 
@@ -70,23 +66,21 @@ public class GCMSenderTest {
     when(invalidResult.hasCanonicalRegistrationId()).thenReturn(false);
     when(invalidResult.isSuccess()).thenReturn(true);
 
-    GcmMessage message = new GcmMessage(gcmId, destinationNumber, 1, false);
+    GcmMessage message = new GcmMessage(gcmId, destinationNumber, 1, GcmMessage.Type.NOTIFICATION, Optional.empty());
     GCMSender gcmSender = new GCMSender(accountsManager, sender, executorService);
 
-    SettableFuture<Result> invalidFuture = SettableFuture.create();
-    invalidFuture.set(invalidResult);
+    CompletableFuture<Result> invalidFuture = CompletableFuture.completedFuture(invalidResult);
 
-    when(sender.send(any(Message.class), Matchers.anyObject())).thenReturn(invalidFuture);
-    when(invalidResult.getContext()).thenReturn(message);
+    when(sender.send(any(Message.class))).thenReturn(invalidFuture);
 
     gcmSender.sendMessage(message);
 
-    verify(sender, times(1)).send(any(Message.class), eq(message));
+    verify(sender, times(1)).send(any(Message.class));
     verify(accountsManager, times(1)).get(eq(destinationNumber));
     verify(accountsManager, times(1)).update(eq(destinationAccount));
-    verify(destinationDevice, times(1)).setGcmId(eq((String)null));
+    verify(destinationDevice, times(1)).setUninstalledFeedbackTimestamp(eq(Util.todayInMillis()));
   }
-
+  
   @Test
   public void testCanonicalId() {
     String destinationNumber = "+12223334444";
@@ -111,18 +105,16 @@ public class GCMSenderTest {
     when(canonicalResult.isSuccess()).thenReturn(false);
     when(canonicalResult.getCanonicalRegistrationId()).thenReturn(canonicalId);
 
-    GcmMessage message = new GcmMessage(gcmId, destinationNumber, 1, false);
+    GcmMessage message = new GcmMessage(gcmId, destinationNumber, 1, GcmMessage.Type.NOTIFICATION, Optional.empty());
     GCMSender gcmSender = new GCMSender(accountsManager, sender, executorService);
 
-    SettableFuture<Result> invalidFuture = SettableFuture.create();
-    invalidFuture.set(canonicalResult);
+    CompletableFuture<Result> invalidFuture = CompletableFuture.completedFuture(canonicalResult);
 
-    when(sender.send(any(Message.class), Matchers.anyObject())).thenReturn(invalidFuture);
-    when(canonicalResult.getContext()).thenReturn(message);
+    when(sender.send(any(Message.class))).thenReturn(invalidFuture);
 
     gcmSender.sendMessage(message);
 
-    verify(sender, times(1)).send(any(Message.class), eq(message));
+    verify(sender, times(1)).send(any(Message.class));
     verify(accountsManager, times(1)).get(eq(destinationNumber));
     verify(accountsManager, times(1)).update(eq(destinationAccount));
     verify(destinationDevice, times(1)).setGcmId(eq(canonicalId));

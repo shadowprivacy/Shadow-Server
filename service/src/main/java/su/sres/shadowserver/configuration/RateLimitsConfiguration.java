@@ -20,138 +20,160 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 public class RateLimitsConfiguration {
 
-  @JsonProperty
-  private RateLimitConfiguration smsDestination = new RateLimitConfiguration(2, 2);
+	@JsonProperty
+	private RateLimitConfiguration smsDestination = new RateLimitConfiguration(2, 2);
 
-  @JsonProperty
-  private RateLimitConfiguration voiceDestination = new RateLimitConfiguration(2, 1.0 / 2.0);
+	@JsonProperty
+	private RateLimitConfiguration voiceDestination = new RateLimitConfiguration(2, 1.0 / 2.0);
 
-  @JsonProperty
-  private RateLimitConfiguration voiceDestinationDaily = new RateLimitConfiguration(10, 10.0 / (24.0 * 60.0));
-  
-  @JsonProperty
-  private RateLimitConfiguration smsVoiceIp = new RateLimitConfiguration(1000, 1000);
-  
-  @JsonProperty
-  private RateLimitConfiguration smsVoicePrefix = new RateLimitConfiguration(1000, 1000);
-  
-  @JsonProperty
-  private RateLimitConfiguration autoBlock = new RateLimitConfiguration(500, 500);
+	@JsonProperty
+	private RateLimitConfiguration voiceDestinationDaily = new RateLimitConfiguration(10, 10.0 / (24.0 * 60.0));
 
-  @JsonProperty
-  private RateLimitConfiguration verifyNumber = new RateLimitConfiguration(2, 2);
+	@JsonProperty
+	private RateLimitConfiguration smsVoiceIp = new RateLimitConfiguration(1000, 1000);
 
-  @JsonProperty
-  private RateLimitConfiguration verifyPin = new RateLimitConfiguration(10, 1 / (24.0 * 60.0));
+	@JsonProperty
+	private RateLimitConfiguration smsVoicePrefix = new RateLimitConfiguration(1000, 1000);
 
-  @JsonProperty
-  private RateLimitConfiguration attachments = new RateLimitConfiguration(50, 50);
+	@JsonProperty
+	private RateLimitConfiguration autoBlock = new RateLimitConfiguration(500, 500);
 
-  @JsonProperty
-  private RateLimitConfiguration contactQueries = new RateLimitConfiguration(50000, 50000);
+	@JsonProperty
+	private RateLimitConfiguration verifyNumber = new RateLimitConfiguration(2, 2);
 
-  @JsonProperty
-  private RateLimitConfiguration prekeys = new RateLimitConfiguration(3, 1.0 / 10.0);
+	@JsonProperty
+	private RateLimitConfiguration verifyPin = new RateLimitConfiguration(10, 1 / (24.0 * 60.0));
 
-  @JsonProperty
-  private RateLimitConfiguration messages = new RateLimitConfiguration(60, 60);
+	@JsonProperty
+	private RateLimitConfiguration attachments = new RateLimitConfiguration(50, 50);
 
-  @JsonProperty
-  private RateLimitConfiguration allocateDevice = new RateLimitConfiguration(2, 1.0 / 2.0);
+	@JsonProperty
+	private RateLimitConfiguration contactQueries = new RateLimitConfiguration(50000, 50000);
 
-  @JsonProperty
-  private RateLimitConfiguration verifyDevice = new RateLimitConfiguration(2, 2);
+	@JsonProperty
+	private RateLimitConfiguration prekeys = new RateLimitConfiguration(3, 1.0 / 10.0);
 
-  @JsonProperty
-  private RateLimitConfiguration turnAllocations = new RateLimitConfiguration(60, 60);
+	@JsonProperty
+	private RateLimitConfiguration messages = new RateLimitConfiguration(60, 60);
 
-  @JsonProperty
-  private RateLimitConfiguration profile = new RateLimitConfiguration(4320, 3);
-  
-  public RateLimitConfiguration getAutoBlock() {
-	    return autoBlock;
-	  }
+	@JsonProperty
+	private RateLimitConfiguration allocateDevice = new RateLimitConfiguration(2, 1.0 / 2.0);
 
-  public RateLimitConfiguration getAllocateDevice() {
-    return allocateDevice;
-  }
+	@JsonProperty
+	private RateLimitConfiguration verifyDevice = new RateLimitConfiguration(2, 2);
 
-  public RateLimitConfiguration getVerifyDevice() {
-    return verifyDevice;
-  }
+	@JsonProperty
+	private RateLimitConfiguration turnAllocations = new RateLimitConfiguration(60, 60);
 
-  public RateLimitConfiguration getMessages() {
-    return messages;
-  }
+	@JsonProperty
+	private RateLimitConfiguration profile = new RateLimitConfiguration(4320, 3);
 
-  public RateLimitConfiguration getPreKeys() {
-    return prekeys;
-  }
+	@JsonProperty
+	private RateLimitConfiguration stickerPack = new RateLimitConfiguration(50, 20 / (24.0 * 60.0));
 
-  public RateLimitConfiguration getContactQueries() {
-    return contactQueries;
-  }
+	@JsonProperty
+	private RateLimitConfiguration usernameLookup = new RateLimitConfiguration(100, 100 / (24.0 * 60.0));
 
-  public RateLimitConfiguration getAttachments() {
-    return attachments;
-  }
+	@JsonProperty
+	private RateLimitConfiguration usernameSet = new RateLimitConfiguration(100, 100 / (24.0 * 60.0));
 
-  public RateLimitConfiguration getSmsDestination() {
-    return smsDestination;
-  }
+	public RateLimitConfiguration getAutoBlock() {
+		return autoBlock;
+	}
 
-  public RateLimitConfiguration getVoiceDestination() {
-    return voiceDestination;
-  }
+	public RateLimitConfiguration getAllocateDevice() {
+		return allocateDevice;
+	}
 
-  public RateLimitConfiguration getVoiceDestinationDaily() {
-    return voiceDestinationDaily;
-  }
-  
-  public RateLimitConfiguration getSmsVoiceIp() {
-	    return smsVoiceIp;
-	  }
-  
-  public RateLimitConfiguration getSmsVoicePrefix() {
-	    return smsVoicePrefix;
-	  }
+	public RateLimitConfiguration getVerifyDevice() {
+		return verifyDevice;
+	}
 
-  public RateLimitConfiguration getVerifyNumber() {
-    return verifyNumber;
-  }
+	public RateLimitConfiguration getMessages() {
+		return messages;
+	}
 
-  public RateLimitConfiguration getVerifyPin() {
-    return verifyPin;
-  }
+	public RateLimitConfiguration getPreKeys() {
+		return prekeys;
+	}
 
-  public RateLimitConfiguration getTurnAllocations() {
-    return turnAllocations;
-  }
+	public RateLimitConfiguration getContactQueries() {
+		return contactQueries;
+	}
 
-  public RateLimitConfiguration getProfile() {
-    return profile;
-  }
+	public RateLimitConfiguration getAttachments() {
+		return attachments;
+	}
 
-  public static class RateLimitConfiguration {
-    @JsonProperty
-    private int bucketSize;
+	public RateLimitConfiguration getSmsDestination() {
+		return smsDestination;
+	}
 
-    @JsonProperty
-    private double leakRatePerMinute;
+	public RateLimitConfiguration getVoiceDestination() {
+		return voiceDestination;
+	}
 
-    public RateLimitConfiguration(int bucketSize, double leakRatePerMinute) {
-      this.bucketSize        = bucketSize;
-      this.leakRatePerMinute = leakRatePerMinute;
-    }
+	public RateLimitConfiguration getVoiceDestinationDaily() {
+		return voiceDestinationDaily;
+	}
 
-    public RateLimitConfiguration() {}
+	public RateLimitConfiguration getSmsVoiceIp() {
+		return smsVoiceIp;
+	}
 
-    public int getBucketSize() {
-      return bucketSize;
-    }
+	public RateLimitConfiguration getSmsVoicePrefix() {
+		return smsVoicePrefix;
+	}
 
-    public double getLeakRatePerMinute() {
-      return leakRatePerMinute;
-    }
-  }
+	public RateLimitConfiguration getVerifyNumber() {
+		return verifyNumber;
+	}
+
+	public RateLimitConfiguration getVerifyPin() {
+		return verifyPin;
+	}
+
+	public RateLimitConfiguration getTurnAllocations() {
+		return turnAllocations;
+	}
+
+	public RateLimitConfiguration getProfile() {
+		return profile;
+	}
+
+	public RateLimitConfiguration getStickerPack() {
+		return stickerPack;
+	}
+
+	public RateLimitConfiguration getUsernameLookup() {
+		return usernameLookup;
+	}
+
+	public RateLimitConfiguration getUsernameSet() {
+		return usernameSet;
+	}
+
+	public static class RateLimitConfiguration {
+		@JsonProperty
+		private int bucketSize;
+
+		@JsonProperty
+		private double leakRatePerMinute;
+
+		public RateLimitConfiguration(int bucketSize, double leakRatePerMinute) {
+			this.bucketSize = bucketSize;
+			this.leakRatePerMinute = leakRatePerMinute;
+		}
+
+		public RateLimitConfiguration() {
+		}
+
+		public int getBucketSize() {
+			return bucketSize;
+		}
+
+		public double getLeakRatePerMinute() {
+			return leakRatePerMinute;
+		}
+	}
 }

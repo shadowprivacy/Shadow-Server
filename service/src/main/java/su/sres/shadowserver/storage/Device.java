@@ -16,243 +16,267 @@
  */
 package su.sres.shadowserver.storage;
 
-
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import su.sres.shadowserver.auth.AuthenticationCredentials;
+import su.sres.shadowserver.entities.UserCapabilities;
 import su.sres.shadowserver.entities.SignedPreKey;
 import su.sres.shadowserver.util.Util;
 
+import javax.annotation.Nullable;
+import javax.validation.constraints.Null;
 import java.util.concurrent.TimeUnit;
 
 public class Device {
 
-  public static final long MASTER_ID = 1;
+	public static final long MASTER_ID = 1;
 
-  @JsonProperty
-  private long    id;
+	@JsonProperty
+	private long id;
 
-  @JsonProperty
-  private String  name;
+	@JsonProperty
+	private String name;
 
-  @JsonProperty
-  private String  authToken;
+	@JsonProperty
+	private String authToken;
 
-  @JsonProperty
-  private String  salt;
+	@JsonProperty
+	private String salt;
 
-  @JsonProperty
-  private String  signalingKey;
+	@JsonProperty
+	private String signalingKey;
 
-  @JsonProperty
-  private String  gcmId;
+	@JsonProperty
+	private String gcmId;
 
-  @JsonProperty
-  private String  apnId;
+	@JsonProperty
+	private String apnId;
 
-  @JsonProperty
-  private String  voipApnId;
+	@JsonProperty
+	private String voipApnId;
 
-  @JsonProperty
-  private long pushTimestamp;
+	@JsonProperty
+	private long pushTimestamp;
 
-  @JsonProperty
-  private boolean fetchesMessages;
+	@JsonProperty
+	private long uninstalledFeedback;
 
-  @JsonProperty
-  private int registrationId;
+	@JsonProperty
+	private boolean fetchesMessages;
 
-  @JsonProperty
-  private SignedPreKey signedPreKey;
+	@JsonProperty
+	private int registrationId;
 
-  @JsonProperty
-  private long lastSeen;
+	@JsonProperty
+	private SignedPreKey signedPreKey;
 
-  @JsonProperty
-  private long created;
+	@JsonProperty
+	private long lastSeen;
 
-  @JsonProperty
-  private String userAgent;
+	@JsonProperty
+	private long created;
 
-  @JsonProperty
-  private boolean unauthenticatedDelivery;
+	@JsonProperty
+	private String userAgent;
 
-  public Device() {}
+	@JsonProperty
+	private DeviceCapabilities capabilities;
 
-  public Device(long id, String name, String authToken, String salt,
-                String signalingKey, String gcmId, String apnId,
-                String voipApnId, boolean fetchesMessages,
-                int registrationId, SignedPreKey signedPreKey,
-                long lastSeen, long created, String userAgent,
-                boolean unauthenticatedDelivery)
-  {
-	  this.id                      = id;
-	    this.name                    = name;
-	    this.authToken               = authToken;
-	    this.salt                    = salt;
-	    this.signalingKey            = signalingKey;
-	    this.gcmId                   = gcmId;
-	    this.apnId                   = apnId;
-	    this.voipApnId               = voipApnId;
-	    this.fetchesMessages         = fetchesMessages;
-	    this.registrationId          = registrationId;
-	    this.signedPreKey            = signedPreKey;
-	    this.lastSeen                = lastSeen;
-	    this.created                 = created;
-	    this.userAgent               = userAgent;
-	    this.unauthenticatedDelivery = unauthenticatedDelivery;
-  }
+	public Device() {
+	}
 
-  public String getApnId() {
-    return apnId;
-  }
+	public Device(long id, String name, String authToken, String salt, String signalingKey, String gcmId, String apnId,
+			String voipApnId, boolean fetchesMessages, int registrationId, SignedPreKey signedPreKey, long lastSeen,
+			long created, String userAgent, long uninstalledFeedback, DeviceCapabilities capabilities) {
+		this.id = id;
+		this.name = name;
+		this.authToken = authToken;
+		this.salt = salt;
+		this.signalingKey = signalingKey;
+		this.gcmId = gcmId;
+		this.apnId = apnId;
+		this.voipApnId = voipApnId;
+		this.fetchesMessages = fetchesMessages;
+		this.registrationId = registrationId;
+		this.signedPreKey = signedPreKey;
+		this.lastSeen = lastSeen;
+		this.created = created;
+		this.userAgent = userAgent;
+		this.uninstalledFeedback = uninstalledFeedback;
+		this.capabilities = capabilities;
+	}
 
-  public void setApnId(String apnId) {
-    this.apnId = apnId;
+	public String getApnId() {
+		return apnId;
+	}
 
-    if (apnId != null) {
-      this.pushTimestamp = System.currentTimeMillis();
-    }
-  }
+	public void setApnId(String apnId) {
+		this.apnId = apnId;
 
-  public String getVoipApnId() {
-    return voipApnId;
-  }
+		if (apnId != null) {
+			this.pushTimestamp = System.currentTimeMillis();
+		}
+	}
 
-  public void setVoipApnId(String voipApnId) {
-    this.voipApnId = voipApnId;
-  }
+	public String getVoipApnId() {
+		return voipApnId;
+	}
 
-  public void setLastSeen(long lastSeen) {
-    this.lastSeen = lastSeen;
-  }
+	public void setVoipApnId(String voipApnId) {
+		this.voipApnId = voipApnId;
+	}
 
-  public long getLastSeen() {
-    return lastSeen;
-  }
+	public void setUninstalledFeedbackTimestamp(long uninstalledFeedback) {
+		this.uninstalledFeedback = uninstalledFeedback;
+	}
 
-  public void setCreated(long created) {
-    this.created = created;
-  }
+	public long getUninstalledFeedbackTimestamp() {
+		return uninstalledFeedback;
+	}
 
-  public long getCreated() {
-    return this.created;
-  }
+	public void setLastSeen(long lastSeen) {
+		this.lastSeen = lastSeen;
+	}
 
-  public String getGcmId() {
-    return gcmId;
-  }
+	public long getLastSeen() {
+		return lastSeen;
+	}
 
-  public void setGcmId(String gcmId) {
-    this.gcmId = gcmId;
+	public void setCreated(long created) {
+		this.created = created;
+	}
 
-    if (gcmId != null) {
-      this.pushTimestamp = System.currentTimeMillis();
-    }
-  }
+	public long getCreated() {
+		return this.created;
+	}
 
-  public long getId() {
-    return id;
-  }
+	public String getGcmId() {
+		return gcmId;
+	}
 
-  public void setId(long id) {
-    this.id = id;
-  }
+	public void setGcmId(String gcmId) {
+		this.gcmId = gcmId;
 
-  public String getName() {
-    return name;
-  }
+		if (gcmId != null) {
+			this.pushTimestamp = System.currentTimeMillis();
+		}
+	}
 
-  public void setName(String name) {
-    this.name = name;
-  }
+	public long getId() {
+		return id;
+	}
 
-  public boolean isUnauthenticatedDeliverySupported() {
-	    return unauthenticatedDelivery;
-  }
+	public void setId(long id) {
+		this.id = id;
+	}
 
-  public void setUnauthenticatedDeliverySupported(boolean unauthenticatedDelivery) {
-	    this.unauthenticatedDelivery = unauthenticatedDelivery;
-  }
+	public String getName() {
+		return name;
+	}
 
-  public void setAuthenticationCredentials(AuthenticationCredentials credentials) {
-    this.authToken = credentials.getHashedAuthenticationToken();
-    this.salt      = credentials.getSalt();
-  }
+	public void setName(String name) {
+		this.name = name;
+	}
 
-  public AuthenticationCredentials getAuthenticationCredentials() {
-    return new AuthenticationCredentials(authToken, salt);
-  }
+	public void setAuthenticationCredentials(AuthenticationCredentials credentials) {
+		this.authToken = credentials.getHashedAuthenticationToken();
+		this.salt = credentials.getSalt();
+	}
 
-  public String getSignalingKey() {
-    return signalingKey;
-  }
+	public AuthenticationCredentials getAuthenticationCredentials() {
+		return new AuthenticationCredentials(authToken, salt);
+	}
 
-  public void setSignalingKey(String signalingKey) {
-    this.signalingKey = signalingKey;
-  }
+	public @Nullable DeviceCapabilities getCapabilities() {
+		return capabilities;
+	}
 
-  public boolean isActive() {
-    boolean hasChannel = fetchesMessages || !Util.isEmpty(getApnId()) || !Util.isEmpty(getGcmId());
+	public void setCapabilities(DeviceCapabilities capabilities) {
+		this.capabilities = capabilities;
+	}
 
-    return (id == MASTER_ID && hasChannel && signedPreKey != null) ||
-    		(id != MASTER_ID && hasChannel && signedPreKey != null && !isIdleInactive());
-  }
+	public String getSignalingKey() {
+		return signalingKey;
+	}
 
-  public boolean isIdleInactive() {
-    return id != MASTER_ID && lastSeen < (System.currentTimeMillis() - TimeUnit.DAYS.toMillis(30));
-  }
+	public void setSignalingKey(String signalingKey) {
+		this.signalingKey = signalingKey;
+	}
 
-  public boolean getFetchesMessages() {
-    return fetchesMessages;
-  }
+	public boolean isEnabled() {
+		boolean hasChannel = fetchesMessages || !Util.isEmpty(getApnId()) || !Util.isEmpty(getGcmId());
 
-  public void setFetchesMessages(boolean fetchesMessages) {
-    this.fetchesMessages = fetchesMessages;
-  }
+		return (id == MASTER_ID && hasChannel && signedPreKey != null) || (id != MASTER_ID && hasChannel
+				&& signedPreKey != null && lastSeen > (System.currentTimeMillis() - TimeUnit.DAYS.toMillis(30)));
+	}
 
-  public boolean isMaster() {
-    return getId() == MASTER_ID;
-  }
+	public boolean getFetchesMessages() {
+		return fetchesMessages;
+	}
 
-  public int getRegistrationId() {
-    return registrationId;
-  }
+	public void setFetchesMessages(boolean fetchesMessages) {
+		this.fetchesMessages = fetchesMessages;
+	}
 
-  public void setRegistrationId(int registrationId) {
-    this.registrationId = registrationId;
-  }
+	public boolean isMaster() {
+		return getId() == MASTER_ID;
+	}
 
-  public SignedPreKey getSignedPreKey() {
-    return signedPreKey;
-  }
+	public int getRegistrationId() {
+		return registrationId;
+	}
 
-  public void setSignedPreKey(SignedPreKey signedPreKey) {
-    this.signedPreKey = signedPreKey;
-  }
+	public void setRegistrationId(int registrationId) {
+		this.registrationId = registrationId;
+	}
 
-  public long getPushTimestamp() {
-    return pushTimestamp;
-  }
+	public SignedPreKey getSignedPreKey() {
+		return signedPreKey;
+	}
 
-  public void setUserAgent(String userAgent) {
-    this.userAgent = userAgent;
-  }
+	public void setSignedPreKey(SignedPreKey signedPreKey) {
+		this.signedPreKey = signedPreKey;
+	}
 
-  public String getUserAgent() {
-    return this.userAgent;
-  }
+	public long getPushTimestamp() {
+		return pushTimestamp;
+	}
 
-  @Override
-  public boolean equals(Object other) {
-    if (other == null || !(other instanceof Device)) return false;
+	public void setUserAgent(String userAgent) {
+		this.userAgent = userAgent;
+	}
 
-    Device that = (Device)other;
-    return this.id == that.id;
-  }
+	public String getUserAgent() {
+		return this.userAgent;
+	}
 
-  @Override
-  public int hashCode() {
-    return (int)this.id;
-  }
+	@Override
+	public boolean equals(Object other) {
+		if (other == null || !(other instanceof Device))
+			return false;
+
+		Device that = (Device) other;
+		return this.id == that.id;
+	}
+
+	@Override
+	public int hashCode() {
+		return (int) this.id;
+	}
+
+	public static class DeviceCapabilities {
+		@JsonProperty
+		private boolean uuid;
+
+		public DeviceCapabilities() {
+		}
+
+		public DeviceCapabilities(boolean uuid) {
+			this.uuid = uuid;
+		}
+
+		public boolean isUuid() {
+			return uuid;
+		}
+	}
 }

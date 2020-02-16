@@ -19,7 +19,10 @@ package su.sres.shadowserver.controllers;
 import com.codahale.metrics.annotation.Timed;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import su.sres.shadowserver.auth.AmbiguousIdentifier;
 import su.sres.shadowserver.auth.Anonymous;
+import su.sres.shadowserver.auth.DisabledPermittedAccount;
 import su.sres.shadowserver.auth.OptionalAccess;
 
 import javax.validation.Valid;
@@ -59,233 +62,222 @@ import su.sres.shadowserver.storage.Keys;
 @Path("/v2/keys")
 public class KeysController {
 
-  private static final Logger logger = LoggerFactory.getLogger(KeysController.class);
+	private static final Logger logger = LoggerFactory.getLogger(KeysController.class);
 
-  private final RateLimiters           rateLimiters;
-  private final Keys                   keys;
-  private final AccountsManager        accounts;
+	private final RateLimiters rateLimiters;
+	private final Keys keys;
+	private final AccountsManager accounts;
 // excluded federation, reserved for future use
-  //  private final FederatedClientManager federatedClientManager;
+	// private final FederatedClientManager federatedClientManager;
 
-  /* excluded federation, reserved for future use
-   * 
-  
-  public KeysController(RateLimiters rateLimiters, Keys keys, AccountsManager accounts,
-                        FederatedClientManager federatedClientManager)
-  {
-    this.rateLimiters           = rateLimiters;
-    this.keys                   = keys;
-    this.accounts               = accounts;
-    this.federatedClientManager = federatedClientManager;
-  }
-  */
-  public KeysController(RateLimiters rateLimiters, Keys keys, AccountsManager accounts) {
-	    this.rateLimiters = rateLimiters;
-	    this.keys         = keys;
-	    this.accounts     = accounts;
-	  }
+	/*
+	 * excluded federation, reserved for future use
+	 * 
+	 * 
+	 * public KeysController(RateLimiters rateLimiters, Keys keys, AccountsManager
+	 * accounts, FederatedClientManager federatedClientManager) { this.rateLimiters
+	 * = rateLimiters; this.keys = keys; this.accounts = accounts;
+	 * this.federatedClientManager = federatedClientManager; }
+	 */
+	public KeysController(RateLimiters rateLimiters, Keys keys, AccountsManager accounts) {
+		this.rateLimiters = rateLimiters;
+		this.keys = keys;
+		this.accounts = accounts;
+	}
 
-  @GET
-  @Produces(MediaType.APPLICATION_JSON)
-  public PreKeyCount getStatus(@Auth Account account) {
-    int count = keys.getCount(account.getNumber(), account.getAuthenticatedDevice().get().getId());
+	@GET
+	@Produces(MediaType.APPLICATION_JSON)
+	public PreKeyCount getStatus(@Auth Account account) {
+		int count = keys.getCount(account.getNumber(), account.getAuthenticatedDevice().get().getId());
 
-    if (count > 0) {
-      count = count - 1;
-    }
+		if (count > 0) {
+			count = count - 1;
+		}
 
-    return new PreKeyCount(count);
-  }
+		return new PreKeyCount(count);
+	}
 
-  @Timed
-  @PUT
-  @Consumes(MediaType.APPLICATION_JSON)
-  public void setKeys(@Auth Account account, @Valid PreKeyState preKeys)  {
-    Device  device        = account.getAuthenticatedDevice().get();
-    boolean updateAccount = false;
+	@Timed
+	@PUT
+	@Consumes(MediaType.APPLICATION_JSON)
+	public void setKeys(@Auth DisabledPermittedAccount disabledPermittedAccount, @Valid PreKeyState preKeys) {
+						
+		Account account = disabledPermittedAccount.getAccount();
+		Device device = account.getAuthenticatedDevice().get();
+		boolean updateAccount = false;
 
-    if (!preKeys.getSignedPreKey().equals(device.getSignedPreKey())) {
-      device.setSignedPreKey(preKeys.getSignedPreKey());
-      updateAccount = true;
-    }
+		if (!preKeys.getSignedPreKey().equals(device.getSignedPreKey())) {
+			
+			device.setSignedPreKey(preKeys.getSignedPreKey());
+			updateAccount = true;
+		}
 
-    if (!preKeys.getIdentityKey().equals(account.getIdentityKey())) {
-      account.setIdentityKey(preKeys.getIdentityKey());
-      updateAccount = true;
-    }
+		if (!preKeys.getIdentityKey().equals(account.getIdentityKey())) {
+			
+			account.setIdentityKey(preKeys.getIdentityKey());
+			updateAccount = true;
+		}
 
-    if (updateAccount) {
-      accounts.update(account);
-    }
+		if (updateAccount) {
+			accounts.update(account);
+		}
 
-    keys.store(account.getNumber(), device.getId(), preKeys.getPreKeys());
-  }
+		keys.store(account.getNumber(), device.getId(), preKeys.getPreKeys());
+	}
 
-  @Timed
-  @GET
-  @Path("/{number}/{device_id}")
-  @Produces(MediaType.APPLICATION_JSON)
-  /* excluded federation, reserved for future use
-   * 
-   
-  public Optional<PreKeyResponse> getDeviceKeys(@Auth                   Account account,
-                                                @PathParam("number")    String number,
-                                                @PathParam("device_id") String deviceId,
-                                                @QueryParam("relay")    Optional<String> relay)
-      throws RateLimitExceededException
-  {
-    try {
-      if (relay.isPresent()) {
-        return federatedClientManager.getClient(relay.get()).getKeysV2(number, deviceId);
-      }
+	/*
+	 * excluded federation, reserved for future use
+	 * 
+	 * 
+	 * public Optional<PreKeyResponse> getDeviceKeys(@Auth Account account,
+	 * 
+	 * @PathParam("number") String number,
+	 * 
+	 * @PathParam("device_id") String deviceId,
+	 * 
+	 * @QueryParam("relay") Optional<String> relay) throws
+	 * RateLimitExceededException { try { if (relay.isPresent()) { return
+	 * federatedClientManager.getClient(relay.get()).getKeysV2(number, deviceId); }
+	 * 
+	 * Account target = getAccount(number, deviceId);
+	 * 
+	 * if (account.isRateLimited()) {
+	 * rateLimiters.getPreKeysLimiter().validate(account.getNumber() + "__" + number
+	 * + "." + deviceId); }
+	 * 
+	 * Optional<List<KeyRecord>> targetKeys = getLocalKeys(target, deviceId);
+	 * List<PreKeyResponseItem> devices = new LinkedList<>();
+	 * 
+	 * for (Device device : target.getDevices()) { if (device.isActive() &&
+	 * (deviceId.equals("*") || device.getId() == Long.parseLong(deviceId))) {
+	 * SignedPreKey signedPreKey = device.getSignedPreKey(); PreKey preKey = null;
+	 * 
+	 * if (targetKeys.isPresent()) { for (KeyRecord keyRecord : targetKeys.get()) {
+	 * if (!keyRecord.isLastResort() && keyRecord.getDeviceId() == device.getId()) {
+	 * preKey = new PreKey(keyRecord.getKeyId(), keyRecord.getPublicKey()); } } }
+	 * 
+	 * if (signedPreKey != null || preKey != null) { devices.add(new
+	 * PreKeyResponseItem(device.getId(), device.getRegistrationId(), signedPreKey,
+	 * preKey)); } } }
+	 * 
+	 * if (devices.isEmpty()) return Optional.absent(); else return Optional.of(new
+	 * PreKeyResponse(target.getIdentityKey(), devices)); } catch
+	 * (NoSuchPeerException | NoSuchUserException e) { throw new
+	 * WebApplicationException(Response.status(404).build()); } }
+	 * 
+	 */
+	
 
-      Account target = getAccount(number, deviceId);
+	@Timed
+	@GET
+	@Path("/{identifier}/{device_id}")
+	@Produces(MediaType.APPLICATION_JSON)
+	public Optional<PreKeyResponse> getDeviceKeys(@Auth Optional<Account> account,
+			@HeaderParam(OptionalAccess.UNIDENTIFIED) Optional<Anonymous> accessKey,
+			@PathParam("identifier") AmbiguousIdentifier targetName, @PathParam("device_id") String deviceId)
+			throws RateLimitExceededException {
+		if (!account.isPresent() && !accessKey.isPresent()) {
+			throw new WebApplicationException(Response.Status.UNAUTHORIZED);
+		}
 
-      if (account.isRateLimited()) {
-        rateLimiters.getPreKeysLimiter().validate(account.getNumber() +  "__" + number + "." + deviceId);
-      }
+		Optional<Account> target = accounts.get(targetName);
+		OptionalAccess.verify(account, accessKey, target, deviceId);
 
-      Optional<List<KeyRecord>> targetKeys = getLocalKeys(target, deviceId);
-      List<PreKeyResponseItem>  devices    = new LinkedList<>();
+		assert (target.isPresent());
 
-      for (Device device : target.getDevices()) {
-        if (device.isActive() && (deviceId.equals("*") || device.getId() == Long.parseLong(deviceId))) {
-          SignedPreKey signedPreKey = device.getSignedPreKey();
-          PreKey preKey       = null;
+		if (account.isPresent()) {
+			rateLimiters.getPreKeysLimiter()
+					.validate(account.get().getNumber() + "__" + target.get().getNumber() + "." + deviceId);
+		}
 
-          if (targetKeys.isPresent()) {
-            for (KeyRecord keyRecord : targetKeys.get()) {
-              if (!keyRecord.isLastResort() && keyRecord.getDeviceId() == device.getId()) {
-                preKey = new PreKey(keyRecord.getKeyId(), keyRecord.getPublicKey());
-              }
-            }
-          }
+		List<KeyRecord> targetKeys = getLocalKeys(target.get(), deviceId);
+		List<PreKeyResponseItem> devices = new LinkedList<>();
 
-          if (signedPreKey != null || preKey != null) {
-            devices.add(new PreKeyResponseItem(device.getId(), device.getRegistrationId(), signedPreKey, preKey));
-          }
-        }
-      }
+		for (Device device : target.get().getDevices()) {
+			if (device.isEnabled() && (deviceId.equals("*") || device.getId() == Long.parseLong(deviceId))) {
+				SignedPreKey signedPreKey = device.getSignedPreKey();
+				PreKey preKey = null;
 
-      if (devices.isEmpty()) return Optional.absent();
-      else                   return Optional.of(new PreKeyResponse(target.getIdentityKey(), devices));
-    } catch (NoSuchPeerException | NoSuchUserException e) {
-      throw new WebApplicationException(Response.status(404).build());
-    }
-  }
-  
-  */
-  
-  public Optional<PreKeyResponse> getDeviceKeys(@Auth                                     Optional<Account> account,
-          @HeaderParam(OptionalAccess.UNIDENTIFIED) Optional<Anonymous> accessKey,
-          @PathParam("number")                      String number,
-          @PathParam("device_id")                   String deviceId)
-throws RateLimitExceededException
-{
-if (!account.isPresent() && !accessKey.isPresent()) {
-throw new WebApplicationException(Response.Status.UNAUTHORIZED);
-}
+				for (KeyRecord keyRecord : targetKeys) {
+					if (keyRecord.getDeviceId() == device.getId()) {
+						preKey = new PreKey(keyRecord.getKeyId(), keyRecord.getPublicKey());
+					}
+				}
 
-Optional<Account> target = accounts.get(number);
-OptionalAccess.verify(account, accessKey, target, deviceId);
+				if (signedPreKey != null || preKey != null) {
+					devices.add(
+							new PreKeyResponseItem(device.getId(), device.getRegistrationId(), signedPreKey, preKey));
+				}
+			}
+		}
 
-assert(target.isPresent());
+		if (devices.isEmpty())
+			return Optional.empty();
+		else
+			return Optional.of(new PreKeyResponse(target.get().getIdentityKey(), devices));
+	}
 
-if (account.isPresent()) {
-    rateLimiters.getPreKeysLimiter().validate(account.get().getNumber() +  "__" + number + "." + deviceId);
-  }
+	@Timed
+	@PUT
+	@Path("/signed")
+	@Consumes(MediaType.APPLICATION_JSON)
+	public void setSignedKey(@Auth Account account, @Valid SignedPreKey signedPreKey) {
+		Device device = account.getAuthenticatedDevice().get();
 
-List<KeyRecord>          targetKeys = getLocalKeys(target.get(), deviceId);
-List<PreKeyResponseItem> devices    = new LinkedList<>();
+		device.setSignedPreKey(signedPreKey);
+		accounts.update(account);
+	}
 
-for (Device device : target.get().getDevices()) {
-if (device.isActive() && (deviceId.equals("*") || device.getId() == Long.parseLong(deviceId))) {
-SignedPreKey signedPreKey = device.getSignedPreKey();
-PreKey preKey       = null;
+	@Timed
+	@GET
+	@Path("/signed")
+	@Produces(MediaType.APPLICATION_JSON)
+	public Optional<SignedPreKey> getSignedKey(@Auth Account account) {
+		Device device = account.getAuthenticatedDevice().get();
+		SignedPreKey signedPreKey = device.getSignedPreKey();
 
-for (KeyRecord keyRecord : targetKeys) {
-    if (keyRecord.getDeviceId() == device.getId()) {
-preKey = new PreKey(keyRecord.getKeyId(), keyRecord.getPublicKey());
-}
-}
+		if (signedPreKey != null)
+			return Optional.of(signedPreKey);
+		else
+			return Optional.empty();
+	}
 
-if (signedPreKey != null || preKey != null) {
-devices.add(new PreKeyResponseItem(device.getId(), device.getRegistrationId(), signedPreKey, preKey));
-}
-}
-}
-
-if (devices.isEmpty()) return Optional.empty();
-else                   return Optional.of(new PreKeyResponse(target.get().getIdentityKey(), devices));
-}  
-  
-
-  @Timed
-  @PUT
-  @Path("/signed")
-  @Consumes(MediaType.APPLICATION_JSON)
-  public void setSignedKey(@Auth Account account, @Valid SignedPreKey signedPreKey) {
-    Device device = account.getAuthenticatedDevice().get();
-    device.setSignedPreKey(signedPreKey);
-    accounts.update(account);
-  }
-
-  @Timed
-  @GET
-  @Path("/signed")
-  @Produces(MediaType.APPLICATION_JSON)
-  public Optional<SignedPreKey> getSignedKey(@Auth Account account) {
-    Device       device       = account.getAuthenticatedDevice().get();
-    SignedPreKey signedPreKey = device.getSignedPreKey();
-
-    if (signedPreKey != null) return Optional.of(signedPreKey);
-    else                      return Optional.empty();
-  }
-
-  private List<KeyRecord> getLocalKeys(Account destination, String deviceIdSelector) {
+	private List<KeyRecord> getLocalKeys(Account destination, String deviceIdSelector) {
 // excluded federation (?), reserved for future use 
-  //     throws NoSuchUserException
-  
-    try {
-      if (deviceIdSelector.equals("*")) {
-        return keys.get(destination.getNumber());
-      }
+		// throws NoSuchUserException
 
-      long deviceId = Long.parseLong(deviceIdSelector);
+		try {
+			if (deviceIdSelector.equals("*")) {
+				return keys.get(destination.getNumber());
+			}
 
-      return keys.get(destination.getNumber(), deviceId);
-    } catch (NumberFormatException e) {
-      throw new WebApplicationException(Response.status(422).build());
-    }
-  }
+			long deviceId = Long.parseLong(deviceIdSelector);
 
-  /* excluded federation (?), reserved for future use
-   *
-     
-  private Account getAccount(String number, String deviceSelector)
-      throws NoSuchUserException
-  {
-    try {
-      Optional<Account> account = accounts.get(number);
+			return keys.get(destination.getNumber(), deviceId);
+		} catch (NumberFormatException e) {
+			throw new WebApplicationException(Response.status(422).build());
+		}
+	}
 
-      if (!account.isPresent() || !account.get().isActive()) {
-        throw new NoSuchUserException("No active account");
-      }
-
-      if (!deviceSelector.equals("*")) {
-        long deviceId = Long.parseLong(deviceSelector);
-
-        Optional<Device> targetDevice = account.get().getDevice(deviceId);
-
-        if (!targetDevice.isPresent() || !targetDevice.get().isActive()) {
-          throw new NoSuchUserException("No active device");
-        }
-      }
-
-      return account.get();
-    } catch (NumberFormatException e) {
-      throw new WebApplicationException(Response.status(422).build());
-    }
-  }
-  */
+	/*
+	 * excluded federation (?), reserved for future use
+	 *
+	 * 
+	 * private Account getAccount(String number, String deviceSelector) throws
+	 * NoSuchUserException { try { Optional<Account> account = accounts.get(number);
+	 * 
+	 * if (!account.isPresent() || !account.get().isActive()) { throw new
+	 * NoSuchUserException("No active account"); }
+	 * 
+	 * if (!deviceSelector.equals("*")) { long deviceId =
+	 * Long.parseLong(deviceSelector);
+	 * 
+	 * Optional<Device> targetDevice = account.get().getDevice(deviceId);
+	 * 
+	 * if (!targetDevice.isPresent() || !targetDevice.get().isActive()) { throw new
+	 * NoSuchUserException("No active device"); } }
+	 * 
+	 * return account.get(); } catch (NumberFormatException e) { throw new
+	 * WebApplicationException(Response.status(422).build()); } }
+	 */
 }

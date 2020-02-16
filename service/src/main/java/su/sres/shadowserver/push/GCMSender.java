@@ -4,19 +4,16 @@ import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.SharedMetricRegistries;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.util.concurrent.FutureCallback;
-import com.google.common.util.concurrent.Futures;
-import com.google.common.util.concurrent.ListenableFuture;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.whispersystems.gcm.server.Message;
-import org.whispersystems.gcm.server.Result;
-import org.whispersystems.gcm.server.Sender;
+import su.sres.gcm.server.Message;
+import su.sres.gcm.server.Result;
+import su.sres.gcm.server.Sender;
 
-import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -26,7 +23,10 @@ import io.dropwizard.lifecycle.Managed;
 import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.storage.AccountsManager;
 import su.sres.shadowserver.storage.Device;
+import su.sres.shadowserver.util.CircuitBreakerUtil;
 import su.sres.shadowserver.util.Constants;
+import su.sres.shadowserver.util.SystemMapper;
+import su.sres.shadowserver.util.Util;
 
 public class GCMSender implements Managed {
 
@@ -38,9 +38,10 @@ public class GCMSender implements Managed {
   private final Meter          unregistered   = metricRegistry.meter(name(getClass(), "sent", "unregistered"));
   private final Meter          canonical      = metricRegistry.meter(name(getClass(), "sent", "canonical"));
 
-  private final Map<String, Meter> outboundMeters = new HashMap<String, Meter>() {{
+  private final Map<String, Meter> outboundMeters = new HashMap<>() {{
     put("receipt", metricRegistry.meter(name(getClass(), "outbound", "receipt")));
     put("notification", metricRegistry.meter(name(getClass(), "outbound", "notification")));
+    put("challenge", metricRegistry.meter(name(getClass(), "outbound", "challenge")));
   }};
 
 
@@ -50,7 +51,9 @@ public class GCMSender implements Managed {
 
   public GCMSender(AccountsManager accountsManager, String signalKey) {
     this.accountsManager = accountsManager;
-    this.signalSender    = new Sender(signalKey, 50);
+    this.signalSender    = new Sender(signalKey, SystemMapper.getMapper(), 6);
+    
+    CircuitBreakerUtil.registerMetrics(metricRegistry, signalSender.getRetry(), Sender.class);
   }
 
   @VisibleForTesting
@@ -65,31 +68,38 @@ public class GCMSender implements Managed {
                                      .withDestination(message.getGcmId())
                                      .withPriority("high");
 
-    String  key     = message.isReceipt() ? "receipt" : "notification";
-    Message request = builder.withDataPart(key, "").build();
+    String key;
 
-    ListenableFuture<Result> future = signalSender.send(request, message);
+    switch (message.getType()) {
+      case RECEIPT:      key = "receipt";      break;
+      case NOTIFICATION: key = "notification"; break;
+      case CHALLENGE:    key = "challenge";    break;
+      default:           throw new AssertionError();
+    }
+
+    Message request = builder.withDataPart(key, message.getData().orElse("")).build();
+
+    CompletableFuture<Result> future = signalSender.send(request);
     markOutboundMeter(key);
 
-    Futures.addCallback(future, new FutureCallback<Result>() {
-      @Override
-      public void onSuccess(Result result) {
+    future.handle((result, throwable) -> {
+    	if (result != null && message.getType() != GcmMessage.Type.CHALLENGE) {
         if (result.isUnregistered() || result.isInvalidRegistrationId()) {
-          handleBadRegistration(result);
+        	executor.submit(() -> handleBadRegistration(message));
         } else if (result.hasCanonicalRegistrationId()) {
-          handleCanonicalRegistrationId(result);
+        	executor.submit(() -> handleCanonicalRegistrationId(message, result));
         } else if (!result.isSuccess()) {
-          handleGenericError(result);
+        	executor.submit(() -> handleGenericError(message, result));
         } else {
           success.mark();
         }
+        
+        } else {
+            logger.warn("FCM Failed: " + throwable + ", " + throwable.getCause());
       }
 
-      @Override
-      public void onFailure(Throwable throwable) {
-        logger.warn("GCM Failed: " + throwable);
-      }
-    }, executor);
+        return null;
+      });
   }
 
   @Override
@@ -98,36 +108,34 @@ public class GCMSender implements Managed {
   }
 
   @Override
-  public void stop() throws IOException {
-    this.signalSender.stop();
+  public void stop() {
     this.executor.shutdown();
   }
 
-  private void handleBadRegistration(Result result) {
-    GcmMessage message = (GcmMessage)result.getContext();
-    logger.warn("Got GCM unregistered notice! " + message.getGcmId());
+  private void handleBadRegistration(GcmMessage message) {
 
     Optional<Account> account = getAccountForEvent(message);
 
     if (account.isPresent()) {
+    	//noinspection OptionalGetWithoutIsPresent
       Device device = account.get().getDevice(message.getDeviceId()).get();
-      device.setGcmId(null);
-      device.setFetchesMessages(false);
-
-      accountsManager.update(account.get());
+      if (device.getUninstalledFeedbackTimestamp() == 0) {
+          device.setUninstalledFeedbackTimestamp(Util.todayInMillis());
+          accountsManager.update(account.get());
+        }
     }
 
     unregistered.mark();
   }
 
-  private void handleCanonicalRegistrationId(Result result) {
-    GcmMessage message = (GcmMessage)result.getContext();
+  private void handleCanonicalRegistrationId(GcmMessage message, Result result) {
     logger.warn(String.format("Actually received 'CanonicalRegistrationId' ::: (canonical=%s), (original=%s)",
                               result.getCanonicalRegistrationId(), message.getGcmId()));
 
     Optional<Account> account = getAccountForEvent(message);
 
     if (account.isPresent()) {
+    	//noinspection OptionalGetWithoutIsPresent
       Device device = account.get().getDevice(message.getDeviceId()).get();
       device.setGcmId(result.getCanonicalRegistrationId());
 
@@ -137,8 +145,7 @@ public class GCMSender implements Managed {
     canonical.mark();
   }
 
-  private void handleGenericError(Result result) {
-    GcmMessage message = (GcmMessage)result.getContext();
+  private void handleGenericError(GcmMessage message, Result result) {
     logger.warn(String.format("Unrecoverable Error ::: (error=%s), (gcm_id=%s), " +
                               "(destination=%s), (device_id=%d)",
                               result.getError(), message.getGcmId(), message.getNumber(),
@@ -154,11 +161,8 @@ public class GCMSender implements Managed {
 
       if (device.isPresent()) {
         if (message.getGcmId().equals(device.get().getGcmId())) {
-          logger.info("GCM Unregister GCM ID matches!");
-
-          if (device.get().getPushTimestamp() == 0 || System.currentTimeMillis() > (device.get().getPushTimestamp() + TimeUnit.SECONDS.toMillis(10)))
-          {
-            logger.info("GCM Unregister Timestamp matches!");
+        	
+        	if (device.get().getPushTimestamp() == 0 || System.currentTimeMillis() > (device.get().getPushTimestamp() + TimeUnit.SECONDS.toMillis(10))) {
 
             return account;
           }

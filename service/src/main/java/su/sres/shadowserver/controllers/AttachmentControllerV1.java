@@ -28,7 +28,6 @@ import javax.ws.rs.Produces;
 import javax.ws.rs.core.MediaType;
 import java.io.IOException;
 import java.net.URL;
-import java.security.SecureRandom;
 import java.util.stream.Stream;
 
 import io.dropwizard.auth.Auth;
@@ -40,7 +39,6 @@ import su.sres.shadowserver.entities.AttachmentUri;
 import su.sres.shadowserver.limits.RateLimiters;
 import su.sres.shadowserver.s3.UrlSigner;
 import su.sres.shadowserver.storage.Account;
-import su.sres.shadowserver.util.Conversions;
 
 
 @Path("/v1/attachments")

@@ -52,6 +52,7 @@ import su.sres.shadowserver.limits.RateLimiters;
 import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.storage.AccountsManager;
 import su.sres.shadowserver.storage.Device;
+import su.sres.shadowserver.storage.Device.DeviceCapabilities;
 import su.sres.shadowserver.storage.MessagesManager;
 import su.sres.shadowserver.storage.PendingDevicesManager;
 import su.sres.shadowserver.util.Util;
@@ -125,7 +126,7 @@ public class DeviceController {
       maxDeviceLimit = maxDeviceConfiguration.get(account.getNumber());
     }
 
-    if (account.getActiveDeviceCount() >= maxDeviceLimit) {
+    if (account.getEnabledDeviceCount() >= maxDeviceLimit) {
       throw new DeviceLimitExceededException(account.getDevices().size(), MAX_DEVICES);
     }
 
@@ -135,7 +136,8 @@ public class DeviceController {
 
     VerificationCode       verificationCode       = generateVerificationCode();
     StoredVerificationCode storedVerificationCode = new StoredVerificationCode(verificationCode.getVerificationCode(),
-                                                                               System.currentTimeMillis());
+    		System.currentTimeMillis(),
+            null);
 
     pendingDevices.store(account.getNumber(), storedVerificationCode);
 
@@ -154,8 +156,10 @@ public class DeviceController {
   {
     try {
       AuthorizationHeader header = AuthorizationHeader.fromFullHeader(authorizationHeader);
-      String number              = header.getNumber();
+      String number              = header.getIdentifier().getNumber();
       String password            = header.getPassword();
+      
+      if (number == null) throw new WebApplicationException(400);
 
       rateLimiters.getVerifyDeviceLimiter().validate(number);
 
@@ -177,7 +181,7 @@ public class DeviceController {
         maxDeviceLimit = maxDeviceConfiguration.get(account.get().getNumber());
       }
 
-      if (account.get().getActiveDeviceCount() >= maxDeviceLimit) {
+      if (account.get().getEnabledDeviceCount() >= maxDeviceLimit) {
         throw new DeviceLimitExceededException(account.get().getDevices().size(), MAX_DEVICES);
       }
 
@@ -209,7 +213,15 @@ public class DeviceController {
   @Path("/unauthenticated_delivery")
   public void setUnauthenticatedDelivery(@Auth Account account) {
     assert(account.getAuthenticatedDevice().isPresent());
-    account.getAuthenticatedDevice().get().setUnauthenticatedDeliverySupported(true);
+    // Deprecated
+  }
+
+  @Timed
+  @PUT
+  @Path("/capabilities")
+  public void setCapabiltities(@Auth Account account, @Valid DeviceCapabilities capabilities) {
+    assert(account.getAuthenticatedDevice().isPresent());
+    account.getAuthenticatedDevice().get().setCapabilities(capabilities);
     accounts.update(account);
   }
 

@@ -31,6 +31,7 @@ import org.junit.Test;
 import redis.clients.jedis.Jedis;
 
 import java.util.Arrays;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.Optional;
 
@@ -46,181 +47,192 @@ import static org.mockito.Mockito.when;
 
 public class ActiveUserCounterTest {
 
-  private final String NUMBER_IOS      = "+15551234567";
-  private final String NUMBER_ANDROID  = "+5511987654321";
-  private final String NUMBER_NODEVICE = "+5215551234567";
+	private final UUID UUID_IOS = UUID.randomUUID();
+	private final UUID UUID_ANDROID = UUID.randomUUID();
+	private final UUID UUID_NODEVICE = UUID.randomUUID();
 
-  private final String TALLY_KEY       = "active_user_tally";
+	private final String ACCOUNT_NUMBER_IOS = "+15551234567";
+	private final String ACCOUNT_NUMBER_ANDROID = "+5511987654321";
+	private final String ACCOUNT_NUMBER_NODEVICE = "+5215551234567";
 
-  private final Device iosDevice     = mock(Device.class);
-  private final Device androidDevice = mock(Device.class);
+	private final String TALLY_KEY = "active_user_tally";
 
-  private final Account androidAccount = mock(Account.class);
-  private final Account iosAccount     = mock(Account.class);
-  private final Account noDeviceAccount = mock(Account.class);
+	private final Device iosDevice = mock(Device.class);
+	private final Device androidDevice = mock(Device.class);
 
-  private final Jedis               jedis          = mock(Jedis.class);
-  private final ReplicatedJedisPool jedisPool      = mock(ReplicatedJedisPool.class);
-  private final MetricsFactory      metricsFactory = mock(MetricsFactory.class);
+	private final Account androidAccount = mock(Account.class);
+	private final Account iosAccount = mock(Account.class);
+	private final Account noDeviceAccount = mock(Account.class);
 
-  private final ActiveUserCounter activeUserCounter = new ActiveUserCounter(metricsFactory, jedisPool);
+	private final Jedis jedis = mock(Jedis.class);
+	private final ReplicatedJedisPool jedisPool = mock(ReplicatedJedisPool.class);
+	private final MetricsFactory metricsFactory = mock(MetricsFactory.class);
 
-  @Before
-  public void setup() {
+	private final ActiveUserCounter activeUserCounter = new ActiveUserCounter(metricsFactory, jedisPool);
 
-    long halfDayAgo      = System.currentTimeMillis() - TimeUnit.HOURS.toMillis(12);
-    long fortyFiveDayAgo = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(45);
+	@Before
+	public void setup() {
 
-    when(androidDevice.getApnId()).thenReturn(null);
-    when(androidDevice.getGcmId()).thenReturn("mock-gcm-id");
-    when(androidDevice.getLastSeen()).thenReturn(fortyFiveDayAgo);
+		long halfDayAgo = System.currentTimeMillis() - TimeUnit.HOURS.toMillis(12);
+		long fortyFiveDayAgo = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(45);
 
-    when(iosDevice.getApnId()).thenReturn("mock-apn-id");
-    when(iosDevice.getGcmId()).thenReturn(null);
-    when(iosDevice.getLastSeen()).thenReturn(halfDayAgo);
+		when(androidDevice.getApnId()).thenReturn(null);
+		when(androidDevice.getGcmId()).thenReturn("mock-gcm-id");
+		when(androidDevice.getLastSeen()).thenReturn(fortyFiveDayAgo);
 
-    when(iosAccount.getNumber()).thenReturn(NUMBER_IOS);
-    when(iosAccount.getMasterDevice()).thenReturn(Optional.of(iosDevice));
+		when(iosDevice.getApnId()).thenReturn("mock-apn-id");
+		when(iosDevice.getGcmId()).thenReturn(null);
+		when(iosDevice.getLastSeen()).thenReturn(halfDayAgo);
 
-    when(androidAccount.getNumber()).thenReturn(NUMBER_ANDROID);
-    when(androidAccount.getMasterDevice()).thenReturn(Optional.of(androidDevice));
+		when(iosAccount.getUuid()).thenReturn(UUID_IOS);
+		when(iosAccount.getMasterDevice()).thenReturn(Optional.of(iosDevice));
+		when(iosAccount.getNumber()).thenReturn(ACCOUNT_NUMBER_IOS);
 
-    when(noDeviceAccount.getNumber()).thenReturn(NUMBER_NODEVICE);
-    when(noDeviceAccount.getMasterDevice()).thenReturn(Optional.ofNullable(null));
+		when(androidAccount.getUuid()).thenReturn(UUID_ANDROID);
+		when(androidAccount.getMasterDevice()).thenReturn(Optional.of(androidDevice));
+		when(androidAccount.getNumber()).thenReturn(ACCOUNT_NUMBER_ANDROID);
 
-    when(jedis.get(any(String.class))).thenReturn("{\"fromNumber\":\"+\",\"platforms\":{},\"countries\":{}}");
-    when(jedisPool.getWriteResource()).thenReturn(jedis);
-    when(jedisPool.getReadResource()).thenReturn(jedis);
-    when(metricsFactory.getReporters()).thenReturn(ImmutableList.of());
+		when(noDeviceAccount.getUuid()).thenReturn(UUID_NODEVICE);
+		when(noDeviceAccount.getMasterDevice()).thenReturn(Optional.ofNullable(null));
+		when(noDeviceAccount.getNumber()).thenReturn(ACCOUNT_NUMBER_NODEVICE);
 
-  }
+		when(jedis.get(any(String.class))).thenReturn("{\"fromNumber\":\"+\",\"platforms\":{},\"countries\":{}}");
+		when(jedisPool.getWriteResource()).thenReturn(jedis);
+		when(jedisPool.getReadResource()).thenReturn(jedis);
+		when(metricsFactory.getReporters()).thenReturn(ImmutableList.of());
 
-  @Test
-  public void testCrawlStart() {
-    activeUserCounter.onCrawlStart();
+	}
 
-    verify(jedisPool, times(1)).getWriteResource();
-    verify(jedis, times(1)).del(any(String.class));
-    verify(jedis, times(1)).close();
+	@Test
+	public void testCrawlStart() {
+		activeUserCounter.onCrawlStart();
 
-    verifyZeroInteractions(iosDevice);
-    verifyZeroInteractions(iosAccount);
-    verifyZeroInteractions(androidDevice);
-    verifyZeroInteractions(androidAccount);
-    verifyZeroInteractions(noDeviceAccount);
-    verifyZeroInteractions(metricsFactory);
-    verifyNoMoreInteractions(jedis);
-    verifyNoMoreInteractions(jedisPool);
-  }
+		verify(jedisPool, times(1)).getWriteResource();
+		verify(jedis, times(1)).del(any(String.class));
+		verify(jedis, times(1)).close();
 
-  @Test
-  public void testCrawlEnd() {
-    activeUserCounter.onCrawlEnd(Optional.empty());
+		verifyZeroInteractions(iosDevice);
+		verifyZeroInteractions(iosAccount);
+		verifyZeroInteractions(androidDevice);
+		verifyZeroInteractions(androidAccount);
+		verifyZeroInteractions(noDeviceAccount);
+		verifyZeroInteractions(metricsFactory);
+		verifyNoMoreInteractions(jedis);
+		verifyNoMoreInteractions(jedisPool);
+	}
 
-    verify(jedisPool, times(1)).getReadResource();
-    verify(jedis, times(1)).get(any(String.class));
-    verify(jedis, times(1)).close();
+	@Test
+	public void testCrawlEnd() {
+		activeUserCounter.onCrawlEnd(Optional.empty());
 
-    verify(metricsFactory, times(1)).getReporters();
+		verify(jedisPool, times(1)).getReadResource();
+		verify(jedis, times(1)).get(any(String.class));
+		verify(jedis, times(1)).close();
 
-    verifyZeroInteractions(iosDevice);
-    verifyZeroInteractions(iosAccount);
-    verifyZeroInteractions(androidDevice);
-    verifyZeroInteractions(androidAccount);
-    verifyZeroInteractions(noDeviceAccount);
+		verify(metricsFactory, times(1)).getReporters();
 
-    verifyNoMoreInteractions(metricsFactory);
-    verifyNoMoreInteractions(jedis);
-    verifyNoMoreInteractions(jedisPool);
+		verifyZeroInteractions(iosDevice);
+		verifyZeroInteractions(iosAccount);
+		verifyZeroInteractions(androidDevice);
+		verifyZeroInteractions(androidAccount);
+		verifyZeroInteractions(noDeviceAccount);
 
-  }
+		verifyNoMoreInteractions(metricsFactory);
+		verifyNoMoreInteractions(jedis);
+		verifyNoMoreInteractions(jedisPool);
 
-  @Test
-  public void testCrawlChunkValidAccount() throws AccountDatabaseCrawlerRestartException {
-    activeUserCounter.onCrawlChunk(Optional.of(NUMBER_IOS), Arrays.asList(iosAccount));
+	}
 
-    verify(iosAccount, times(1)).getMasterDevice();
-    verify(iosAccount, times(1)).getNumber();
+	@Test
+	public void testCrawlChunkValidAccount() throws AccountDatabaseCrawlerRestartException {
+		activeUserCounter.timeAndProcessCrawlChunk(Optional.of(UUID_IOS), Arrays.asList(iosAccount));
 
-    verify(iosDevice, times(1)).getLastSeen();
-    verify(iosDevice, times(1)).getApnId();
-    verify(iosDevice, times(0)).getGcmId();
+		verify(iosAccount, times(1)).getMasterDevice();
+		verify(iosAccount, times(1)).getNumber();
 
-    verify(jedisPool, times(1)).getWriteResource();
-    verify(jedis, times(1)).get(any(String.class));
-    verify(jedis, times(1)).set(any(String.class), eq("{\"fromNumber\":\""+NUMBER_IOS+"\",\"platforms\":{\"ios\":[1,1,1,1,1]},\"countries\":{\"1\":[1,1,1,1,1]}}"));
-    verify(jedis, times(1)).close();
+		verify(iosDevice, times(1)).getLastSeen();
+		verify(iosDevice, times(1)).getApnId();
+		verify(iosDevice, times(0)).getGcmId();
 
-    verify(metricsFactory, times(0)).getReporters();
+		verify(jedisPool, times(1)).getWriteResource();
+		verify(jedis, times(1)).get(any(String.class));
+		verify(jedis, times(1)).set(any(String.class), eq("{\"fromUuid\":\"" + UUID_IOS.toString()
+				+ "\",\"platforms\":{\"ios\":[1,1,1,1,1]},\"countries\":{\"1\":[1,1,1,1,1]}}"));
+		verify(jedis, times(1)).close();
 
-    verifyZeroInteractions(androidDevice);
-    verifyZeroInteractions(androidAccount);
-    verifyZeroInteractions(noDeviceAccount);
-    verifyZeroInteractions(metricsFactory);
+		verify(metricsFactory, times(0)).getReporters();
 
-    verifyNoMoreInteractions(iosDevice);
-    verifyNoMoreInteractions(iosAccount);
-    verifyNoMoreInteractions(jedis);
-    verifyNoMoreInteractions(jedisPool);
-  }
+		verifyZeroInteractions(androidDevice);
+		verifyZeroInteractions(androidAccount);
+		verifyZeroInteractions(noDeviceAccount);
+		verifyZeroInteractions(metricsFactory);
 
-  @Test
-  public void testCrawlChunkNoDeviceAccount() throws AccountDatabaseCrawlerRestartException {
-    activeUserCounter.onCrawlChunk(Optional.of(NUMBER_NODEVICE), Arrays.asList(noDeviceAccount));
+		verifyNoMoreInteractions(iosDevice);
+		verifyNoMoreInteractions(iosAccount);
+		verifyNoMoreInteractions(jedis);
+		verifyNoMoreInteractions(jedisPool);
+	}
 
-    verify(noDeviceAccount, times(1)).getMasterDevice();
+	@Test
+	public void testCrawlChunkNoDeviceAccount() throws AccountDatabaseCrawlerRestartException {
+		activeUserCounter.timeAndProcessCrawlChunk(Optional.of(UUID_NODEVICE), Arrays.asList(noDeviceAccount));
 
-    verify(jedisPool, times(1)).getWriteResource();
-    verify(jedis, times(1)).get(eq(TALLY_KEY));
-    verify(jedis, times(1)).set(any(String.class), eq("{\"fromNumber\":\""+NUMBER_NODEVICE+"\",\"platforms\":{},\"countries\":{}}"));
-    verify(jedis, times(1)).close();
+		verify(noDeviceAccount, times(1)).getMasterDevice();
 
-    verify(metricsFactory, times(0)).getReporters();
+		verify(jedisPool, times(1)).getWriteResource();
+		verify(jedis, times(1)).get(eq(TALLY_KEY));
+		verify(jedis, times(1)).set(any(String.class),
+				eq("{\"fromUuid\":\"" + UUID_NODEVICE + "\",\"platforms\":{},\"countries\":{}}"));
+		verify(jedis, times(1)).close();
 
-    verifyZeroInteractions(iosDevice);
-    verifyZeroInteractions(iosAccount);
-    verifyZeroInteractions(androidDevice);
-    verifyZeroInteractions(androidAccount);
-    verifyZeroInteractions(noDeviceAccount);
-    verifyZeroInteractions(metricsFactory);
+		verify(metricsFactory, times(0)).getReporters();
 
-    verifyNoMoreInteractions(jedis);
-    verifyNoMoreInteractions(jedisPool);
-  }
+		verifyZeroInteractions(iosDevice);
+		verifyZeroInteractions(iosAccount);
+		verifyZeroInteractions(androidDevice);
+		verifyZeroInteractions(androidAccount);
+		verifyZeroInteractions(noDeviceAccount);
+		verifyZeroInteractions(metricsFactory);
 
-  @Test
-  public void testCrawlChunkMixedAccount() throws AccountDatabaseCrawlerRestartException {
-    activeUserCounter.onCrawlChunk(Optional.of(NUMBER_IOS), Arrays.asList(iosAccount, androidAccount, noDeviceAccount));
+		verifyNoMoreInteractions(jedis);
+		verifyNoMoreInteractions(jedisPool);
+	}
 
-    verify(iosAccount, times(1)).getMasterDevice();
-    verify(iosAccount, times(1)).getNumber();
-    verify(androidAccount, times(1)).getMasterDevice();
-    verify(androidAccount, times(1)).getNumber();
-    verify(noDeviceAccount, times(1)).getMasterDevice();
+	@Test
+	public void testCrawlChunkMixedAccount() throws AccountDatabaseCrawlerRestartException {
+		activeUserCounter.timeAndProcessCrawlChunk(Optional.of(UUID_IOS),
+				Arrays.asList(iosAccount, androidAccount, noDeviceAccount));
 
-    verify(iosDevice, times(1)).getLastSeen();
-    verify(iosDevice, times(1)).getApnId();
-    verify(iosDevice, times(0)).getGcmId();
+		verify(iosAccount, times(1)).getMasterDevice();
+		verify(iosAccount, times(1)).getNumber();
+		verify(androidAccount, times(1)).getMasterDevice();
+		verify(androidAccount, times(1)).getNumber();
+		verify(noDeviceAccount, times(1)).getMasterDevice();
 
-    verify(androidDevice, times(1)).getLastSeen();
-    verify(androidDevice, times(1)).getApnId();
-    verify(androidDevice, times(1)).getGcmId();
+		verify(iosDevice, times(1)).getLastSeen();
+		verify(iosDevice, times(1)).getApnId();
+		verify(iosDevice, times(0)).getGcmId();
 
-    verify(jedisPool, times(1)).getWriteResource();
-    verify(jedis, times(1)).get(eq(TALLY_KEY));
-    verify(jedis, times(1)).set(any(String.class), eq("{\"fromNumber\":\""+NUMBER_IOS+"\",\"platforms\":{\"android\":[0,0,0,1,1],\"ios\":[1,1,1,1,1]},\"countries\":{\"55\":[0,0,0,1,1],\"1\":[1,1,1,1,1]}}"));
-    verify(jedis, times(1)).close();
+		verify(androidDevice, times(1)).getLastSeen();
+		verify(androidDevice, times(1)).getApnId();
+		verify(androidDevice, times(1)).getGcmId();
 
-    verify(metricsFactory, times(0)).getReporters();
+		verify(jedisPool, times(1)).getWriteResource();
+		verify(jedis, times(1)).get(eq(TALLY_KEY));
+		verify(jedis, times(1)).set(any(String.class), eq("{\"fromUuid\":\"" + UUID_IOS
+				+ "\",\"platforms\":{\"android\":[0,0,0,1,1],\"ios\":[1,1,1,1,1]},\"countries\":{\"55\":[0,0,0,1,1],\"1\":[1,1,1,1,1]}}"));
+		verify(jedis, times(1)).close();
 
-    verifyZeroInteractions(metricsFactory);
+		verify(metricsFactory, times(0)).getReporters();
 
-    verifyNoMoreInteractions(iosDevice);
-    verifyNoMoreInteractions(iosAccount);
-    verifyNoMoreInteractions(androidDevice);
-    verifyNoMoreInteractions(androidAccount);
-    verifyNoMoreInteractions(noDeviceAccount);
-    verifyNoMoreInteractions(jedis);
-    verifyNoMoreInteractions(jedisPool);
-  }
+		verifyZeroInteractions(metricsFactory);
+
+		verifyNoMoreInteractions(iosDevice);
+		verifyNoMoreInteractions(iosAccount);
+		verifyNoMoreInteractions(androidDevice);
+		verifyNoMoreInteractions(androidAccount);
+		verifyNoMoreInteractions(noDeviceAccount);
+		verifyNoMoreInteractions(jedis);
+		verifyNoMoreInteractions(jedisPool);
+	}
 }

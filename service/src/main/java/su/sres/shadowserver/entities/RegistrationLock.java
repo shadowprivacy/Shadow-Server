@@ -8,19 +8,19 @@ import org.hibernate.validator.constraints.NotEmpty;
 public class RegistrationLock {
 
   @JsonProperty
+  @Length(min=64,max=64)
   @NotEmpty
-  @Length(min=4,max=20)
-  private String pin;
+  private String registrationLock;
 
   public RegistrationLock() {}
 
   @VisibleForTesting
-  public RegistrationLock(String pin) {
-    this.pin = pin;
+  public RegistrationLock(String registrationLock) {
+	    this.registrationLock = registrationLock;
   }
 
-  public String getPin() {
-    return pin;
+  public String getRegistrationLock() {
+	    return registrationLock;
   }
 
 }

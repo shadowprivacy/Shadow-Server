@@ -45,6 +45,8 @@ import java.util.Set;
 import java.util.UUID;
 
 import io.dropwizard.auth.Auth;
+
+import su.sres.shadowserver.auth.AmbiguousIdentifier;
 import su.sres.shadowserver.auth.Anonymous;
 import su.sres.shadowserver.auth.OptionalAccess;
 import su.sres.shadowserver.entities.IncomingMessage;
@@ -121,7 +123,7 @@ public class MessageController {
   @Produces(MediaType.APPLICATION_JSON)
   public SendMessageResponse sendMessage(@Auth                                     Optional<Account>   source,
           @HeaderParam(OptionalAccess.UNIDENTIFIED) Optional<Anonymous> accessKey,
-          @PathParam("destination")                 String              destinationName,
+          @PathParam("destination")                 AmbiguousIdentifier destinationName,
           @Valid                                    IncomingMessageList messages)
 throws RateLimitExceededException
   {
@@ -129,18 +131,18 @@ throws RateLimitExceededException
 	      throw new WebApplicationException(Response.Status.UNAUTHORIZED);
 	    }
 
-	    if (source.isPresent() && !source.get().getNumber().equals(destinationName)) {
+	  if (source.isPresent() && !source.get().isFor(destinationName)) {
 	      rateLimiters.getMessagesLimiter().validate(source.get().getNumber() + "__" + destinationName);
     }
 	    
-	    if (source.isPresent() && !source.get().getNumber().equals(destinationName)) {
+	  if (source.isPresent() && !source.get().isFor(destinationName)) {
 	        identifiedMeter.mark();
-	      } else {
+	  } else if (!source.isPresent()) {
 	        unidentifiedMeter.mark();
 	      }
 
     try {
-        boolean isSyncMessage = source.isPresent() && source.get().getNumber().equals(destinationName);
+    	boolean isSyncMessage = source.isPresent() && source.get().isFor(destinationName);
 
         Optional<Account> destination;
 
@@ -170,7 +172,7 @@ throws RateLimitExceededException
               }
             }
 
-            return new SendMessageResponse(!isSyncMessage && source.isPresent() && source.get().getActiveDeviceCount() > 1); 
+        return new SendMessageResponse(!isSyncMessage && source.isPresent() && source.get().getEnabledDeviceCount() > 1); 
         
     } catch (NoSuchUserException e) {
       throw new WebApplicationException(Response.status(404).build());
@@ -277,6 +279,7 @@ throws RateLimitExceededException
 
                     if (source.isPresent()) {
                       messageBuilder.setSource(source.get().getNumber())
+                                    .setSourceUuid(source.get().getUuid().toString())              
                                     .setSourceDevice((int)source.get().getAuthenticatedDevice().get().getId());
                     }
       if (messageBody.isPresent()) {
@@ -371,7 +374,7 @@ throws RateLimitExceededException
     }
 
     for (Device device : account.getDevices()) {
-      if (device.isActive() &&
+        if (device.isEnabled() &&
           !(isSyncMessage && device.getId() == account.getAuthenticatedDevice().get().getId()))
       {
         accountDeviceIds.add(device.getId());

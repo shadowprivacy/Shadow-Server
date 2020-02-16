@@ -61,7 +61,7 @@ public class DirectoryCommand extends EnvironmentCommand<WhisperServerConfigurat
     try {
       environment.getObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-      DatabaseConfiguration dbConfig = configuration.getAccountsReadDatabaseConfiguration();
+      DatabaseConfiguration dbConfig = configuration.getAccountsDatabaseConfiguration();
 //      DBI               dbi      = new DBI(dbConfig.getUrl(), dbConfig.getUser(), dbConfig.getPassword());
 
 // insert      

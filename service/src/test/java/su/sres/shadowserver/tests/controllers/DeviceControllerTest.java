@@ -16,6 +16,7 @@
  */
 package su.sres.shadowserver.tests.controllers;
 
+import com.google.common.collect.ImmutableSet;
 import org.glassfish.jersey.test.grizzly.GrizzlyWebTestContainerFactory;
 import org.junit.Before;
 import org.junit.Rule;
@@ -30,9 +31,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
-import io.dropwizard.auth.AuthValueFactoryProvider;
+import io.dropwizard.auth.PolymorphicAuthValueFactoryProvider;
 import io.dropwizard.testing.junit.ResourceTestRule;
 
+import su.sres.shadowserver.auth.DisabledPermittedAccount;
 import su.sres.shadowserver.auth.StoredVerificationCode;
 import su.sres.shadowserver.controllers.DeviceController;
 import su.sres.shadowserver.entities.AccountAttributes;
@@ -42,6 +44,7 @@ import su.sres.shadowserver.limits.RateLimiters;
 import su.sres.shadowserver.mappers.DeviceLimitExceededExceptionMapper;
 import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.storage.AccountsManager;
+import su.sres.shadowserver.storage.Device;
 import su.sres.shadowserver.storage.MessagesManager;
 import su.sres.shadowserver.storage.PendingDevicesManager;
 import su.sres.shadowserver.tests.util.AuthHelper;
@@ -76,6 +79,9 @@ public class DeviceControllerTest {
   private RateLimiter           rateLimiter           = mock(RateLimiter.class           );
   private Account               account               = mock(Account.class               );
   private Account               maxedAccount          = mock(Account.class);
+  
+  // introduced with CDS
+  private Device                masterDevice          = mock(Device.class);
 
   private Map<String, Integer>  deviceConfiguration   = new HashMap<String, Integer>() {{
 
@@ -84,7 +90,7 @@ public class DeviceControllerTest {
   @Rule
   public final ResourceTestRule resources = ResourceTestRule.builder()
                                                             .addProvider(AuthHelper.getAuthFilter())
-                                                            .addProvider(new AuthValueFactoryProvider.Binder<>(Account.class))
+                                                            .addProvider(new PolymorphicAuthValueFactoryProvider.Binder<>(ImmutableSet.of(Account.class, DisabledPermittedAccount.class)))
                                                             .setTestContainerFactory(new GrizzlyWebTestContainerFactory())
                                                             .addProvider(new DeviceLimitExceededExceptionMapper())
                                                             .addResource(new DumbVerificationDeviceController(pendingDevicesManager,
@@ -103,12 +109,19 @@ public class DeviceControllerTest {
     when(rateLimiters.getAllocateDeviceLimiter()).thenReturn(rateLimiter);
     when(rateLimiters.getVerifyDeviceLimiter()).thenReturn(rateLimiter);
 
+    // introduced with CDS
+    when(masterDevice.getId()).thenReturn(1L);
+    
     when(account.getNextDeviceId()).thenReturn(42L);
     when(account.getNumber()).thenReturn(AuthHelper.VALID_NUMBER);
 //    when(maxedAccount.getActiveDeviceCount()).thenReturn(6);
+    
+ // introduced with CDS
+    when(account.getAuthenticatedDevice()).thenReturn(Optional.of(masterDevice));
+    when(account.isEnabled()).thenReturn(false);
 
-    when(pendingDevicesManager.getCodeForNumber(AuthHelper.VALID_NUMBER)).thenReturn(Optional.of(new StoredVerificationCode("5678901", System.currentTimeMillis())));
-    when(pendingDevicesManager.getCodeForNumber(AuthHelper.VALID_NUMBER_TWO)).thenReturn(Optional.of(new StoredVerificationCode("1112223", System.currentTimeMillis() - TimeUnit.MINUTES.toMillis(31))));
+    when(pendingDevicesManager.getCodeForNumber(AuthHelper.VALID_NUMBER)).thenReturn(Optional.of(new StoredVerificationCode("5678901", System.currentTimeMillis(), null)));
+    when(pendingDevicesManager.getCodeForNumber(AuthHelper.VALID_NUMBER_TWO)).thenReturn(Optional.of(new StoredVerificationCode("1112223", System.currentTimeMillis() - TimeUnit.MINUTES.toMillis(31), null)));
     when(accountsManager.get(AuthHelper.VALID_NUMBER)).thenReturn(Optional.of(account));
     when(accountsManager.get(AuthHelper.VALID_NUMBER_TWO)).thenReturn(Optional.of(maxedAccount));
   }
@@ -135,6 +148,17 @@ public class DeviceControllerTest {
 
     verify(pendingDevicesManager).remove(AuthHelper.VALID_NUMBER);
     verify(messagesManager).clear(eq(AuthHelper.VALID_NUMBER), eq(42L));
+  }
+  
+  @Test
+  public void disabledDeviceRegisterTest() throws Exception {
+    Response response = resources.getJerseyTest()
+                                 .target("/v1/devices/provisioning/code")
+                                 .request()
+                                 .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.DISABLED_NUMBER, AuthHelper.DISABLED_PASSWORD))
+                                 .get();
+
+      assertThat(response.getStatus()).isEqualTo(401);
   }
 
   @Test
@@ -191,10 +215,11 @@ public class DeviceControllerTest {
                                  .target("/v1/devices/5678901")
                                  .request()
                                  .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, "password1"))
-                                 .put(Entity.entity(new AccountAttributes("keykeykeykey", false, 1234, "this is a really long name that is longer than 80 characters it's so long that it's even longer than 204 characters. that's a lot of characters. we're talking lots and lots and lots of characters. 12345678", true, true, null),
+                                 .put(Entity.entity(new AccountAttributes("keykeykeykey", false, 1234, "this is a really long name that is longer than 80 characters it's so long that it's even longer than 204 characters. that's a lot of characters. we're talking lots and lots and lots of characters. 12345678", null, null),
                                                     MediaType.APPLICATION_JSON_TYPE));
 
     assertEquals(response.getStatus(), 422);
     verifyNoMoreInteractions(messagesManager);
-  }
+  }  
+  
 }

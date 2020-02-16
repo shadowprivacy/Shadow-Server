@@ -35,13 +35,6 @@ import su.sres.shadowserver.configuration.*;
 /** @noinspection MismatchedQueryAndUpdateOfCollection, WeakerAccess */
 public class WhisperServerConfiguration extends Configuration {
 
-
-// remove Twilio	
-//  @NotNull
-//  @Valid
-//  @JsonProperty
-//  private TwilioConfiguration twilio;
-
   @NotNull
   @Valid
   @JsonProperty
@@ -55,7 +48,7 @@ public class WhisperServerConfiguration extends Configuration {
   @NotNull
   @Valid
   @JsonProperty
-  private ProfilesConfiguration profiles;
+  private CdnConfiguration cdn;
 
   @NotNull
   @Valid
@@ -114,7 +107,12 @@ public class WhisperServerConfiguration extends Configuration {
   @Valid
   @NotNull
   @JsonProperty
-  private DatabaseConfiguration database = new DatabaseConfiguration();
+  private DatabaseConfiguration keysDatabase;
+
+  @Valid
+  @NotNull
+  @JsonProperty
+  private DatabaseConfiguration accountsDatabase;
 
   @JsonProperty
   private DatabaseConfiguration read_database;
@@ -153,17 +151,21 @@ public class WhisperServerConfiguration extends Configuration {
   @NotNull
   @JsonProperty
   private UnidentifiedDeliveryConfiguration unidentifiedDelivery;
-
-// not needed now  
-//  @Valid
-//  @NotNull
-//  @JsonProperty
-//  private VoiceVerificationConfiguration voiceVerification;
   
   @Valid
   @NotNull
   @JsonProperty
   private RecaptchaConfiguration recaptcha;
+  
+  @Valid
+  @NotNull
+  @JsonProperty
+  private SecureStorageServiceConfiguration storageService;
+  
+  @Valid
+  @NotNull
+  @JsonProperty
+  private SecureBackupServiceConfiguration backupService;
   
   private Map<String, String> transparentDataIndex = new HashMap<>();
   
@@ -171,19 +173,9 @@ public class WhisperServerConfiguration extends Configuration {
 	    return recaptcha;
 	  }
 
-// not needed now  
-// public VoiceVerificationConfiguration getVoiceVerificationConfiguration() {
-//    return voiceVerification;
-//  }
-
   public WebSocketConfiguration getWebSocketConfiguration() {
     return webSocket;
   }
-
-// remove Twilio  
-//  public TwilioConfiguration getTwilioConfiguration() {
-//    return twilio;
-//  }
 
   public PushConfiguration getPushConfiguration() {
     return push;
@@ -205,6 +197,10 @@ public class WhisperServerConfiguration extends Configuration {
     return directory;
   }
   
+  public SecureStorageServiceConfiguration getSecureStorageServiceConfiguration() {
+	    return storageService;
+	  }
+  
   public AccountDatabaseCrawlerConfiguration getAccountDatabaseCrawlerConfiguration() {
 	    return accountDatabaseCrawler;
 	  }
@@ -225,12 +221,12 @@ public class WhisperServerConfiguration extends Configuration {
 	    return abuseDatabase;
 	  }
 
-  public DatabaseConfiguration getAccountsDatabaseConfiguration() {
-    return database;
+  public DatabaseConfiguration getKeysDatabase() {
+	    return keysDatabase;
   }
 
-  public DatabaseConfiguration getAccountsReadDatabaseConfiguration() {
-    return read_database;
+  public DatabaseConfiguration getAccountsDatabaseConfiguration() {
+	    return accountsDatabase;
   }
 
   public RateLimitsConfiguration getLimitsConfiguration() {
@@ -258,8 +254,8 @@ public class WhisperServerConfiguration extends Configuration {
     return apn;
   }
 
-  public ProfilesConfiguration getProfilesConfiguration() {
-    return profiles;
+  public CdnConfiguration getCdnConfiguration() {
+	    return cdn;
   }
   
   public UnidentifiedDeliveryConfiguration getDeliveryCertificate() {
@@ -290,5 +286,9 @@ public class WhisperServerConfiguration extends Configuration {
   
   public Map<String, String> getTransparentDataIndex() {
 	    return transparentDataIndex;
+	  }
+  
+  public SecureBackupServiceConfiguration getSecureBackupServiceConfiguration() {
+	    return backupService;
 	  }
 }

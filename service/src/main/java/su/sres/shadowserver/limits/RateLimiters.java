@@ -16,161 +16,169 @@
  */
 package su.sres.shadowserver.limits;
 
-
 import su.sres.shadowserver.configuration.RateLimitsConfiguration;
 import su.sres.shadowserver.redis.ReplicatedJedisPool;
 
 public class RateLimiters {
 
-  private final RateLimiter smsDestinationLimiter;
-  private final RateLimiter voiceDestinationLimiter;
-  private final RateLimiter voiceDestinationDailyLimiter;
-  private final RateLimiter smsVoiceIpLimiter;
-  private final RateLimiter smsVoicePrefixLimiter;
-  private final RateLimiter autoBlockLimiter;
-  private final RateLimiter verifyLimiter;
-  private final RateLimiter pinLimiter;
+	private final RateLimiter smsDestinationLimiter;
+	private final RateLimiter voiceDestinationLimiter;
+	private final RateLimiter voiceDestinationDailyLimiter;
+	private final RateLimiter smsVoiceIpLimiter;
+	private final RateLimiter smsVoicePrefixLimiter;
+	private final RateLimiter autoBlockLimiter;
+	private final RateLimiter verifyLimiter;
+	private final RateLimiter pinLimiter;
 
-  private final RateLimiter attachmentLimiter;
-  private final RateLimiter contactsLimiter;
-  private final RateLimiter preKeysLimiter;
-  private final RateLimiter messagesLimiter;
+	private final RateLimiter attachmentLimiter;
+	private final RateLimiter contactsLimiter;
+	private final RateLimiter preKeysLimiter;
+	private final RateLimiter messagesLimiter;
 
-  private final RateLimiter allocateDeviceLimiter;
-  private final RateLimiter verifyDeviceLimiter;
+	private final RateLimiter allocateDeviceLimiter;
+	private final RateLimiter verifyDeviceLimiter;
 
-  private final RateLimiter turnLimiter;
+	private final RateLimiter turnLimiter;
 
-  private final RateLimiter profileLimiter;
+	private final RateLimiter profileLimiter;
+	private final RateLimiter stickerPackLimiter;
 
-  public RateLimiters(RateLimitsConfiguration config, ReplicatedJedisPool cacheClient) {
-    this.smsDestinationLimiter = new RateLimiter(cacheClient, "smsDestination",
-                                                 config.getSmsDestination().getBucketSize(),
-                                                 config.getSmsDestination().getLeakRatePerMinute());
+	private final RateLimiter usernameLookupLimiter;
+	private final RateLimiter usernameSetLimiter;
 
-    this.voiceDestinationLimiter = new RateLimiter(cacheClient, "voxDestination",
-                                                   config.getVoiceDestination().getBucketSize(),
-                                                   config.getVoiceDestination().getLeakRatePerMinute());
+	public RateLimiters(RateLimitsConfiguration config, ReplicatedJedisPool cacheClient) {
+		this.smsDestinationLimiter = new RateLimiter(cacheClient, "smsDestination",
+				config.getSmsDestination().getBucketSize(), config.getSmsDestination().getLeakRatePerMinute());
 
-    this.voiceDestinationDailyLimiter = new RateLimiter(cacheClient, "voxDestinationDaily",
-                                                        config.getVoiceDestinationDaily().getBucketSize(),
-                                                        config.getVoiceDestinationDaily().getLeakRatePerMinute());
+		this.voiceDestinationLimiter = new RateLimiter(cacheClient, "voxDestination",
+				config.getVoiceDestination().getBucketSize(), config.getVoiceDestination().getLeakRatePerMinute());
 
-    this.smsVoiceIpLimiter = new RateLimiter(cacheClient, "smsVoiceIp",
-            config.getSmsVoiceIp().getBucketSize(),
-            config.getSmsVoiceIp().getLeakRatePerMinute());
-    
-    this.smsVoicePrefixLimiter = new RateLimiter(cacheClient, "smsVoicePrefix",
-            config.getSmsVoicePrefix().getBucketSize(),
-            config.getSmsVoicePrefix().getLeakRatePerMinute());
-    
-    this.autoBlockLimiter = new RateLimiter(cacheClient, "autoBlock",
-            config.getAutoBlock().getBucketSize(),
-            config.getAutoBlock().getLeakRatePerMinute());
-    
-    this.verifyLimiter = new RateLimiter(cacheClient, "verify",
-                                         config.getVerifyNumber().getBucketSize(),
-                                         config.getVerifyNumber().getLeakRatePerMinute());
+		this.voiceDestinationDailyLimiter = new RateLimiter(cacheClient, "voxDestinationDaily",
+				config.getVoiceDestinationDaily().getBucketSize(),
+				config.getVoiceDestinationDaily().getLeakRatePerMinute());
 
-    this.pinLimiter = new LockingRateLimiter(cacheClient, "pin",
-                                             config.getVerifyPin().getBucketSize(),
-                                             config.getVerifyPin().getLeakRatePerMinute());
+		this.smsVoiceIpLimiter = new RateLimiter(cacheClient, "smsVoiceIp", config.getSmsVoiceIp().getBucketSize(),
+				config.getSmsVoiceIp().getLeakRatePerMinute());
 
-    this.attachmentLimiter = new RateLimiter(cacheClient, "attachmentCreate",
-                                             config.getAttachments().getBucketSize(),
-                                             config.getAttachments().getLeakRatePerMinute());
+		this.smsVoicePrefixLimiter = new RateLimiter(cacheClient, "smsVoicePrefix",
+				config.getSmsVoicePrefix().getBucketSize(), config.getSmsVoicePrefix().getLeakRatePerMinute());
 
-    this.contactsLimiter = new RateLimiter(cacheClient, "contactsQuery",
-                                           config.getContactQueries().getBucketSize(),
-                                           config.getContactQueries().getLeakRatePerMinute());
+		this.autoBlockLimiter = new RateLimiter(cacheClient, "autoBlock", config.getAutoBlock().getBucketSize(),
+				config.getAutoBlock().getLeakRatePerMinute());
 
-    this.preKeysLimiter = new RateLimiter(cacheClient, "prekeys",
-                                          config.getPreKeys().getBucketSize(),
-                                          config.getPreKeys().getLeakRatePerMinute());
+		this.verifyLimiter = new LockingRateLimiter(cacheClient, "verify", config.getVerifyNumber().getBucketSize(),
+				config.getVerifyNumber().getLeakRatePerMinute());
 
-    this.messagesLimiter = new RateLimiter(cacheClient, "messages",
-                                           config.getMessages().getBucketSize(),
-                                           config.getMessages().getLeakRatePerMinute());
+		this.pinLimiter = new LockingRateLimiter(cacheClient, "pin", config.getVerifyPin().getBucketSize(),
+				config.getVerifyPin().getLeakRatePerMinute());
 
-    this.allocateDeviceLimiter = new RateLimiter(cacheClient, "allocateDevice",
-                                                 config.getAllocateDevice().getBucketSize(),
-                                                 config.getAllocateDevice().getLeakRatePerMinute());
+		this.attachmentLimiter = new RateLimiter(cacheClient, "attachmentCreate",
+				config.getAttachments().getBucketSize(), config.getAttachments().getLeakRatePerMinute());
 
-    this.verifyDeviceLimiter = new RateLimiter(cacheClient, "verifyDevice",
-                                               config.getVerifyDevice().getBucketSize(),
-                                               config.getVerifyDevice().getLeakRatePerMinute());
+		this.contactsLimiter = new RateLimiter(cacheClient, "contactsQuery", config.getContactQueries().getBucketSize(),
+				config.getContactQueries().getLeakRatePerMinute());
 
-    this.turnLimiter = new RateLimiter(cacheClient, "turnAllocate",
-                                       config.getTurnAllocations().getBucketSize(),
-                                       config.getTurnAllocations().getLeakRatePerMinute());
+		this.preKeysLimiter = new RateLimiter(cacheClient, "prekeys", config.getPreKeys().getBucketSize(),
+				config.getPreKeys().getLeakRatePerMinute());
 
-    this.profileLimiter = new RateLimiter(cacheClient, "profile",
-                                          config.getProfile().getBucketSize(),
-                                          config.getProfile().getLeakRatePerMinute());
-  }
+		this.messagesLimiter = new RateLimiter(cacheClient, "messages", config.getMessages().getBucketSize(),
+				config.getMessages().getLeakRatePerMinute());
 
-  public RateLimiter getAllocateDeviceLimiter() {
-    return allocateDeviceLimiter;
-  }
+		this.allocateDeviceLimiter = new RateLimiter(cacheClient, "allocateDevice",
+				config.getAllocateDevice().getBucketSize(), config.getAllocateDevice().getLeakRatePerMinute());
 
-  public RateLimiter getVerifyDeviceLimiter() {
-    return verifyDeviceLimiter;
-  }
+		this.verifyDeviceLimiter = new RateLimiter(cacheClient, "verifyDevice",
+				config.getVerifyDevice().getBucketSize(), config.getVerifyDevice().getLeakRatePerMinute());
 
-  public RateLimiter getMessagesLimiter() {
-    return messagesLimiter;
-  }
+		this.turnLimiter = new RateLimiter(cacheClient, "turnAllocate", config.getTurnAllocations().getBucketSize(),
+				config.getTurnAllocations().getLeakRatePerMinute());
 
-  public RateLimiter getPreKeysLimiter() {
-    return preKeysLimiter;
-  }
+		this.profileLimiter = new RateLimiter(cacheClient, "profile", config.getProfile().getBucketSize(),
+				config.getProfile().getLeakRatePerMinute());
 
-  public RateLimiter getContactsLimiter() {
-    return contactsLimiter;
-  }
+		this.stickerPackLimiter = new RateLimiter(cacheClient, "stickerPack", config.getStickerPack().getBucketSize(),
+				config.getStickerPack().getLeakRatePerMinute());
 
-  public RateLimiter getAttachmentLimiter() {
-    return this.attachmentLimiter;
-  }
+		this.usernameLookupLimiter = new RateLimiter(cacheClient, "usernameLookup",
+				config.getUsernameLookup().getBucketSize(), config.getUsernameLookup().getLeakRatePerMinute());
 
-  public RateLimiter getSmsDestinationLimiter() {
-    return smsDestinationLimiter;
-  }
-  
-  public RateLimiter getSmsVoiceIpLimiter() {
-	    return smsVoiceIpLimiter;
-	  }
-  
-  public RateLimiter getSmsVoicePrefixLimiter() {
-	    return smsVoicePrefixLimiter;
-	  }
-  
-  public RateLimiter getAutoBlockLimiter() {
-	    return autoBlockLimiter;
-	  }
+		this.usernameSetLimiter = new RateLimiter(cacheClient, "usernameSet", config.getUsernameSet().getBucketSize(),
+				config.getUsernameSet().getLeakRatePerMinute());
+	}
 
-  public RateLimiter getVoiceDestinationLimiter() {
-    return voiceDestinationLimiter;
-  }
+	public RateLimiter getAllocateDeviceLimiter() {
+		return allocateDeviceLimiter;
+	}
 
-  public RateLimiter getVoiceDestinationDailyLimiter() {
-    return voiceDestinationDailyLimiter;
-  }
+	public RateLimiter getVerifyDeviceLimiter() {
+		return verifyDeviceLimiter;
+	}
 
-  public RateLimiter getVerifyLimiter() {
-    return verifyLimiter;
-  }
+	public RateLimiter getMessagesLimiter() {
+		return messagesLimiter;
+	}
 
-  public RateLimiter getPinLimiter() {
-    return pinLimiter;
-  }
+	public RateLimiter getPreKeysLimiter() {
+		return preKeysLimiter;
+	}
 
-  public RateLimiter getTurnLimiter() {
-    return turnLimiter;
-  }
+	public RateLimiter getContactsLimiter() {
+		return contactsLimiter;
+	}
 
-  public RateLimiter getProfileLimiter() {
-    return profileLimiter;
-  }
+	public RateLimiter getAttachmentLimiter() {
+		return this.attachmentLimiter;
+	}
 
+	public RateLimiter getSmsDestinationLimiter() {
+		return smsDestinationLimiter;
+	}
+
+	public RateLimiter getSmsVoiceIpLimiter() {
+		return smsVoiceIpLimiter;
+	}
+
+	public RateLimiter getSmsVoicePrefixLimiter() {
+		return smsVoicePrefixLimiter;
+	}
+
+	public RateLimiter getAutoBlockLimiter() {
+		return autoBlockLimiter;
+	}
+
+	public RateLimiter getVoiceDestinationLimiter() {
+		return voiceDestinationLimiter;
+	}
+
+	public RateLimiter getVoiceDestinationDailyLimiter() {
+		return voiceDestinationDailyLimiter;
+	}
+
+	public RateLimiter getVerifyLimiter() {
+		return verifyLimiter;
+	}
+
+	public RateLimiter getPinLimiter() {
+		return pinLimiter;
+	}
+
+	public RateLimiter getTurnLimiter() {
+		return turnLimiter;
+	}
+
+	public RateLimiter getProfileLimiter() {
+		return profileLimiter;
+	}
+
+	public RateLimiter getStickerPackLimiter() {
+		return stickerPackLimiter;
+	}
+
+	public RateLimiter getUsernameLookupLimiter() {
+		return usernameLookupLimiter;
+	}
+
+	public RateLimiter getUsernameSetLimiter() {
+		return usernameSetLimiter;
+	}
 }

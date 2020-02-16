@@ -186,4 +186,57 @@
             </column>
         </addColumn>
     </changeSet>
+    
+    <changeSet id="6" author="moxie">
+        <addColumn tableName="pending_accounts">
+            <column name="push_code" type="text">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+
+        <dropNotNullConstraint tableName="pending_accounts" columnName="verification_code"/>
+    </changeSet>
+    
+    <changeSet id="7" author="moxie">
+        <addColumn tableName="accounts">
+            <column name="uuid" type="uuid"/>
+        </addColumn>
+    </changeSet>
+
+    <changeSet id="8" author="moxie" runInTransaction="false">
+        <sql>CREATE UNIQUE INDEX CONCURRENTLY uuid_index ON accounts (uuid);</sql>
+    </changeSet>
+    
+    <changeSet id="9" author="moxie">
+        <createTable tableName="usernames">
+            <column name="id" type="bigint" autoIncrement="true">
+                <constraints nullable="false" primaryKey="true"/>
+            </column>
+
+            <column name="uuid" type="uuid">
+                <constraints nullable="false" unique="true"/>
+            </column>
+
+            <column name="username" type="text">
+                <constraints nullable="false" unique="true"/>
+            </column>
+        </createTable>
+    </changeSet>
+    
+    <changeSet id="10" author="moxie">
+        <createTable tableName="reserved_usernames">
+            <column name="id" type="bigint" autoIncrement="true">
+                <constraints nullable="false" primaryKey="true"/>
+            </column>
+
+            <column name="username" type="text">
+                <constraints nullable="false" unique="true"/>
+            </column>
+
+            <column name="uuid" type="uuid">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+    </changeSet>
+    
 </databaseChangeLog>

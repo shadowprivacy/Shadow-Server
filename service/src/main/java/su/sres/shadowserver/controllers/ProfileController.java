@@ -11,6 +11,7 @@ import org.apache.commons.codec.binary.Base64;
 import org.hibernate.validator.constraints.Length;
 import org.hibernate.validator.valuehandling.UnwrapValidatedValue;
 import su.sres.shadowserver.auth.OptionalAccess;
+import su.sres.shadowserver.auth.AmbiguousIdentifier;
 import su.sres.shadowserver.auth.Anonymous;
 import su.sres.shadowserver.auth.UnidentifiedAccessChecksum;
 
@@ -28,16 +29,20 @@ import java.security.SecureRandom;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.Optional;
+import java.util.UUID;
 
 import io.dropwizard.auth.Auth;
-import su.sres.shadowserver.configuration.ProfilesConfiguration;
+
+import su.sres.shadowserver.configuration.CdnConfiguration;
 import su.sres.shadowserver.entities.Profile;
 import su.sres.shadowserver.entities.ProfileAvatarUploadAttributes;
+import su.sres.shadowserver.entities.UserCapabilities;
 import su.sres.shadowserver.limits.RateLimiters;
 import su.sres.shadowserver.s3.PolicySigner;
 import su.sres.shadowserver.s3.PostPolicyGenerator;
 import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.storage.AccountsManager;
+import su.sres.shadowserver.storage.UsernamesManager;
 import su.sres.shadowserver.util.Pair;
 
 @SuppressWarnings("OptionalUsedAsFieldOrParameterType")
@@ -46,6 +51,7 @@ public class ProfileController {
 
   private final RateLimiters     rateLimiters;
   private final AccountsManager  accountsManager;
+  private final UsernamesManager usernamesManager;
 
   private final PolicySigner        policySigner;
   private final PostPolicyGenerator policyGenerator;
@@ -55,13 +61,15 @@ public class ProfileController {
 
   public ProfileController(RateLimiters rateLimiters,
                            AccountsManager accountsManager,
-                           ProfilesConfiguration profilesConfiguration)
+                           UsernamesManager usernamesManager,
+                           CdnConfiguration profilesConfiguration)
   {
     AWSCredentials         credentials         = new BasicAWSCredentials(profilesConfiguration.getAccessKey(), profilesConfiguration.getAccessSecret());
     AWSCredentialsProvider credentialsProvider = new AWSStaticCredentialsProvider(credentials);
 
     this.rateLimiters       = rateLimiters;
     this.accountsManager    = accountsManager;
+    this.usernamesManager   = usernamesManager;
     this.bucket             = profilesConfiguration.getBucket();
     this.s3client           = AmazonS3Client.builder()
                                             .withCredentials(credentialsProvider)
@@ -79,10 +87,10 @@ public class ProfileController {
   @Timed
   @GET
   @Produces(MediaType.APPLICATION_JSON)
-  @Path("/{number}")
+  @Path("/{identifier}")
   public Profile getProfile(@Auth                                     Optional<Account>   requestAccount,
           @HeaderParam(OptionalAccess.UNIDENTIFIED) Optional<Anonymous> accessKey,
-          @PathParam("number")                      String number,
+          @PathParam("identifier")                  AmbiguousIdentifier identifier,
           @QueryParam("ca")                         boolean useCaCertificate)
       throws RateLimitExceededException
   {
@@ -94,15 +102,55 @@ public class ProfileController {
 	      rateLimiters.getProfileLimiter().validate(requestAccount.get().getNumber());
     }
 
-	  Optional<Account> accountProfile = accountsManager.get(number);
+	  Optional<Account> accountProfile = accountsManager.get(identifier);
 	    OptionalAccess.verify(requestAccount, accessKey, accountProfile);
 
-	    //noinspection ConstantConditions,OptionalGetWithoutIsPresent
+	    Optional<String> username = Optional.empty();
+
+	    if (!identifier.hasNumber()) {
+	      //noinspection OptionalGetWithoutIsPresent
+	      username = usernamesManager.get(accountProfile.get().getUuid());
+	    }
+
+	    return new Profile(accountProfile.get().getProfileName(),
+	                       accountProfile.get().getAvatar(),
+	                       accountProfile.get().getIdentityKey(),
+	                       UnidentifiedAccessChecksum.generateFor(accountProfile.get().getUnidentifiedAccessKey()),
+	                       accountProfile.get().isUnrestrictedUnidentifiedAccess(),
+	                       new UserCapabilities(accountProfile.get().isUuidAddressingSupported()),
+	                       username.orElse(null),
+	                       null);
+	  }
+
+	  @Timed
+	  @GET
+	  @Produces(MediaType.APPLICATION_JSON)
+	  @Path("/username/{username}")
+	  public Profile getProfileByUsername(@Auth Account account, @PathParam("username") String username) throws RateLimitExceededException {
+	    rateLimiters.getUsernameLookupLimiter().validate(account.getUuid().toString());
+
+	    username = username.toLowerCase();
+
+	    Optional<UUID> uuid = usernamesManager.get(username);
+
+	    if (!uuid.isPresent()) {
+	      throw new WebApplicationException(Response.status(Response.Status.NOT_FOUND).build());
+	    }
+
+	    Optional<Account> accountProfile = accountsManager.get(uuid.get());
+
+	    if (!accountProfile.isPresent()) {
+	      throw new WebApplicationException(Response.status(Response.Status.NOT_FOUND).build());
+	    }
+	    
 	    return new Profile(accountProfile.get().getProfileName(),
                        accountProfile.get().getAvatar(),
                        accountProfile.get().getIdentityKey(),
-                       accountProfile.get().isUnauthenticatedDeliverySupported() ? UnidentifiedAccessChecksum.generateFor(accountProfile.get().getUnidentifiedAccessKey()) : null,
-                       accountProfile.get().isUnrestrictedUnidentifiedAccess());
+                       UnidentifiedAccessChecksum.generateFor(accountProfile.get().getUnidentifiedAccessKey()),
+                       accountProfile.get().isUnrestrictedUnidentifiedAccess(),
+                       new UserCapabilities(accountProfile.get().isUuidAddressingSupported()),
+                       username,
+                       accountProfile.get().getUuid());
   }
 
   @Timed
@@ -123,7 +171,7 @@ public class ProfileController {
     String               previousAvatar = account.getAvatar();
     ZonedDateTime        now            = ZonedDateTime.now(ZoneOffset.UTC);
     String               objectName     = generateAvatarObjectName();
-    Pair<String, String> policy         = policyGenerator.createFor(now, objectName);
+    Pair<String, String> policy         = policyGenerator.createFor(now, objectName, 10 * 1024 * 1024);
     String               signature      = policySigner.getSignature(now, policy.second());
 
     if (previousAvatar != null && previousAvatar.startsWith("profiles/")) {

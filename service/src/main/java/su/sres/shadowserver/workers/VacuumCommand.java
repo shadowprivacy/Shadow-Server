@@ -31,7 +31,7 @@ public class VacuumCommand extends ConfiguredCommand<WhisperServerConfiguration>
                      WhisperServerConfiguration config)
       throws Exception
   {
-	  DatabaseConfiguration accountDbConfig = config.getAccountsDatabaseConfiguration();
+	  DatabaseConfiguration accountDbConfig = config.getAbuseDatabaseConfiguration();
 	    DatabaseConfiguration messageDbConfig = config.getMessageStoreConfiguration();
 	    Jdbi accountJdbi = Jdbi.create(accountDbConfig.getUrl(), accountDbConfig.getUser(), accountDbConfig.getPassword());
 	    Jdbi messageJdbi = Jdbi.create(messageDbConfig.getUrl(), messageDbConfig.getUser(), messageDbConfig.getPassword());

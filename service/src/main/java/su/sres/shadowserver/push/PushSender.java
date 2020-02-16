@@ -21,6 +21,7 @@ import com.codahale.metrics.SharedMetricRegistries;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 import static com.codahale.metrics.MetricRegistry.name;
@@ -106,7 +107,7 @@ public class PushSender implements Managed {
 
   private void sendGcmNotification(Account account, Device device) {
     GcmMessage gcmMessage = new GcmMessage(device.getGcmId(), account.getNumber(),
-                                           (int)device.getId(), false);
+    		(int)device.getId(), GcmMessage.Type.NOTIFICATION, Optional.empty());
 
     gcmSender.sendMessage(gcmMessage);
   }
@@ -127,10 +128,10 @@ public class PushSender implements Managed {
     }
 
     if (!Util.isEmpty(device.getVoipApnId())) {
-      apnMessage = new ApnMessage(device.getVoipApnId(), account.getNumber(), device.getId(), true);
+    	apnMessage = new ApnMessage(device.getVoipApnId(), account.getNumber(), device.getId(), true, Optional.empty());
       RedisOperation.unchecked(() -> apnFallbackManager.schedule(account, device));
     } else {
-      apnMessage = new ApnMessage(device.getApnId(), account.getNumber(), device.getId(), false);
+    	apnMessage = new ApnMessage(device.getApnId(), account.getNumber(), device.getId(), false, Optional.empty());
     }
 
     apnSender.sendMessage(apnMessage);

@@ -63,7 +63,7 @@ public class DirectoryUpdater {
         else                                        offset += accounts.size();
 
         for (Account account : accounts) {
-          if (account.isActive()) {
+          if (account.isEnabled()) {
             byte[]        token         = Util.getContactToken(account.getNumber());
             ClientContact clientContact = new ClientContact(token, null, true, true);
 

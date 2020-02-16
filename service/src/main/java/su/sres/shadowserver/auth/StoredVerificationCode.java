@@ -2,6 +2,8 @@ package su.sres.shadowserver.auth;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import su.sres.shadowserver.util.Util;
+
 import java.security.MessageDigest;
 import java.util.concurrent.TimeUnit;
 
@@ -12,12 +14,16 @@ public class StoredVerificationCode {
 
   @JsonProperty
   private long   timestamp;
+  
+  @JsonProperty
+  private String pushCode;
 
   public StoredVerificationCode() {}
 
-  public StoredVerificationCode(String code, long timestamp) {
+  public StoredVerificationCode(String code, long timestamp, String pushCode) {
     this.code      = code;
     this.timestamp = timestamp;
+    this.pushCode  = pushCode;
   }
 
   public String getCode() {
@@ -27,9 +33,22 @@ public class StoredVerificationCode {
   public long getTimestamp() {
     return timestamp;
   }
+  
+  public String getPushCode() {
+	    return pushCode;
+	  }
+ 
+  // this is for storing the push code into the already existing entry during pre-auth
+  public void setPushCode(String inputPushCode) {
+	  pushCode = inputPushCode;
+  }
 
   public boolean isValid(String theirCodeString) {
-    if (timestamp + TimeUnit.MINUTES.toMillis(1440) < System.currentTimeMillis()) {
+	  if (timestamp + TimeUnit.MINUTES.toMillis(1440) < System.currentTimeMillis()) {
+	      return false;
+	    }
+
+	    if (Util.isEmpty(code) || Util.isEmpty(theirCodeString)) {
       return false;
     }
 

@@ -19,7 +19,9 @@ package su.sres.shadowserver.entities;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.annotations.VisibleForTesting;
 import org.hibernate.validator.constraints.Length;
-import org.hibernate.validator.constraints.NotEmpty;
+
+import su.sres.shadowserver.storage.Device;
+import su.sres.shadowserver.storage.Device.DeviceCapabilities;
 
 public class AccountAttributes {
 
@@ -37,36 +39,35 @@ public class AccountAttributes {
   private String name;
 
   @JsonProperty
-  private boolean voice;
-
-  @JsonProperty
-  private boolean video;
-
-  @JsonProperty
   private String pin;
+
+  @JsonProperty
+  private String registrationLock;
   
   @JsonProperty
   private byte[] unidentifiedAccessKey;
 
   @JsonProperty
   private boolean unrestrictedUnidentifiedAccess;
+  
+  @JsonProperty
+  private DeviceCapabilities capabilities;
 
   public AccountAttributes() {}
 
   @VisibleForTesting
   public AccountAttributes(String signalingKey, boolean fetchesMessages, int registrationId, String pin) {
-    this(signalingKey, fetchesMessages, registrationId, null, false, false, pin);
+	  this(signalingKey, fetchesMessages, registrationId, null, pin, null);
   }
 
   @VisibleForTesting
-  public AccountAttributes(String signalingKey, boolean fetchesMessages, int registrationId, String name, boolean voice, boolean video, String pin) {
-    this.signalingKey    = signalingKey;
-    this.fetchesMessages = fetchesMessages;
-    this.registrationId  = registrationId;
-    this.name            = name;
-    this.voice           = voice;
-    this.video           = video;
-    this.pin             = pin;
+  public AccountAttributes(String signalingKey, boolean fetchesMessages, int registrationId, String name, String pin, String registrationLock) {
+	    this.signalingKey     = signalingKey;
+	    this.fetchesMessages  = fetchesMessages;
+	    this.registrationId   = registrationId;
+	    this.name             = name;
+	    this.pin              = pin;
+	    this.registrationLock = registrationLock;
   }
 
   public String getSignalingKey() {
@@ -84,19 +85,14 @@ public class AccountAttributes {
   public String getName() {
     return name;
   }
-
-  public boolean getVoice() {
-    return voice;
-  }
-
-  public boolean getVideo() {
-    return video;
-  }
-
+  
   public String getPin() {
     return pin;
   }
   
+  public String getRegistrationLock() {
+	    return registrationLock;
+	  }  
 
   public byte[] getUnidentifiedAccessKey() {
     return unidentifiedAccessKey;
@@ -104,5 +100,9 @@ public class AccountAttributes {
 
   public boolean isUnrestrictedUnidentifiedAccess() {
     return unrestrictedUnidentifiedAccess;
+  }  
+
+  public DeviceCapabilities getCapabilities() {
+    return capabilities;
   }
 }

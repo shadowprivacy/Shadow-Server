@@ -1,5 +1,6 @@
 package su.sres.shadowserver.tests.controllers;
 
+import com.google.common.collect.ImmutableSet;
 import org.glassfish.jersey.test.grizzly.GrizzlyWebTestContainerFactory;
 import org.junit.Before;
 import org.junit.Rule;
@@ -13,8 +14,10 @@ import javax.ws.rs.core.Response;
 import java.util.LinkedList;
 import java.util.List;
 
-import io.dropwizard.auth.AuthValueFactoryProvider;
+import io.dropwizard.auth.PolymorphicAuthValueFactoryProvider;
 import io.dropwizard.testing.junit.ResourceTestRule;
+
+import su.sres.shadowserver.auth.DisabledPermittedAccount;
 import su.sres.shadowserver.controllers.DirectoryController;
 import su.sres.shadowserver.entities.ClientContactTokens;
 import su.sres.shadowserver.limits.RateLimiter;
@@ -38,7 +41,7 @@ public class DirectoryControllerTest {
   @Rule
   public final ResourceTestRule resources = ResourceTestRule.builder()
                                                             .addProvider(AuthHelper.getAuthFilter())
-                                                            .addProvider(new AuthValueFactoryProvider.Binder<>(Account.class))
+                                                            .addProvider(new PolymorphicAuthValueFactoryProvider.Binder<>(ImmutableSet.of(Account.class, DisabledPermittedAccount.class)))
                                                             .setTestContainerFactory(new GrizzlyWebTestContainerFactory())
                                                             .addResource(new DirectoryController(rateLimiters,
                                                                                                  directoryManager))
@@ -57,6 +60,17 @@ public class DirectoryControllerTest {
         return response;
       }
     });
+  }
+  
+  @Test
+  public void testDisabledGetAuthToken() {
+    Response response =
+        resources.getJerseyTest()
+                 .target("/v1/directory/auth")
+                 .request()
+                 .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.DISABLED_NUMBER, AuthHelper.DISABLED_PASSWORD))
+                 .get();
+    assertThat(response.getStatus()).isEqualTo(401);
   }
 
   @Test

@@ -63,7 +63,7 @@ public class DeleteUserCommand extends EnvironmentCommand<WhisperServerConfigura
 
       JdbiFactory           jdbiFactory     = new JdbiFactory();
       Jdbi                  accountJdbi     = jdbiFactory.build(environment, configuration.getAccountsDatabaseConfiguration(), "accountdb");
-      FaultTolerantDatabase accountDatabase = new FaultTolerantDatabase("account_database_delete_user", accountJdbi, configuration.getAbuseDatabaseConfiguration().getCircuitBreakerConfiguration());
+      FaultTolerantDatabase accountDatabase = new FaultTolerantDatabase("account_database_delete_user", accountJdbi, configuration.getAccountsDatabaseConfiguration().getCircuitBreakerConfiguration());
 
       Accounts            accounts        = new Accounts(accountDatabase);
       

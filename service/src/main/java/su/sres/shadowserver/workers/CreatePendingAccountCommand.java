@@ -31,30 +31,25 @@ import su.sres.shadowserver.util.VerificationCode;
 
 public class CreatePendingAccountCommand extends EnvironmentCommand<WhisperServerConfiguration> {
 
-	 private final Logger logger = LoggerFactory.getLogger(CreatePendingAccountCommand.class);
+	private final Logger logger = LoggerFactory.getLogger(CreatePendingAccountCommand.class);
 
-  public CreatePendingAccountCommand() {
-    super(new Application<WhisperServerConfiguration>() {
-      @Override
-      public void run(WhisperServerConfiguration configuration, Environment environment)
-          throws Exception
-      {
+	public CreatePendingAccountCommand() {
+		super(new Application<WhisperServerConfiguration>() {
+			@Override
+			public void run(WhisperServerConfiguration configuration, Environment environment) throws Exception {
 
-      }
-    }, "adduser", "add new user as pending (unverified) account");
-  }
+			}
+		}, "adduser", "add new user as pending (unverified) account");
+	}
 
-  @Override
-  public void configure(Subparser subparser) {
-    super.configure(subparser);
-    subparser.addArgument("-u", "--user") // supplies a comma-separated list of users
-             .dest("user")
-             .type(String.class)
-             .required(true)
-             .help("The phone number of the user to add");
-  }
+	@Override
+	public void configure(Subparser subparser) {
+		super.configure(subparser);
+		subparser.addArgument("-u", "--user") // supplies a comma-separated list of users
+				.dest("user").type(String.class).required(true).help("The phone number of the user to add");
+	}
 
-  @Override
+	@Override
   protected void run(Environment environment, Namespace namespace,
                      WhisperServerConfiguration configuration)
       throws Exception
@@ -66,7 +61,7 @@ public class CreatePendingAccountCommand extends EnvironmentCommand<WhisperServe
 
       JdbiFactory            jdbiFactory            = new JdbiFactory();
       Jdbi                   accountJdbi            = jdbiFactory.build(environment, configuration.getAccountsDatabaseConfiguration(), "accountdb");
-      FaultTolerantDatabase  accountDatabase        = new FaultTolerantDatabase("accounts_database_add_pending_user", accountJdbi, configuration.getAbuseDatabaseConfiguration().getCircuitBreakerConfiguration());
+      FaultTolerantDatabase  accountDatabase        = new FaultTolerantDatabase("accounts_database_add_pending_user", accountJdbi, configuration.getAccountsDatabaseConfiguration().getCircuitBreakerConfiguration());
 
       ReplicatedJedisPool    cacheClient            = new RedisClientFactory("main_cache_add_command", configuration.getCacheConfiguration().getUrl(), configuration.getCacheConfiguration().getReplicaUrls(), configuration.getCacheConfiguration().getCircuitBreakerConfiguration()).getRedisClientPool();
       ReplicatedJedisPool    redisClient            = new RedisClientFactory("directory_cache_add_command", configuration.getDirectoryConfiguration().getUrl(), configuration.getDirectoryConfiguration().getReplicaUrls(), configuration.getDirectoryConfiguration().getCircuitBreakerConfiguration()).getRedisClientPool();      
@@ -76,28 +71,30 @@ public class CreatePendingAccountCommand extends EnvironmentCommand<WhisperServe
       PendingAccountsManager pendingAccountsManager = new PendingAccountsManager(pendingAccounts, cacheClient);
    
      
-      DirectoryManager       directory                 = new DirectoryManager(redisClient);
-      AccountsManager        accountsManager           = new AccountsManager(accounts, directory, cacheClient);
+      DirectoryManager       directory              = new DirectoryManager(redisClient);
+      AccountsManager        accountsManager        = new AccountsManager(accounts, directory, cacheClient);
 
       for (String user: users) {
         Optional<Account> existingAccount = accountsManager.get(user);
 
         if (!existingAccount.isPresent()) {
-        	
+        	        	        	
         	VerificationCode       verificationCode       = generateVerificationCode(user);
       	    StoredVerificationCode storedVerificationCode = new StoredVerificationCode(verificationCode.getVerificationCode(),
-                                                                                       System.currentTimeMillis());
+      	    		System.currentTimeMillis(),
+                    null);
       	    pendingAccountsManager.store(user, storedVerificationCode);
       	    
             logger.warn("Added new user " + user + " to pending accounts with code " + storedVerificationCode.getCode());
                     	
         }
         
-        else if ((existingAccount.isPresent() && !existingAccount.get().isActive())) {
-        	
+        else if ((existingAccount.isPresent() && !existingAccount.get().isEnabled())) {
+        	        	        	
         	VerificationCode       verificationCode       = generateVerificationCode(user);
       	    StoredVerificationCode storedVerificationCode = new StoredVerificationCode(verificationCode.getVerificationCode(),
-                                                                                       System.currentTimeMillis());
+      	    		System.currentTimeMillis(),
+                    null);
       	    pendingAccountsManager.store(user, storedVerificationCode);
       	    
             logger.warn("Added existing inactive user " + user + " to pending accounts with code " + storedVerificationCode.getCode());
@@ -113,17 +110,19 @@ public class CreatePendingAccountCommand extends EnvironmentCommand<WhisperServe
       throw new RuntimeException(ex);
     }
   }
-  
-  @VisibleForTesting private VerificationCode generateVerificationCode(String number) {
+
+	@VisibleForTesting
+	private VerificationCode generateVerificationCode(String number) {
 
 // not sure if we'll still need this	  
 //	    if (testDevices.containsKey(number)) {
 //	      return new VerificationCode(testDevices.get(number));
 //	    }
-	  
+
 // generates a random number between 100000 and 999999
-	    SecureRandom random = new SecureRandom();
-	    int randomInt       = 100000 + random.nextInt(900000);
-	    return new VerificationCode(randomInt);
-	  }  
+		SecureRandom random = new SecureRandom();
+		int randomInt = 100000 + random.nextInt(900000);
+		return new VerificationCode(randomInt);
+	}
+	  
 }
