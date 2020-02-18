@@ -26,6 +26,7 @@ import java.util.Optional;
 
 import redis.clients.jedis.Jedis;
 import su.sres.shadowserver.auth.StoredVerificationCode;
+import su.sres.shadowserver.configuration.LocalParametersConfiguration;
 import su.sres.shadowserver.redis.ReplicatedJedisPool;
 import su.sres.shadowserver.util.SystemMapper;
 
@@ -35,15 +36,16 @@ public class PendingAccountsManager {
 
   private static final String CACHE_PREFIX = "pending_account2::";
 
-  private final PendingAccounts     pendingAccounts;
-  private final ReplicatedJedisPool cacheClient;
-  private final ObjectMapper        mapper;
-
+  private final PendingAccounts              pendingAccounts;
+  private final ReplicatedJedisPool          cacheClient;
+  private final ObjectMapper                 mapper;
+  
   public PendingAccountsManager(PendingAccounts pendingAccounts, ReplicatedJedisPool cacheClient)
   {
     this.pendingAccounts = pendingAccounts;
     this.cacheClient     = cacheClient;
     this.mapper          = SystemMapper.getMapper();
+    
   }
 
   public void store(String number, StoredVerificationCode code) {

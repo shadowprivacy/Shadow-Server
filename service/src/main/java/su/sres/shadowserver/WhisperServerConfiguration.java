@@ -166,6 +166,11 @@ public class WhisperServerConfiguration extends Configuration {
   @NotNull
   @JsonProperty
   private SecureBackupServiceConfiguration backupService;
+    
+  @Valid
+  @NotNull
+  @JsonProperty
+  private LocalParametersConfiguration localParametersConfiguration;
   
   private Map<String, String> transparentDataIndex = new HashMap<>();
   
@@ -290,5 +295,9 @@ public class WhisperServerConfiguration extends Configuration {
   
   public SecureBackupServiceConfiguration getSecureBackupServiceConfiguration() {
 	    return backupService;
+	  }
+  
+  public LocalParametersConfiguration getLocalParametersConfiguration() {
+	    return localParametersConfiguration;
 	  }
 }

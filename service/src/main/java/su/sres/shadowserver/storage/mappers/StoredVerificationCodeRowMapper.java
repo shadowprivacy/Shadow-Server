@@ -13,6 +13,7 @@ public class StoredVerificationCodeRowMapper implements RowMapper<StoredVerifica
   public StoredVerificationCode map(ResultSet resultSet, StatementContext ctx) throws SQLException {
     return new StoredVerificationCode(resultSet.getString("verification_code"),
     		resultSet.getLong("timestamp"),
-            resultSet.getString("push_code"));
+            resultSet.getString("push_code"),
+            resultSet.getInt("lifetime"));
   }
 }

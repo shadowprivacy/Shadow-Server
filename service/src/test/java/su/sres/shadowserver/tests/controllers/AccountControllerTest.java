@@ -62,23 +62,25 @@ import static org.mockito.Mockito.*;
 
 public class AccountControllerTest {
 
-	private static final String SENDER             = "+14152222222";
-	  private static final String SENDER_OLD         = "+14151111111";
-	  private static final String SENDER_PIN         = "+14153333333";
-	  private static final String SENDER_OVER_PIN    = "+14154444444";
-	  private static final String SENDER_OVER_PREFIX = "+14156666666";
-	  private static final String SENDER_PREAUTH     = "+14157777777";
-	  private static final String SENDER_REG_LOCK    = "+14158888888";
+		private static final String SENDER             = "+14152222222";
+		private static final String SENDER_OLD         = "+14151111111";
+		private static final String SENDER_PIN         = "+14153333333";
+		private static final String SENDER_OVER_PIN    = "+14154444444";
+		private static final String SENDER_OVER_PREFIX = "+14156666666";
+		private static final String SENDER_PREAUTH     = "+14157777777";
+		private static final String SENDER_REG_LOCK    = "+14158888888";
 
-	  private static final String ABUSIVE_HOST             = "192.168.1.1";
-	  private static final String RESTRICTED_HOST          = "192.168.1.2";
-	  private static final String NICE_HOST                = "127.0.0.1";
-	  private static final String RATE_LIMITED_IP_HOST     = "10.0.0.1";
-	  private static final String RATE_LIMITED_PREFIX_HOST = "10.0.0.2";
-	  private static final String RATE_LIMITED_HOST2       = "10.0.0.3";
+		private static final String ABUSIVE_HOST             = "192.168.1.1";
+		private static final String RESTRICTED_HOST          = "192.168.1.2";
+		private static final String NICE_HOST                = "127.0.0.1";
+		private static final String RATE_LIMITED_IP_HOST     = "10.0.0.1";
+		private static final String RATE_LIMITED_PREFIX_HOST = "10.0.0.2";
+		private static final String RATE_LIMITED_HOST2       = "10.0.0.3";
   
-  private static final String VALID_CAPTCHA_TOKEN   = "valid_token";
-  private static final String INVALID_CAPTCHA_TOKEN = "invalid_token";
+		private static final String VALID_CAPTCHA_TOKEN   = "valid_token";
+		private static final String INVALID_CAPTCHA_TOKEN = "invalid_token";
+  
+		private static final int VERIFICATION_CODE_LIFETIME = 24;
 
   private        PendingAccountsManager pendingAccountsManager = mock(PendingAccountsManager.class);
   private        AccountsManager        accountsManager        = mock(AccountsManager.class       );
@@ -151,12 +153,12 @@ public class AccountControllerTest {
     when(senderRegLockAccount.getRegistrationLockSalt()).thenReturn(Optional.of(registrationLockCredentials.getSalt()));
     when(senderRegLockAccount.getLastSeen()).thenReturn(System.currentTimeMillis());
 
-    when(pendingAccountsManager.getCodeForNumber(SENDER)).thenReturn(Optional.of(new StoredVerificationCode("1234", System.currentTimeMillis(), null)));
-    when(pendingAccountsManager.getCodeForNumber(SENDER_OLD)).thenReturn(Optional.of(new StoredVerificationCode("1234", System.currentTimeMillis() - TimeUnit.MINUTES.toMillis(31), null)));
-    when(pendingAccountsManager.getCodeForNumber(SENDER_PIN)).thenReturn(Optional.of(new StoredVerificationCode("333333", System.currentTimeMillis(), null)));
-    when(pendingAccountsManager.getCodeForNumber(SENDER_REG_LOCK)).thenReturn(Optional.of(new StoredVerificationCode("666666", System.currentTimeMillis(), null)));
-    when(pendingAccountsManager.getCodeForNumber(SENDER_OVER_PIN)).thenReturn(Optional.of(new StoredVerificationCode("444444", System.currentTimeMillis(), null)));
-    when(pendingAccountsManager.getCodeForNumber(SENDER_PREAUTH)).thenReturn(Optional.of(new StoredVerificationCode("555555", System.currentTimeMillis(), "validchallenge")));
+    when(pendingAccountsManager.getCodeForNumber(SENDER)).thenReturn(Optional.of(new StoredVerificationCode("1234", System.currentTimeMillis(), null, VERIFICATION_CODE_LIFETIME)));
+    when(pendingAccountsManager.getCodeForNumber(SENDER_OLD)).thenReturn(Optional.of(new StoredVerificationCode("1234", System.currentTimeMillis() - TimeUnit.MINUTES.toMillis(31), null, VERIFICATION_CODE_LIFETIME)));
+    when(pendingAccountsManager.getCodeForNumber(SENDER_PIN)).thenReturn(Optional.of(new StoredVerificationCode("333333", System.currentTimeMillis(), null, VERIFICATION_CODE_LIFETIME)));
+    when(pendingAccountsManager.getCodeForNumber(SENDER_REG_LOCK)).thenReturn(Optional.of(new StoredVerificationCode("666666", System.currentTimeMillis(), null, VERIFICATION_CODE_LIFETIME)));
+    when(pendingAccountsManager.getCodeForNumber(SENDER_OVER_PIN)).thenReturn(Optional.of(new StoredVerificationCode("444444", System.currentTimeMillis(), null, VERIFICATION_CODE_LIFETIME)));
+    when(pendingAccountsManager.getCodeForNumber(SENDER_PREAUTH)).thenReturn(Optional.of(new StoredVerificationCode("555555", System.currentTimeMillis(), "validchallenge", VERIFICATION_CODE_LIFETIME)));
 
     when(accountsManager.get(eq(SENDER_PIN))).thenReturn(Optional.of(senderPinAccount));
     when(accountsManager.get(eq(SENDER_REG_LOCK))).thenReturn(Optional.of(senderRegLockAccount));

@@ -61,9 +61,10 @@ public class DeviceControllerTest {
                                             AccountsManager accounts,
                                             MessagesManager messages,
                                             RateLimiters rateLimiters,
-                                            Map<String, Integer> deviceConfiguration)
+                                            Map<String, Integer> deviceConfiguration,
+                                            int verificationCodeLifetime)
     {
-      super(pendingDevices, accounts, messages, rateLimiters, deviceConfiguration);
+      super(pendingDevices, accounts, messages, rateLimiters, deviceConfiguration, verificationCodeLifetime);
     }
 
     @Override
@@ -86,6 +87,8 @@ public class DeviceControllerTest {
   private Map<String, Integer>  deviceConfiguration   = new HashMap<String, Integer>() {{
 
   }};
+  
+  private static final int VERIFICATION_CODE_LIFETIME = 48;
 
   @Rule
   public final ResourceTestRule resources = ResourceTestRule.builder()
@@ -97,7 +100,8 @@ public class DeviceControllerTest {
                                                                                                               accountsManager,
                                                                                                               messagesManager,
                                                                                                               rateLimiters,
-                                                                                                              deviceConfiguration))
+                                                                                                              deviceConfiguration,
+                                                                                                              VERIFICATION_CODE_LIFETIME))
                                                             .build();
 
 
@@ -120,8 +124,8 @@ public class DeviceControllerTest {
     when(account.getAuthenticatedDevice()).thenReturn(Optional.of(masterDevice));
     when(account.isEnabled()).thenReturn(false);
 
-    when(pendingDevicesManager.getCodeForNumber(AuthHelper.VALID_NUMBER)).thenReturn(Optional.of(new StoredVerificationCode("5678901", System.currentTimeMillis(), null)));
-    when(pendingDevicesManager.getCodeForNumber(AuthHelper.VALID_NUMBER_TWO)).thenReturn(Optional.of(new StoredVerificationCode("1112223", System.currentTimeMillis() - TimeUnit.MINUTES.toMillis(31), null)));
+    when(pendingDevicesManager.getCodeForNumber(AuthHelper.VALID_NUMBER)).thenReturn(Optional.of(new StoredVerificationCode("5678901", System.currentTimeMillis(), null, VERIFICATION_CODE_LIFETIME)));
+    when(pendingDevicesManager.getCodeForNumber(AuthHelper.VALID_NUMBER_TWO)).thenReturn(Optional.of(new StoredVerificationCode("1112223", System.currentTimeMillis() - TimeUnit.MINUTES.toMillis(31), null, VERIFICATION_CODE_LIFETIME)));
     when(accountsManager.get(AuthHelper.VALID_NUMBER)).thenReturn(Optional.of(account));
     when(accountsManager.get(AuthHelper.VALID_NUMBER_TWO)).thenReturn(Optional.of(maxedAccount));
   }

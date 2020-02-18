@@ -70,18 +70,21 @@ public class DeviceController {
   private final MessagesManager       messages;
   private final RateLimiters          rateLimiters;
   private final Map<String, Integer>  maxDeviceConfiguration;
+  private final int                   verificationCodeLifetime ;
 
   public DeviceController(PendingDevicesManager pendingDevices,
                           AccountsManager accounts,
                           MessagesManager messages,
                           RateLimiters rateLimiters,
-                          Map<String, Integer> maxDeviceConfiguration)
+                          Map<String, Integer> maxDeviceConfiguration,
+                          int verificationCodeLifetime)
   {
-    this.pendingDevices         = pendingDevices;
-    this.accounts               = accounts;
-    this.messages               = messages;
-    this.rateLimiters           = rateLimiters;
-    this.maxDeviceConfiguration = maxDeviceConfiguration;
+    this.pendingDevices           = pendingDevices;
+    this.accounts                 = accounts;
+    this.messages                 = messages;
+    this.rateLimiters             = rateLimiters;
+    this.maxDeviceConfiguration   = maxDeviceConfiguration;
+    this.verificationCodeLifetime = verificationCodeLifetime;
   }
 
   @Timed
@@ -136,8 +139,9 @@ public class DeviceController {
 
     VerificationCode       verificationCode       = generateVerificationCode();
     StoredVerificationCode storedVerificationCode = new StoredVerificationCode(verificationCode.getVerificationCode(),
-    		System.currentTimeMillis(),
-            null);
+    		                                                                   System.currentTimeMillis(),
+    		                                                                   null,
+    		                                                                   verificationCodeLifetime);
 
     pendingDevices.store(account.getNumber(), storedVerificationCode);
 

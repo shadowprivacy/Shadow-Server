@@ -17,13 +17,17 @@ public class StoredVerificationCode {
   
   @JsonProperty
   private String pushCode;
-
+  
+  @JsonProperty
+  private int lifetime;
+    
   public StoredVerificationCode() {}
 
-  public StoredVerificationCode(String code, long timestamp, String pushCode) {
+  public StoredVerificationCode(String code, long timestamp, String pushCode, int lifetime) {
     this.code      = code;
     this.timestamp = timestamp;
     this.pushCode  = pushCode;
+    this.lifetime =  lifetime; 
   }
 
   public String getCode() {
@@ -37,6 +41,10 @@ public class StoredVerificationCode {
   public String getPushCode() {
 	    return pushCode;
 	  }
+  
+  public int getLifetime() {
+	    return lifetime;
+	  }
  
   // this is for storing the push code into the already existing entry during pre-auth
   public void setPushCode(String inputPushCode) {
@@ -44,7 +52,7 @@ public class StoredVerificationCode {
   }
 
   public boolean isValid(String theirCodeString) {
-	  if (timestamp + TimeUnit.MINUTES.toMillis(1440) < System.currentTimeMillis()) {
+	  if (timestamp + TimeUnit.HOURS.toMillis(lifetime) < System.currentTimeMillis()) {
 	      return false;
 	    }
 
