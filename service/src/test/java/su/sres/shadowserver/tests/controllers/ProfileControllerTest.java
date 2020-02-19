@@ -47,6 +47,7 @@ public class ProfileControllerTest {
     when(configuration.getBucket()).thenReturn("profile-bucket");
   }
 
+    
   @ClassRule
   public static final ResourceTestRule resources = ResourceTestRule.builder()
                                                                    .addProvider(AuthHelper.getAuthFilter())
@@ -58,7 +59,8 @@ public class ProfileControllerTest {
                                                                                                       usernamesManager,
                                                                                                       configuration))
                                                                    .build();
-
+  
+  
   @Before
   public void setup() throws Exception {
     when(rateLimiters.getProfileLimiter()).thenReturn(rateLimiter);

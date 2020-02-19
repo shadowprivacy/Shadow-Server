@@ -166,8 +166,7 @@ public class WhisperServerConfiguration extends Configuration {
   @NotNull
   @JsonProperty
   private SecureBackupServiceConfiguration backupService;
-    
-  @Valid
+  
   @NotNull
   @JsonProperty
   private LocalParametersConfiguration localParametersConfiguration;

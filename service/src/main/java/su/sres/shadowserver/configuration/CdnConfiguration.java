@@ -4,36 +4,44 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import org.hibernate.validator.constraints.NotEmpty;
 
 public class CdnConfiguration {
-  @NotEmpty
-  @JsonProperty
-  private String accessKey;
+	@NotEmpty
+	@JsonProperty
+	private String uri;
 
-  @NotEmpty
-  @JsonProperty
-  private String accessSecret;
+	@NotEmpty
+	@JsonProperty
+	private String accessKey;
 
-  @NotEmpty
-  @JsonProperty
-  private String bucket;
+	@NotEmpty
+	@JsonProperty
+	private String accessSecret;
 
-  @NotEmpty
-  @JsonProperty
-  private String region;
+	@NotEmpty
+	@JsonProperty
+	private String bucket;
 
-  public String getAccessKey() {
-    return accessKey;
-  }
+	@NotEmpty
+	@JsonProperty
+	private String region;
 
-  public String getAccessSecret() {
-    return accessSecret;
-  }
+	public String getUri() {
+		return uri;
+	}
+	
+	public String getAccessKey() {
+		return accessKey;
+	}
 
-  public String getBucket() {
-    return bucket;
-  }
+	public String getAccessSecret() {
+		return accessSecret;
+	}
 
-  public String getRegion() {
-    return region;
-  }
+	public String getBucket() {
+		return bucket;
+	}
+
+	public String getRegion() {
+		return region;
+	}
 
 }

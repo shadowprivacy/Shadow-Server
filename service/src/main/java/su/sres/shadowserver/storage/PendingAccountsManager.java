@@ -26,7 +26,6 @@ import java.util.Optional;
 
 import redis.clients.jedis.Jedis;
 import su.sres.shadowserver.auth.StoredVerificationCode;
-import su.sres.shadowserver.configuration.LocalParametersConfiguration;
 import su.sres.shadowserver.redis.ReplicatedJedisPool;
 import su.sres.shadowserver.util.SystemMapper;
 
