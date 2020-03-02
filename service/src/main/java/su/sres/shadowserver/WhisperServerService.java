@@ -279,7 +279,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
    
     environment.jersey().register(new AccountController(pendingAccountsManager, accountsManager, usernamesManager, abusiveHostRules, rateLimiters, messagesManager, turnTokenGenerator, config.getTestDevices(), recaptchaClient, gcmSender
     		// , apnSender
-    		, backupCredentialsGenerator));
+    		, backupCredentialsGenerator, config.getServiceConfiguration()));
     environment.jersey().register(new DeviceController(pendingDevicesManager, accountsManager, messagesManager, rateLimiters, config.getMaxDevices(), config.getLocalParametersConfiguration().getVerificationCodeLifetime()));
     environment.jersey().register(new DirectoryController(rateLimiters, directory));
     

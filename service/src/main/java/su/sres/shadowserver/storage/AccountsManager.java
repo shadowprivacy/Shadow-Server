@@ -148,6 +148,8 @@ public class AccountsManager {
 
 	private void updateDirectory(Account account) {
 		if (account.isEnabled()) {
+			// remove after testing
+			logger.info("Account is enabled. Adding contact to directory");
 			byte[] token = Util.getContactToken(account.getNumber());
 			ClientContact clientContact = new ClientContact(token, null, true, true);
 			directory.add(clientContact);
@@ -166,34 +168,27 @@ public class AccountsManager {
 	}
 
 	private void redisSet(Account account) {
-		try (Jedis jedis = cacheClient.getWriteResource(); Timer.Context ignored = redisSetTimer.time()) {
-			
-			// circumventing the case when uuid is initially null for existing accounts
-			
-//			if (account.getUuid() != null) {
-			
+		try (Jedis jedis = cacheClient.getWriteResource();
+			 Timer.Context ignored = redisSetTimer.time())
+		{
+						
 			jedis.set(getAccountMapKey(account.getNumber()), account.getUuid().toString());
 			jedis.set(getAccountEntityKey(account.getUuid()), mapper.writeValueAsString(account));
-//			} else {
-//				jedis.set(getAccountMapKey(account.getNumber()), "null_uuid");
-//				jedis.set(("Account3::"+account.getNumber()), mapper.writeValueAsString(account));
-//			}
+			
 		} catch (JsonProcessingException e) {
 			throw new IllegalStateException(e);
 		}
 	}
 
 	private Optional<Account> redisGet(String number) {
-		try (Jedis jedis = cacheClient.getReadResource(); Timer.Context ignored = redisNumberGetTimer.time()) {
-			String uuid = jedis.get(getAccountMapKey(number));
-
-			// circumventing the case when uuid is initially null for existing accounts
+		try (Jedis jedis = cacheClient.getReadResource();
+			Timer.Context ignored = redisNumberGetTimer.time()) {
 			
-			if (uuid != null) /** && (!(uuid.equals("null_uuid")))) */ {
-				return redisGet(jedis, UUID.fromString(uuid));
-			}
-			else
-				return Optional.empty();
+			String uuid = jedis.get(getAccountMapKey(number));
+						
+			if (uuid != null) return redisGet(jedis, UUID.fromString(uuid));			
+			else return Optional.empty();
+			
 		} catch (IllegalArgumentException e) {
 			logger.warn("Deserialization error", e);
 			return Optional.empty();

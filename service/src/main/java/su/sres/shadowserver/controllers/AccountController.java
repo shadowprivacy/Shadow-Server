@@ -56,6 +56,7 @@ import su.sres.shadowserver.auth.InvalidAuthorizationHeaderException;
 import su.sres.shadowserver.auth.StoredVerificationCode;
 import su.sres.shadowserver.auth.TurnToken;
 import su.sres.shadowserver.auth.TurnTokenGenerator;
+import su.sres.shadowserver.configuration.ServiceConfiguration;
 import su.sres.shadowserver.entities.AccountAttributes;
 import su.sres.shadowserver.entities.AccountCreationResult;
 import su.sres.shadowserver.entities.ApnRegistrationId;
@@ -110,13 +111,15 @@ public class AccountController {
 	private final GCMSender gcmSender;
 //	  private final APNSender              apnSender;
 	private final ExternalServiceCredentialGenerator backupServiceCredentialGenerator;
+	private final ServiceConfiguration serviceConfiguration;
 
 	public AccountController(PendingAccountsManager pendingAccounts, AccountsManager accounts,
 			UsernamesManager usernames, AbusiveHostRules abusiveHostRules, RateLimiters rateLimiters,
 			MessagesManager messagesManager, TurnTokenGenerator turnTokenGenerator, Map<String, Integer> testDevices,
 			RecaptchaClient recaptchaClient, GCMSender gcmSender,
 			// APNSender apnSender,
-			ExternalServiceCredentialGenerator backupServiceCredentialGenerator) {
+			ExternalServiceCredentialGenerator backupServiceCredentialGenerator,
+			ServiceConfiguration serviceConfiguration) {
 		this.pendingAccounts = pendingAccounts;
 		this.accounts = accounts;
 		this.usernames = usernames;
@@ -130,6 +133,7 @@ public class AccountController {
 		this.gcmSender = gcmSender;
 //    this.apnSender          = apnSender;
 		this.backupServiceCredentialGenerator = backupServiceCredentialGenerator;
+		this.serviceConfiguration = serviceConfiguration;
 	}
 
 	@Timed
@@ -297,6 +301,9 @@ public class AccountController {
 			}
 
 			Account account = createAccount(number, password, userAgent, accountAttributes);
+			
+			// remove after testing
+			logger.info("Created new account for number " + number + "with UUID" + account.getUuid().toString());
 
 			metricRegistry.meter(name(AccountController.class, "verify", Util.getCountryCode(number))).mark();
 
@@ -315,6 +322,15 @@ public class AccountController {
 	public TurnToken getTurnToken(@Auth Account account) throws RateLimitExceededException {
 		rateLimiters.getTurnLimiter().validate(account.getNumber());
 		return turnTokenGenerator.generate();
+	}
+	
+	@Timed
+	@GET
+	@Path("/config/")
+	@Produces(MediaType.APPLICATION_JSON)
+	public ServiceConfiguration getServiceConfiguration(@Auth Account account) throws RateLimitExceededException {
+		rateLimiters.getConfigLimiter().validate(account.getNumber());
+		return serviceConfiguration;
 	}
 
 	@Timed
@@ -614,17 +630,20 @@ public class AccountController {
 		Account account = new Account();
 		account.setNumber(number);
 		account.setUuid(UUID.randomUUID());
+						
 		account.addDevice(device);
 		account.setPin(accountAttributes.getPin());
+				
 		account.setUnidentifiedAccessKey(accountAttributes.getUnidentifiedAccessKey());
 		account.setUnrestrictedUnidentifiedAccess(accountAttributes.isUnrestrictedUnidentifiedAccess());
-
+		
 		if (accounts.create(account)) {
 			newUserMeter.mark();
-		}
-
+		}	
+		
 		messagesManager.clear(number);
-		pendingAccounts.remove(number);
+			
+		pendingAccounts.remove(number);		
 
 		return account;
 	}

@@ -82,19 +82,10 @@ public class Accounts {
                       .bind("data", mapper.writeValueAsString(account))
                       .mapTo(UUID.class)
                       .findOnly();
-
-// remove after testing
-//	          logger.info("uiid is " + uuid);
-//	          logger.info("account.getUuid() is " + account.getUuid());
-
-// circumventing the case when uuid is initially null for existing accounts
 	          
     boolean isNew;
-//    if (uuid == null) {
-//    	isNew = false;
-//    } else {
     isNew = uuid.equals(account.getUuid());
-//    }
+
     account.setUuid(uuid);    
     return isNew;
     

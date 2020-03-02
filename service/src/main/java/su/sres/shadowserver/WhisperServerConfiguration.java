@@ -171,6 +171,10 @@ public class WhisperServerConfiguration extends Configuration {
   @JsonProperty
   private LocalParametersConfiguration localParametersConfiguration;
   
+  @NotNull
+  @JsonProperty
+  private ServiceConfiguration serviceConfiguration;
+  
   private Map<String, String> transparentDataIndex = new HashMap<>();
   
   public RecaptchaConfiguration getRecaptchaConfiguration() {
@@ -298,5 +302,9 @@ public class WhisperServerConfiguration extends Configuration {
   
   public LocalParametersConfiguration getLocalParametersConfiguration() {
 	    return localParametersConfiguration;
+	  }
+  
+  public ServiceConfiguration getServiceConfiguration() {
+	    return serviceConfiguration;
 	  }
 }

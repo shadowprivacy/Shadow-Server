@@ -45,6 +45,8 @@ public class RateLimiters {
 
 	private final RateLimiter usernameLookupLimiter;
 	private final RateLimiter usernameSetLimiter;
+	
+	private final RateLimiter configLimiter;
 
 	public RateLimiters(RateLimitsConfiguration config, ReplicatedJedisPool cacheClient) {
 		this.smsDestinationLimiter = new RateLimiter(cacheClient, "smsDestination",
@@ -104,6 +106,9 @@ public class RateLimiters {
 
 		this.usernameSetLimiter = new RateLimiter(cacheClient, "usernameSet", config.getUsernameSet().getBucketSize(),
 				config.getUsernameSet().getLeakRatePerMinute());
+		
+		this.configLimiter = new RateLimiter(cacheClient, "configRequest", config.getConfigRequest().getBucketSize(),
+				config.getConfigRequest().getLeakRatePerMinute());
 	}
 
 	public RateLimiter getAllocateDeviceLimiter() {
@@ -180,5 +185,9 @@ public class RateLimiters {
 
 	public RateLimiter getUsernameSetLimiter() {
 		return usernameSetLimiter;
+	}
+	
+	public RateLimiter getConfigLimiter() {
+		return configLimiter;
 	}
 }

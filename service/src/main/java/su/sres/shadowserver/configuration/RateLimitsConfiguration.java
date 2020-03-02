@@ -76,6 +76,9 @@ public class RateLimitsConfiguration {
 
 	@JsonProperty
 	private RateLimitConfiguration usernameSet = new RateLimitConfiguration(100, 100 / (24.0 * 60.0));
+	
+	@JsonProperty
+	private RateLimitConfiguration configRequest = new RateLimitConfiguration(2, 2);
 
 	public RateLimitConfiguration getAutoBlock() {
 		return autoBlock;
@@ -151,6 +154,10 @@ public class RateLimitsConfiguration {
 
 	public RateLimitConfiguration getUsernameSet() {
 		return usernameSet;
+	}
+	
+	public RateLimitConfiguration getConfigRequest() {
+		return configRequest;
 	}
 
 	public static class RateLimitConfiguration {
