@@ -301,10 +301,7 @@ public class AccountController {
 			}
 
 			Account account = createAccount(number, password, userAgent, accountAttributes);
-			
-			// remove after testing
-			logger.info("Created new account for number " + number + "with UUID" + account.getUuid().toString());
-
+						
 			metricRegistry.meter(name(AccountController.class, "verify", Util.getCountryCode(number))).mark();
 
 			return new AccountCreationResult(account.getUuid());
