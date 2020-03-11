@@ -160,7 +160,8 @@ public class ProfileController {
 	@Produces(MediaType.APPLICATION_JSON)
 	@Path("/name/{name}")
 	public void setProfile(@Auth Account account,
-			@PathParam("name") @UnwrapValidatedValue(true) @Length(min = 72, max = 72) Optional<String> name) {
+			@PathParam("name") @UnwrapValidatedValue(true) // @Length(min = 72, max = 72)
+	Optional<String> name) {
 		account.setProfileName(name.orElse(null));
 		accountsManager.update(account);
 	}
