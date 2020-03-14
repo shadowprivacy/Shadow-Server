@@ -1,14 +1,7 @@
 package su.sres.shadowserver.controllers;
 
-import com.amazonaws.auth.AWSCredentials;
-import com.amazonaws.auth.AWSCredentialsProvider;
-import com.amazonaws.auth.AWSStaticCredentialsProvider;
-import com.amazonaws.auth.BasicAWSCredentials;
-// import com.amazonaws.services.s3.AmazonS3;
-// import com.amazonaws.services.s3.AmazonS3Client;
 import com.codahale.metrics.annotation.Timed;
 import org.apache.commons.codec.binary.Base64;
-import org.hibernate.validator.constraints.Length;
 import org.hibernate.validator.valuehandling.UnwrapValidatedValue;
 import org.xmlpull.v1.XmlPullParserException;
 
@@ -66,13 +59,14 @@ public class ProfileController {
 
 //  private final AmazonS3            s3client;
 	private final String bucket;
-	private final MinioClient minioClient;
+	private MinioClient minioClient = null;
 
 	public ProfileController(RateLimiters rateLimiters, AccountsManager accountsManager,
-			UsernamesManager usernamesManager, CdnConfiguration profilesConfiguration) throws MinioException {
-		AWSCredentials credentials = new BasicAWSCredentials(profilesConfiguration.getAccessKey(),
-				profilesConfiguration.getAccessSecret());
-		AWSCredentialsProvider credentialsProvider = new AWSStaticCredentialsProvider(credentials);
+			UsernamesManager usernamesManager, CdnConfiguration profilesConfiguration) throws MinioException
+	{
+		//AWSCredentials credentials = new BasicAWSCredentials(profilesConfiguration.getAccessKey(),
+		//		profilesConfiguration.getAccessSecret());
+		//AWSCredentialsProvider credentialsProvider = new AWSStaticCredentialsProvider(credentials);
 
 		this.rateLimiters = rateLimiters;
 		this.accountsManager = accountsManager;
@@ -82,8 +76,9 @@ public class ProfileController {
 //                                            .withCredentials(credentialsProvider)
 //                                            .withRegion(profilesConfiguration.getRegion())
 //                                            .build();
-		this.minioClient = new MinioClient(profilesConfiguration.getUri(), profilesConfiguration.getAccessKey(),
-				profilesConfiguration.getAccessSecret());
+
+		this.minioClient = new MinioClient(profilesConfiguration.getUri(),
+				profilesConfiguration.getAccessKey(), profilesConfiguration.getAccessSecret());
 
 		this.policyGenerator = new PostPolicyGenerator(profilesConfiguration.getRegion(),
 				profilesConfiguration.getBucket(), profilesConfiguration.getAccessKey());
@@ -171,6 +166,7 @@ public class ProfileController {
 	@Produces(MediaType.APPLICATION_JSON)
 	@Path("/form/avatar")
 	public ProfileAvatarUploadAttributes getAvatarUploadForm(@Auth Account account) {
+
 		String previousAvatar = account.getAvatar();
 		ZonedDateTime now = ZonedDateTime.now(ZoneOffset.UTC);
 		String objectName = generateAvatarObjectName();
@@ -180,7 +176,8 @@ public class ProfileController {
 		if (previousAvatar != null 
 	//			&& previousAvatar.startsWith("profiles/")
 				) {
-			try {
+			try
+			{
 				minioClient.removeObject(bucket, previousAvatar);
 			} catch (MinioException | InvalidKeyException | NoSuchAlgorithmException | IOException
 					| XmlPullParserException e) {

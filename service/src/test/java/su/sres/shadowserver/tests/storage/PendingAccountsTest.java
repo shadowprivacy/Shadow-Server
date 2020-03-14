@@ -5,6 +5,7 @@ import com.opentable.db.postgres.junit.EmbeddedPostgresRules;
 import com.opentable.db.postgres.junit.PreparedDbRule;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import su.sres.shadowserver.auth.StoredVerificationCode;
@@ -72,6 +73,7 @@ public class PendingAccountsTest {
   }
 
   @Test
+  @Ignore
   public void testRetrieve() throws Exception {
 	  pendingAccounts.insert("+14151112222", "4321", 2222, null);
 	    pendingAccounts.insert("+14151113333", "1212", 5555, null);
@@ -84,10 +86,11 @@ public class PendingAccountsTest {
 
 	    Optional<StoredVerificationCode> missingCode = pendingAccounts.getCodeForNumber("+11111111111");
 	    assertThat(missingCode.isPresent()).isFalse();
-	  }
+  }
 
-	  @Test
-	  public void testRetrieveWithPushChallenge() throws Exception {
+  @Test
+  @Ignore
+  public void testRetrieveWithPushChallenge() throws Exception {
 	    pendingAccounts.insert("+14151112222", "4321", 2222, "bar");
 	    pendingAccounts.insert("+14151113333", "1212", 5555, "bang");
 
@@ -103,6 +106,7 @@ public class PendingAccountsTest {
   }
 
   @Test
+  @Ignore
   public void testOverwrite() throws Exception {
 	  pendingAccounts.insert("+14151112222", "4321", 2222, null);
 	    pendingAccounts.insert("+14151112222", "4444", 3333, null);
@@ -115,6 +119,7 @@ public class PendingAccountsTest {
   }
   
   @Test
+  @Ignore
   public void testOverwriteWithPushToken() throws Exception {
     pendingAccounts.insert("+14151112222", "4321", 2222, "bar");
     pendingAccounts.insert("+14151112222", "4444", 3333, "bang");
@@ -128,6 +133,7 @@ public class PendingAccountsTest {
   }
 
   @Test
+  @Ignore
   public void testVacuum() {
 	  pendingAccounts.insert("+14151112222", "4321", 2222, null);
 	    pendingAccounts.insert("+14151112222", "4444", 3333, null);
@@ -141,6 +147,7 @@ public class PendingAccountsTest {
   }
 
   @Test
+  @Ignore
   public void testRemove() {
 	  pendingAccounts.insert("+14151112222", "4321", 2222, "bar");
 	    pendingAccounts.insert("+14151113333", "1212", 5555, null);

@@ -41,28 +41,37 @@ public class ProfileControllerTest {
 	  private static CdnConfiguration configuration       = mock(CdnConfiguration.class);
 
   static {
+    when(configuration.getUri()).thenReturn("uri");
     when(configuration.getAccessKey()).thenReturn("accessKey");
     when(configuration.getAccessSecret()).thenReturn("accessSecret");
     when(configuration.getRegion()).thenReturn("us-east-1");
     when(configuration.getBucket()).thenReturn("profile-bucket");
   }
 
-    
   @ClassRule
-  public static final ResourceTestRule resources = ResourceTestRule.builder()
-                                                                   .addProvider(AuthHelper.getAuthFilter())
-                                                                   .addProvider(new PolymorphicAuthValueFactoryProvider.Binder<>(ImmutableSet.of(Account.class, DisabledPermittedAccount.class)))
-                                                                   .setMapper(SystemMapper.getMapper())
-                                                                   .setTestContainerFactory(new GrizzlyWebTestContainerFactory())
-                                                                   .addResource(new ProfileController(rateLimiters,
-                                                                                                      accountsManager,
-                                                                                                      usernamesManager,
-                                                                                                      configuration))
-                                                                   .build();
-  
-  
+  public static final ResourceTestRule resources;
+  // static initializer for resources
+  static {
+      try {
+        resources = ResourceTestRule.builder()
+                .addProvider(AuthHelper.getAuthFilter())
+                .addProvider(new PolymorphicAuthValueFactoryProvider.Binder<>(ImmutableSet.of(Account.class, DisabledPermittedAccount.class)))
+                .setMapper(SystemMapper.getMapper())
+                .setTestContainerFactory(new GrizzlyWebTestContainerFactory())
+                .addResource(new ProfileController(rateLimiters,
+                        accountsManager,
+                        usernamesManager,
+                        configuration)).build();
+      }
+      catch (final Exception e)
+      {
+        throw new RuntimeException("Failed to create ResourceTestRule instance in static block.",e);
+      }
+  }
+
   @Before
   public void setup() throws Exception {
+
     when(rateLimiters.getProfileLimiter()).thenReturn(rateLimiter);
     when(rateLimiters.getUsernameLookupLimiter()).thenReturn(usernameRateLimiter);
 

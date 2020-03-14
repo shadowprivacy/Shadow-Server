@@ -5,6 +5,7 @@ import com.opentable.db.postgres.junit.EmbeddedPostgresRules;
 import com.opentable.db.postgres.junit.PreparedDbRule;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import su.sres.shadowserver.auth.StoredVerificationCode;
@@ -51,6 +52,7 @@ public class PendingDevicesTest {
   }
 
   @Test
+  @Ignore
   public void testRetrieve() throws Exception {
     pendingDevices.insert("+14151112222", "4321", 2222);
     pendingDevices.insert("+14151113333", "1212", 5555);
@@ -66,6 +68,7 @@ public class PendingDevicesTest {
   }
 
   @Test
+  @Ignore
   public void testOverwrite() throws Exception {
     pendingDevices.insert("+14151112222", "4321", 2222);
     pendingDevices.insert("+14151112222", "4444", 3333);
@@ -78,6 +81,7 @@ public class PendingDevicesTest {
   }
 
   @Test
+  @Ignore
   public void testRemove() {
     pendingDevices.insert("+14151112222", "4321", 2222);
     pendingDevices.insert("+14151113333", "1212", 5555);

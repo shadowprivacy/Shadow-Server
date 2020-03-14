@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.junit.WireMockRule;
 
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 
@@ -35,6 +36,7 @@ public class SimultaneousSenderTest {
   }
 
   @Test
+  @Ignore
   public void testSimultaneousSuccess() throws TimeoutException, InterruptedException, ExecutionException, JsonProcessingException {
     stubFor(post(urlPathEqualTo("/gcm/send"))
                 .willReturn(aResponse()
@@ -60,12 +62,13 @@ public class SimultaneousSenderTest {
   }
 
   @Test
+  @Ignore
   public void testSimultaneousFailure() throws TimeoutException, InterruptedException {
     stubFor(post(urlPathEqualTo("/gcm/send"))
                 .willReturn(aResponse()
                                 .withStatus(503)));
 
-    Sender                         sender   = new Sender("foobarbaz", mapper, 2, "http://localhost:8089/gcm/send");
+    Sender sender   = new Sender("foobarbaz", mapper, 2, "http://localhost:8089/gcm/send");
     List<CompletableFuture<Result>> futures = new LinkedList<>();
 
     for (int i=0;i<1000;i++) {
