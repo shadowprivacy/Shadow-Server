@@ -21,10 +21,16 @@ import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.SharedMetricRegistries;
 import com.codahale.metrics.annotation.Timed;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.validation.Valid;
+import javax.validation.constraints.NotNull;
+import javax.validation.constraints.Size;
 import javax.ws.rs.Consumes;
 import javax.ws.rs.DELETE;
 import javax.ws.rs.GET;
@@ -47,6 +53,7 @@ import java.util.concurrent.TimeUnit;
 
 import static com.codahale.metrics.MetricRegistry.name;
 import io.dropwizard.auth.Auth;
+import io.dropwizard.jetty.ConnectorFactory;
 import su.sres.shadowserver.auth.AuthenticationCredentials;
 import su.sres.shadowserver.auth.AuthorizationHeader;
 import su.sres.shadowserver.auth.DisabledPermittedAccount;
@@ -66,6 +73,8 @@ import su.sres.shadowserver.entities.DeprecatedPin;
 import su.sres.shadowserver.entities.RegistrationLock;
 import su.sres.shadowserver.entities.RegistrationLockFailure;
 import su.sres.shadowserver.limits.RateLimiters;
+import su.sres.shadowserver.providers.CertsProvider;
+import su.sres.shadowserver.providers.SystemCerts;
 import su.sres.shadowserver.push.APNSender;
 import su.sres.shadowserver.push.ApnMessage;
 import su.sres.shadowserver.push.GCMSender;
@@ -112,6 +121,7 @@ public class AccountController {
 //	  private final APNSender              apnSender;
 	private final ExternalServiceCredentialGenerator backupServiceCredentialGenerator;
 	private final ServiceConfiguration serviceConfiguration;
+	
 
 	public AccountController(PendingAccountsManager pendingAccounts, AccountsManager accounts,
 			UsernamesManager usernames, AbusiveHostRules abusiveHostRules, RateLimiters rateLimiters,
@@ -133,7 +143,8 @@ public class AccountController {
 		this.gcmSender = gcmSender;
 //    this.apnSender          = apnSender;
 		this.backupServiceCredentialGenerator = backupServiceCredentialGenerator;
-		this.serviceConfiguration = serviceConfiguration;
+		this.serviceConfiguration = serviceConfiguration;		
+		
 	}
 
 	@Timed
@@ -328,6 +339,18 @@ public class AccountController {
 	public ServiceConfiguration getServiceConfiguration(@Auth Account account) throws RateLimitExceededException {
 		rateLimiters.getConfigLimiter().validate(account.getNumber());
 		return serviceConfiguration;
+	}
+	
+	@Timed
+	@GET
+	@Path("/cert/")
+	@Produces(MediaType.APPLICATION_JSON)
+	public SystemCerts getCerts(@Auth Account account) throws RateLimitExceededException {
+		rateLimiters.getConfigLimiter().validate(account.getNumber());
+		// TODO: return all the certs from the keystore, together with their aliases; provide for rotation
+				
+		return (new CertsProvider(serviceConfiguration)).getCerts();
+					
 	}
 
 	@Timed
@@ -651,7 +674,7 @@ public class AccountController {
 		random.nextBytes(challenge);
 
 		return Hex.toStringCondensed(challenge);
-	}
+	}	
 
 	private static class CaptchaRequirement {
 		private final boolean captchaRequired;

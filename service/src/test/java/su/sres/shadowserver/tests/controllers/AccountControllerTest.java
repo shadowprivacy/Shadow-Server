@@ -15,6 +15,7 @@ import javax.ws.rs.core.Response;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
@@ -22,6 +23,7 @@ import java.security.SecureRandom;
 
 import io.dropwizard.auth.PolymorphicAuthValueFactoryProvider;
 import io.dropwizard.testing.junit.ResourceTestRule;
+import io.dropwizard.jetty.ConnectorFactory;
 
 import su.sres.shadowserver.auth.AuthenticationCredentials;
 import su.sres.shadowserver.auth.DisabledPermittedAccount;
@@ -110,7 +112,7 @@ public class AccountControllerTest {
   private ExternalServiceCredentialGenerator storageCredentialGenerator = new ExternalServiceCredentialGenerator(new byte[32], new byte[32], false);
 
   private ServiceConfiguration serviceConfiguration = new ServiceConfiguration();
-
+  
 
 //  public AccountController(PendingAccountsManager pendingAccounts, AccountsManager accounts,
 //                           UsernamesManager usernames, AbusiveHostRules abusiveHostRules, RateLimiters rateLimiters,
@@ -139,7 +141,8 @@ public class AccountControllerTest {
                                                                                                gcmSender,
                                                                        //                      apnSender,
                                                                                                storageCredentialGenerator,
-                                                                                               serviceConfiguration))
+                                                                                               serviceConfiguration
+                                                                                               ))
                                                             .build();
 
 
