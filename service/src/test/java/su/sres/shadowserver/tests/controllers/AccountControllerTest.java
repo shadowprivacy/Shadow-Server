@@ -15,15 +15,12 @@ import javax.ws.rs.core.Response;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.security.SecureRandom;
 
 import io.dropwizard.auth.PolymorphicAuthValueFactoryProvider;
 import io.dropwizard.testing.junit.ResourceTestRule;
-import io.dropwizard.jetty.ConnectorFactory;
 
 import su.sres.shadowserver.auth.AuthenticationCredentials;
 import su.sres.shadowserver.auth.DisabledPermittedAccount;
@@ -44,7 +41,7 @@ import su.sres.shadowserver.limits.RateLimiter;
 import su.sres.shadowserver.limits.RateLimiters;
 import su.sres.shadowserver.mappers.RateLimitExceededExceptionMapper;
 import su.sres.shadowserver.providers.TimeProvider;
-import su.sres.shadowserver.push.APNSender;
+// import su.sres.shadowserver.push.APNSender;
 import su.sres.shadowserver.push.ApnMessage;
 import su.sres.shadowserver.push.GCMSender;
 import su.sres.shadowserver.push.GcmMessage;

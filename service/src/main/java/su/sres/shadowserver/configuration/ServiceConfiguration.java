@@ -39,6 +39,10 @@ public class ServiceConfiguration {
 	@NotNull
 	@Size(min = 32, max = 32)
 	private byte[] unidentifiedDeliveryCaPublicKey;
+	
+	@JsonProperty
+	@NotEmpty
+	private int certsVersion;
 
 	public String getCloudUri() {
 		return cloudUri;
@@ -62,6 +66,10 @@ public class ServiceConfiguration {
 	
 	public byte[] getUnidentifiedDeliveryCaPublicKey() {
 		return unidentifiedDeliveryCaPublicKey;
+	}	
+	
+	public int getCertsVersion() {
+		return certsVersion;
 	}	
 	
 }

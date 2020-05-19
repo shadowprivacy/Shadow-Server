@@ -47,6 +47,8 @@ public class RateLimiters {
 	private final RateLimiter usernameSetLimiter;
 	
 	private final RateLimiter configLimiter;
+	private final RateLimiter certLimiter;
+	private final RateLimiter certVerLimiter;
 
 	public RateLimiters(RateLimitsConfiguration config, ReplicatedJedisPool cacheClient) {
 		this.smsDestinationLimiter = new RateLimiter(cacheClient, "smsDestination",
@@ -109,6 +111,12 @@ public class RateLimiters {
 		
 		this.configLimiter = new RateLimiter(cacheClient, "configRequest", config.getConfigRequest().getBucketSize(),
 				config.getConfigRequest().getLeakRatePerMinute());
+		
+		this.certLimiter = new RateLimiter(cacheClient, "certRequest", config.getCertRequest().getBucketSize(),
+				config.getCertRequest().getLeakRatePerMinute());
+		
+		this.certVerLimiter = new RateLimiter(cacheClient, "certverRequest", config.getCertVerRequest().getBucketSize(),
+				config.getCertVerRequest().getLeakRatePerMinute());
 	}
 
 	public RateLimiter getAllocateDeviceLimiter() {
@@ -189,5 +197,13 @@ public class RateLimiters {
 	
 	public RateLimiter getConfigLimiter() {
 		return configLimiter;
+	}
+	
+	public RateLimiter getCertLimiter() {
+		return certLimiter;
+	}
+	
+	public RateLimiter getCertVerLimiter() {
+		return certVerLimiter;
 	}
 }

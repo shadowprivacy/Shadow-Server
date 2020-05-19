@@ -6,23 +6,19 @@ import java.io.InputStream;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
+import java.security.NoSuchProviderException;
+import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
 
-import com.fasterxml.jackson.core.JsonGenerator;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonSerializer;
-import com.fasterxml.jackson.databind.SerializerProvider;
-
 import su.sres.shadowserver.configuration.ServiceConfiguration;
-import su.sres.shadowserver.util.Base64;
 
 public class CertsProvider {
 
-
 	private static final String CLOUD_CERT_ALIAS = "cloud";
+	private static final String SHADOW_CERT_ALIAS = "shadow";
+	private static final String STORAGE_CERT_ALIAS = "storage";
 
 	private ServiceConfiguration serviceConfiguration;
-
 
 	public CertsProvider(ServiceConfiguration serviceConfiguration) {
 		this.serviceConfiguration = serviceConfiguration;
@@ -30,34 +26,76 @@ public class CertsProvider {
 
 	public SystemCerts getCerts() {
 
-		String  keystorePath = serviceConfiguration.getKeyStorePath(),
-		    	keystorePassword = serviceConfiguration.getKeyStorePassword();
-		
-		byte[] cloudCertificate;							
+		String  keystorePath     = serviceConfiguration.getKeyStorePath(),
+				keystorePassword = serviceConfiguration.getKeyStorePassword();
 
-			try(InputStream keystoreInputStream = new FileInputStream(keystorePath)) {
+		byte[]  cloudCertificateA   = null,
+				cloudCertificateB   = null,
+				shadowCertificateA  = null,
+				shadowCertificateB  = null,
+				storageCertificateA = null,
+				storageCertificateB = null;
 
-				KeyStore keystore = KeyStore.getInstance("PKCS12");
-	     		keystore.load(keystoreInputStream, keystorePassword.toCharArray());		
-	
-				cloudCertificate = keystore.getCertificate(CLOUD_CERT_ALIAS).getEncoded();								
-				
-			} catch (CertificateException | KeyStoreException | NoSuchAlgorithmException | IOException e) {
-				e.printStackTrace();
-				return new SystemCerts(null);
-			}			
-			
-			return new SystemCerts(cloudCertificate);		
+		try (InputStream keystoreInputStream = new FileInputStream(keystorePath)) {
+
+			KeyStore keystore;
+
+			try {
+				keystore = KeyStore.getInstance("PKCS12");
+				keystore.load(keystoreInputStream, keystorePassword.toCharArray());
+
+			} catch (KeyStoreException | NoSuchAlgorithmException | IOException	| CertificateException e) {
+				return new SystemCerts(null, null, null, null, null, null);
+			}
+
+			try {
+				if (keystore.containsAlias(CLOUD_CERT_ALIAS + "_a")) {
+				cloudCertificateA = keystore.getCertificate(CLOUD_CERT_ALIAS + "_a").getEncoded();
+				}
+			} catch (KeyStoreException | CertificateEncodingException e) {}
+
+			try {
+				if (keystore.containsAlias(CLOUD_CERT_ALIAS + "_b")) {
+				cloudCertificateB = keystore.getCertificate(CLOUD_CERT_ALIAS + "_b").getEncoded();
+				}
+			} catch (KeyStoreException | CertificateEncodingException e) {}
+
+			try {
+				if (keystore.containsAlias(SHADOW_CERT_ALIAS + "_a")) {
+				shadowCertificateA = keystore.getCertificate(SHADOW_CERT_ALIAS + "_a").getEncoded();
+				}
+			} catch (KeyStoreException | CertificateEncodingException e) {}
+
+			try {
+				if (keystore.containsAlias(SHADOW_CERT_ALIAS + "_b")) {
+				shadowCertificateB = keystore.getCertificate(SHADOW_CERT_ALIAS + "_b").getEncoded();
+				}
+			} catch (KeyStoreException | CertificateEncodingException e) {}
+
+			try {
+				if (keystore.containsAlias(STORAGE_CERT_ALIAS + "_a")) {
+				storageCertificateA = keystore.getCertificate(STORAGE_CERT_ALIAS + "_a").getEncoded();
+				}
+			} catch (KeyStoreException | CertificateEncodingException e) {}
+
+			try {
+				if (keystore.containsAlias(STORAGE_CERT_ALIAS + "_b")) {
+				storageCertificateB = keystore.getCertificate(STORAGE_CERT_ALIAS + "_b").getEncoded();
+				}
+			} catch (KeyStoreException | CertificateEncodingException e) {}
+
+		} catch (IOException e) {
+			return new SystemCerts(cloudCertificateA, cloudCertificateB, shadowCertificateA, shadowCertificateB,
+					storageCertificateA, storageCertificateB);
+		}
+
+		return new SystemCerts(cloudCertificateA, cloudCertificateB, shadowCertificateA, shadowCertificateB,
+				storageCertificateA, storageCertificateB);
+
 	}
-	
-	public static class Serializing extends JsonSerializer<byte[]> {   
-		
-		@Override
-	    public void serialize(byte[] bytes, JsonGenerator jsonGenerator, SerializerProvider serializerProvider)
-	        throws IOException, JsonProcessingException
-	    {
-	      jsonGenerator.writeString(Base64.encodeBytes(bytes));	  	   	
-	      	      
-	    }
-	  }
+
+	public SystemCertsVersion getCertsVersion() {
+
+		return new SystemCertsVersion(serviceConfiguration.getCertsVersion());
+	}
 }

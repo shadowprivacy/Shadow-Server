@@ -21,16 +21,11 @@ import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.SharedMetricRegistries;
 import com.codahale.metrics.annotation.Timed;
-import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
-import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.validation.Valid;
-import javax.validation.constraints.NotNull;
-import javax.validation.constraints.Size;
 import javax.ws.rs.Consumes;
 import javax.ws.rs.DELETE;
 import javax.ws.rs.GET;
@@ -53,7 +48,6 @@ import java.util.concurrent.TimeUnit;
 
 import static com.codahale.metrics.MetricRegistry.name;
 import io.dropwizard.auth.Auth;
-import io.dropwizard.jetty.ConnectorFactory;
 import su.sres.shadowserver.auth.AuthenticationCredentials;
 import su.sres.shadowserver.auth.AuthorizationHeader;
 import su.sres.shadowserver.auth.DisabledPermittedAccount;
@@ -75,8 +69,9 @@ import su.sres.shadowserver.entities.RegistrationLockFailure;
 import su.sres.shadowserver.limits.RateLimiters;
 import su.sres.shadowserver.providers.CertsProvider;
 import su.sres.shadowserver.providers.SystemCerts;
-import su.sres.shadowserver.push.APNSender;
-import su.sres.shadowserver.push.ApnMessage;
+import su.sres.shadowserver.providers.SystemCertsVersion;
+// import su.sres.shadowserver.push.APNSender;
+// import su.sres.shadowserver.push.ApnMessage;
 import su.sres.shadowserver.push.GCMSender;
 import su.sres.shadowserver.push.GcmMessage;
 import su.sres.shadowserver.recaptcha.RecaptchaClient;
@@ -346,10 +341,21 @@ public class AccountController {
 	@Path("/cert/")
 	@Produces(MediaType.APPLICATION_JSON)
 	public SystemCerts getCerts(@Auth Account account) throws RateLimitExceededException {
-		rateLimiters.getConfigLimiter().validate(account.getNumber());
+		rateLimiters.getCertLimiter().validate(account.getNumber());
 		// TODO: return all the certs from the keystore, together with their aliases; provide for rotation
 				
 		return (new CertsProvider(serviceConfiguration)).getCerts();
+					
+	}
+	
+	@Timed
+	@GET
+	@Path("/certver/")
+	@Produces(MediaType.APPLICATION_JSON)
+	public SystemCertsVersion getCertsVersion(@Auth Account account) throws RateLimitExceededException {
+		rateLimiters.getCertVerLimiter().validate(account.getNumber());
+						
+		return (new CertsProvider(serviceConfiguration)).getCertsVersion();
 					
 	}
 
