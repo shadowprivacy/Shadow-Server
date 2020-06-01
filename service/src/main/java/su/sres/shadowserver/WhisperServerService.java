@@ -250,10 +250,11 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     */
     AttachmentControllerV1 attachmentControllerV1 = new AttachmentControllerV1(rateLimiters, config.getAttachmentsConfiguration().getAccessKey(), config.getAttachmentsConfiguration().getAccessSecret(), config.getAttachmentsConfiguration().getBucket()                                                  );
     AttachmentControllerV2 attachmentControllerV2 = new AttachmentControllerV2(rateLimiters, config.getAttachmentsConfiguration().getAccessKey(), config.getAttachmentsConfiguration().getAccessSecret(), config.getAttachmentsConfiguration().getRegion(), config.getAttachmentsConfiguration().getBucket());
-    KeysController         keysController         = new KeysController(rateLimiters, keys, accountsManager);
-    MessageController      messageController      = new MessageController(rateLimiters, pushSender, receiptSender, accountsManager, messagesManager, null);
-    ProfileController      profileController      = new ProfileController(rateLimiters, accountsManager, usernamesManager, config.getCdnConfiguration());
-    StickerController      stickerController      = new StickerController(rateLimiters, config.getCdnConfiguration().getAccessKey(), config.getCdnConfiguration().getAccessSecret(), config.getCdnConfiguration().getRegion(), config.getCdnConfiguration().getBucket());
+    DebugLogController     debugLogController     = new DebugLogController    (rateLimiters, config.getDebugLogsConfiguration().getAccessKey(),    config.getDebugLogsConfiguration().getAccessSecret(),  config.getDebugLogsConfiguration().getRegion(),   config.getDebugLogsConfiguration().getBucket());
+    KeysController         keysController         = new KeysController        (rateLimiters, keys, accountsManager);
+    MessageController      messageController      = new MessageController     (rateLimiters, pushSender, receiptSender, accountsManager, messagesManager, null);
+    ProfileController      profileController      = new ProfileController     (rateLimiters, accountsManager, usernamesManager, config.getCdnConfiguration());
+    StickerController      stickerController      = new StickerController     (rateLimiters, config.getCdnConfiguration().getAccessKey(),         config.getCdnConfiguration().getAccessSecret(), config.getCdnConfiguration().getRegion(), config.getCdnConfiguration().getBucket());
 
     /* excluded federation, reserved for future purposes
      
@@ -294,6 +295,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     environment.jersey().register(new SecureBackupController(backupCredentialsGenerator));
     environment.jersey().register(attachmentControllerV1);
     environment.jersey().register(attachmentControllerV2);
+    environment.jersey().register(debugLogController);
     environment.jersey().register(keysController);
     environment.jersey().register(messageController);
     environment.jersey().register(profileController);

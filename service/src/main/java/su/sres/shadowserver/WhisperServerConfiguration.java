@@ -44,6 +44,11 @@ public class WhisperServerConfiguration extends Configuration {
   @Valid
   @JsonProperty
   private AttachmentsConfiguration attachments;
+  
+  @NotNull
+  @Valid
+  @JsonProperty
+  private AttachmentsConfiguration debuglogs;
 
   @NotNull
   @Valid
@@ -196,6 +201,10 @@ public class WhisperServerConfiguration extends Configuration {
   public AttachmentsConfiguration getAttachmentsConfiguration() {
     return attachments;
   }
+  
+  public AttachmentsConfiguration getDebugLogsConfiguration() {
+	    return debuglogs;
+	  }
 
   public RedisConfiguration getCacheConfiguration() {
     return cache;

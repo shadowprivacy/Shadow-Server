@@ -43,6 +43,10 @@ public class ServiceConfiguration {
 	@JsonProperty
 	@NotEmpty
 	private int certsVersion;
+	
+	@JsonProperty
+	@NotEmpty
+	private String supportEmail;
 
 	public String getCloudUri() {
 		return cloudUri;
@@ -70,6 +74,10 @@ public class ServiceConfiguration {
 	
 	public int getCertsVersion() {
 		return certsVersion;
-	}	
+	}
+	
+	public String getSupportEmail() {
+		return supportEmail;
+	}
 	
 }
