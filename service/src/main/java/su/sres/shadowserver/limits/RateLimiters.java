@@ -115,7 +115,7 @@ public class RateLimiters {
 		this.certLimiter = new RateLimiter(cacheClient, "certRequest", config.getCertRequest().getBucketSize(),
 				config.getCertRequest().getLeakRatePerMinute());
 		
-		this.certVerLimiter = new RateLimiter(cacheClient, "certverRequest", config.getCertVerRequest().getBucketSize(),
+		this.certVerLimiter = new RateLimiter(cacheClient, "certVerRequest", config.getCertVerRequest().getBucketSize(),
 				config.getCertVerRequest().getLeakRatePerMinute());
 	}
 

@@ -81,10 +81,10 @@ public class RateLimitsConfiguration {
 	private RateLimitConfiguration configRequest = new RateLimitConfiguration(2, 2);
 	
 	@JsonProperty
-	private RateLimitConfiguration certRequest = new RateLimitConfiguration(10, 10 / (24.0 * 60.0));
+	private RateLimitConfiguration certRequest = new RateLimitConfiguration(24, 24 / (24.0 * 60.0));
 	
 	@JsonProperty
-	private RateLimitConfiguration certVerRequest = new RateLimitConfiguration(10, 1);
+	private RateLimitConfiguration certVerRequest = new RateLimitConfiguration(24, 24 / (24.0 * 60.0));
 
 	public RateLimitConfiguration getAutoBlock() {
 		return autoBlock;

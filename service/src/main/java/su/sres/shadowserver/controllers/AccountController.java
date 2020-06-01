@@ -341,8 +341,7 @@ public class AccountController {
 	@Path("/cert/")
 	@Produces(MediaType.APPLICATION_JSON)
 	public SystemCerts getCerts(@Auth Account account) throws RateLimitExceededException {
-		rateLimiters.getCertLimiter().validate(account.getNumber());
-		// TODO: return all the certs from the keystore, together with their aliases; provide for rotation
+		rateLimiters.getCertLimiter().validate(account.getNumber());		
 				
 		return (new CertsProvider(serviceConfiguration)).getCerts();
 					
