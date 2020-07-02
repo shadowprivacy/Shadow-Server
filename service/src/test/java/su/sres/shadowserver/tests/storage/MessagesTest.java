@@ -106,16 +106,16 @@ public class MessagesTest {
 
   @Test
   public void removeByDestinationGuid() {
-    List<MessageToStore>            unrelated = insertRandom("+14151113333", 2);
-    List<MessageToStore>            inserted = insertRandom("+14151112222", 1);
+    List<MessageToStore>            unrelated = insertRandom("johndoe", 2);
+    List<MessageToStore>            inserted = insertRandom("richardroe", 1);
     MessageToStore                  toRemove = inserted.remove(new Random(System.currentTimeMillis()).nextInt(inserted.size() - 1));
-    Optional<OutgoingMessageEntity> removed  = messages.remove("+14151112222", toRemove.guid);
+    Optional<OutgoingMessageEntity> removed  = messages.remove("richardroe", toRemove.guid);
 
     assertThat(removed.isPresent()).isTrue();
     verifyExpected(removed.get(), toRemove.envelope, toRemove.guid);
 
-    verifyInTact(inserted, "+14151112222", 1);
-    verifyInTact(unrelated, "+14151113333", 2);
+    verifyInTact(inserted, "richardroe", 1);
+    verifyInTact(unrelated, "johndoe", 2);
   }
 
   @Test

@@ -132,6 +132,7 @@ public class OptionalAccessTest {
     Account source = mock(Account.class);
     Account target = mock(Account.class);
     when(target.isEnabled()).thenReturn(true);
+    when(source.isEnabled()).thenReturn(true);
     OptionalAccess.verify(Optional.of(source), Optional.empty(), Optional.of(target));;
   }
 }
