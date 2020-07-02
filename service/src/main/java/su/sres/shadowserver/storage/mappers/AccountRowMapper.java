@@ -20,16 +20,8 @@ public class AccountRowMapper implements RowMapper<Account> {
   public Account map(ResultSet resultSet, StatementContext ctx) throws SQLException {
     try {
       Account account = mapper.readValue(resultSet.getString(Accounts.DATA), Account.class);
-      account.setNumber(resultSet.getString(Accounts.NUMBER));
- 
-   // circumventing the case when uuid is initially null for existing accounts
-      
- //     if (resultSet.getString(Accounts.UID) !=null ) {
-      
+      account.setUserLogin(resultSet.getString(Accounts.USER_LOGIN));      
       account.setUuid(UUID.fromString(resultSet.getString(Accounts.UID)));
-//      } else {
-//    	  account.setUuid(null);
-//      }
 
       return account;
     } catch (IOException e) {

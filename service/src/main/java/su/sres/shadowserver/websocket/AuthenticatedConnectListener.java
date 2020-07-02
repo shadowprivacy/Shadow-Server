@@ -58,7 +58,7 @@ public class AuthenticatedConnectListener implements WebSocketConnectListener {
 	      final Device                  device         = account.getAuthenticatedDevice().get();
 	      final String                  connectionId   = String.valueOf(new SecureRandom().nextLong());
 	      final Timer.Context           timer          = durationTimer.time();
-	      final WebsocketAddress        address        = new WebsocketAddress(account.getNumber(), device.getId());
+	      final WebsocketAddress        address        = new WebsocketAddress(account.getUserLogin(), device.getId());
 	      final WebSocketConnection     connection     = new WebSocketConnection(pushSender, receiptSender,
 	                                                                             messagesManager, account, device,
 	                                                                             context.getClient(), connectionId);

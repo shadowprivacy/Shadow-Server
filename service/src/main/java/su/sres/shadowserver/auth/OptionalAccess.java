@@ -45,7 +45,10 @@ public class OptionalAccess {
                             Optional<Anonymous> accessKey,
                             Optional<Account>   targetAccount)
   {
-	  if (requestAccount.isPresent() && targetAccount.isPresent() && targetAccount.get().isEnabled()) {
+	  if (requestAccount.isPresent() && targetAccount.isPresent() && targetAccount.get().isEnabled()
+			 
+			  // safeguard for the source account to be enabled as well 
+			  && requestAccount.get().isEnabled()) {
       return;
     }
 

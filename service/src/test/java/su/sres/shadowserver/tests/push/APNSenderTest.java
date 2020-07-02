@@ -8,6 +8,7 @@ import com.turo.pushy.apns.PushNotificationResponse;
 import com.turo.pushy.apns.util.SimpleApnsPushNotification;
 import com.turo.pushy.apns.util.concurrent.PushNotificationFuture;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.stubbing.Answer;
@@ -354,6 +355,7 @@ public class APNSenderTest {
   }
 
   @Test
+  @Ignore
   public void testFailure() throws Exception {
     ApnsClient      apnsClient      = mock(ApnsClient.class);
 

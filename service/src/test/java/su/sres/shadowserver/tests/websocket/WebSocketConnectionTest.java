@@ -122,7 +122,7 @@ public class WebSocketConnectionTest {
     when(device.getSignalingKey()).thenReturn(Base64.encodeBytes(new byte[52]));
 
     when(account.getAuthenticatedDevice()).thenReturn(Optional.of(device));
-    when(account.getNumber()).thenReturn("+14152222222");
+    when(account.getUserLogin()).thenReturn("+14152222222");
 
     final Device sender1device = mock(Device.class);
 
@@ -136,7 +136,7 @@ public class WebSocketConnectionTest {
     when(accountsManager.get("sender1")).thenReturn(Optional.of(sender1));
     when(accountsManager.get("sender2")).thenReturn(Optional.empty());
 
-    when(storedMessages.getMessagesForDevice(account.getNumber(), device.getId()))
+    when(storedMessages.getMessagesForDevice(account.getUserLogin(), device.getId()))
         .thenReturn(outgoingMessagesList);
 
     final List<CompletableFuture<WebSocketResponseMessage>> futures = new LinkedList<>();
@@ -152,7 +152,7 @@ public class WebSocketConnectionTest {
           }
         });
 
-    WebsocketAddress websocketAddress = new WebsocketAddress(account.getNumber(), device.getId());
+    WebsocketAddress websocketAddress = new WebsocketAddress(account.getUserLogin(), device.getId());
     WebSocketConnection connection = new WebSocketConnection(pushSender, receiptSender, storedMessages,
                                                              account, device, client, "someid");
 
@@ -168,7 +168,7 @@ public class WebSocketConnectionTest {
     futures.get(0).completeExceptionally(new IOException());
     futures.get(2).completeExceptionally(new IOException());
 
-    verify(storedMessages, times(1)).delete(eq(account.getNumber()), eq(2L), eq(2L), eq(false));
+    verify(storedMessages, times(1)).delete(eq(account.getUserLogin()), eq(2L), eq(2L), eq(false));
     verify(receiptSender, times(1)).sendReceipt(eq(account), eq("sender1"), eq(2222L));
 
     connection.onDispatchUnsubscribed(websocketAddress.serialize());
@@ -205,7 +205,7 @@ public class WebSocketConnectionTest {
     when(device.getSignalingKey()).thenReturn(Base64.encodeBytes(new byte[52]));
 
     when(account.getAuthenticatedDevice()).thenReturn(Optional.of(device));
-    when(account.getNumber()).thenReturn("+14152222222");
+    when(account.getUserLogin()).thenReturn("+14152222222");
 
     final Device sender1device = mock(Device.class);
 
@@ -219,7 +219,7 @@ public class WebSocketConnectionTest {
     when(accountsManager.get("sender1")).thenReturn(Optional.of(sender1));
     when(accountsManager.get("sender2")).thenReturn(Optional.<Account>empty());
 
-    when(storedMessages.getMessagesForDevice(account.getNumber(), device.getId()))
+    when(storedMessages.getMessagesForDevice(account.getUserLogin(), device.getId()))
         .thenReturn(pendingMessagesList);
 
     final List<CompletableFuture<WebSocketResponseMessage>> futures = new LinkedList<>();
@@ -235,7 +235,7 @@ public class WebSocketConnectionTest {
           }
         });
 
-    WebsocketAddress websocketAddress = new WebsocketAddress(account.getNumber(), device.getId());
+    WebsocketAddress websocketAddress = new WebsocketAddress(account.getUserLogin(), device.getId());
     WebSocketConnection connection = new WebSocketConnection(pushSender, receiptSender, storedMessages,
                                                              account, device, client, "anotherid");
 
@@ -312,7 +312,7 @@ public class WebSocketConnectionTest {
     when(device.getSignalingKey()).thenReturn(Base64.encodeBytes(new byte[52]));
 
     when(account.getAuthenticatedDevice()).thenReturn(Optional.of(device));
-    when(account.getNumber()).thenReturn("+14152222222");
+    when(account.getUserLogin()).thenReturn("+14152222222");
 
     final Device sender1device = mock(Device.class);
 
@@ -326,7 +326,7 @@ public class WebSocketConnectionTest {
     when(accountsManager.get("sender1")).thenReturn(Optional.of(sender1));
     when(accountsManager.get("sender2")).thenReturn(Optional.<Account>empty());
 
-    when(storedMessages.getMessagesForDevice(account.getNumber(), device.getId()))
+    when(storedMessages.getMessagesForDevice(account.getUserLogin(), device.getId()))
         .thenReturn(pendingMessagesList);
 
     final List<CompletableFuture<WebSocketResponseMessage>> futures = new LinkedList<>();
@@ -342,7 +342,7 @@ public class WebSocketConnectionTest {
           }
         });
 
-    WebsocketAddress websocketAddress = new WebsocketAddress(account.getNumber(), device.getId());
+    WebsocketAddress websocketAddress = new WebsocketAddress(account.getUserLogin(), device.getId());
     WebSocketConnection connection = new WebSocketConnection(pushSender, receiptSender, storedMessages,
                                                              account, device, client, "onemoreid");
 

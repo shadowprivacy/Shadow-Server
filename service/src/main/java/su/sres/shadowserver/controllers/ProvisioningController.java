@@ -44,7 +44,7 @@ public class ProvisioningController {
                                       @Valid                    ProvisioningMessage message)
       throws RateLimitExceededException, InvalidWebsocketAddressException, IOException
   {
-    rateLimiters.getMessagesLimiter().validate(source.getNumber());
+    rateLimiters.getMessagesLimiter().validate(source.getUserLogin());
 
     if (!websocketSender.sendProvisioningMessage(new ProvisioningAddress(destinationName, 0),
                                                  Base64.decode(message.getBody())))

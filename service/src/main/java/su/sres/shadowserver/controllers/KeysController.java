@@ -88,7 +88,7 @@ public class KeysController {
 	@GET
 	@Produces(MediaType.APPLICATION_JSON)
 	public PreKeyCount getStatus(@Auth Account account) {
-		int count = keys.getCount(account.getNumber(), account.getAuthenticatedDevice().get().getId());
+		int count = keys.getCount(account.getUserLogin(), account.getAuthenticatedDevice().get().getId());
 
 		if (count > 0) {
 			count = count - 1;
@@ -122,7 +122,7 @@ public class KeysController {
 			accounts.update(account);
 		}
 
-		keys.store(account.getNumber(), device.getId(), preKeys.getPreKeys());
+		keys.store(account.getUserLogin(), device.getId(), preKeys.getPreKeys());
 	}
 
 	/*
@@ -187,7 +187,7 @@ public class KeysController {
 
 		if (account.isPresent()) {
 			rateLimiters.getPreKeysLimiter()
-					.validate(account.get().getNumber() + "__" + target.get().getNumber() + "." + deviceId);
+					.validate(account.get().getUserLogin() + "__" + target.get().getUserLogin() + "." + deviceId);
 		}
 
 		List<KeyRecord> targetKeys = getLocalKeys(target.get(), deviceId);
@@ -248,12 +248,12 @@ public class KeysController {
 
 		try {
 			if (deviceIdSelector.equals("*")) {
-				return keys.get(destination.getNumber());
+				return keys.get(destination.getUserLogin());
 			}
 
 			long deviceId = Long.parseLong(deviceIdSelector);
 
-			return keys.get(destination.getNumber(), deviceId);
+			return keys.get(destination.getUserLogin(), deviceId);
 		} catch (NumberFormatException e) {
 			throw new WebApplicationException(Response.status(422).build());
 		}

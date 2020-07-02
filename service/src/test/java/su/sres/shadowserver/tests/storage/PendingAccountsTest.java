@@ -78,13 +78,13 @@ public class PendingAccountsTest {
 	  pendingAccounts.insert("+14151112222", "4321", 2222, null);
 	    pendingAccounts.insert("+14151113333", "1212", 5555, null);
 
-	    Optional<StoredVerificationCode> verificationCode = pendingAccounts.getCodeForNumber("+14151112222");
+	    Optional<StoredVerificationCode> verificationCode = pendingAccounts.getCodeForUserLogin("+14151112222");
 
 	    assertThat(verificationCode.isPresent()).isTrue();
 	    assertThat(verificationCode.get().getCode()).isEqualTo("4321");
 	    assertThat(verificationCode.get().getTimestamp()).isEqualTo(2222);
 
-	    Optional<StoredVerificationCode> missingCode = pendingAccounts.getCodeForNumber("+11111111111");
+	    Optional<StoredVerificationCode> missingCode = pendingAccounts.getCodeForUserLogin("+11111111111");
 	    assertThat(missingCode.isPresent()).isFalse();
   }
 
@@ -94,14 +94,14 @@ public class PendingAccountsTest {
 	    pendingAccounts.insert("+14151112222", "4321", 2222, "bar");
 	    pendingAccounts.insert("+14151113333", "1212", 5555, "bang");
 
-    Optional<StoredVerificationCode> verificationCode = pendingAccounts.getCodeForNumber("+14151112222");
+    Optional<StoredVerificationCode> verificationCode = pendingAccounts.getCodeForUserLogin("+14151112222");
 
     assertThat(verificationCode.isPresent()).isTrue();
     assertThat(verificationCode.get().getCode()).isEqualTo("4321");
     assertThat(verificationCode.get().getTimestamp()).isEqualTo(2222);
     assertThat(verificationCode.get().getPushCode()).isEqualTo("bar");
 
-    Optional<StoredVerificationCode> missingCode = pendingAccounts.getCodeForNumber("+11111111111");
+    Optional<StoredVerificationCode> missingCode = pendingAccounts.getCodeForUserLogin("+11111111111");
     assertThat(missingCode.isPresent()).isFalse();
   }
 
@@ -111,7 +111,7 @@ public class PendingAccountsTest {
 	  pendingAccounts.insert("+14151112222", "4321", 2222, null);
 	    pendingAccounts.insert("+14151112222", "4444", 3333, null);
 
-    Optional<StoredVerificationCode> verificationCode = pendingAccounts.getCodeForNumber("+14151112222");
+    Optional<StoredVerificationCode> verificationCode = pendingAccounts.getCodeForUserLogin("+14151112222");
 
     assertThat(verificationCode.isPresent()).isTrue();
     assertThat(verificationCode.get().getCode()).isEqualTo("4444");
@@ -124,7 +124,7 @@ public class PendingAccountsTest {
     pendingAccounts.insert("+14151112222", "4321", 2222, "bar");
     pendingAccounts.insert("+14151112222", "4444", 3333, "bang");
 
-    Optional<StoredVerificationCode> verificationCode = pendingAccounts.getCodeForNumber("+14151112222");
+    Optional<StoredVerificationCode> verificationCode = pendingAccounts.getCodeForUserLogin("+14151112222");
 
     assertThat(verificationCode.isPresent()).isTrue();
     assertThat(verificationCode.get().getCode()).isEqualTo("4444");
@@ -139,7 +139,7 @@ public class PendingAccountsTest {
 	    pendingAccounts.insert("+14151112222", "4444", 3333, null);
     pendingAccounts.vacuum();
 
-    Optional<StoredVerificationCode> verificationCode = pendingAccounts.getCodeForNumber("+14151112222");
+    Optional<StoredVerificationCode> verificationCode = pendingAccounts.getCodeForUserLogin("+14151112222");
 
     assertThat(verificationCode.isPresent()).isTrue();
     assertThat(verificationCode.get().getCode()).isEqualTo("4444");
@@ -152,7 +152,7 @@ public class PendingAccountsTest {
 	  pendingAccounts.insert("+14151112222", "4321", 2222, "bar");
 	    pendingAccounts.insert("+14151113333", "1212", 5555, null);
 
-    Optional<StoredVerificationCode> verificationCode = pendingAccounts.getCodeForNumber("+14151112222");
+    Optional<StoredVerificationCode> verificationCode = pendingAccounts.getCodeForUserLogin("+14151112222");
 
     assertThat(verificationCode.isPresent()).isTrue();
     assertThat(verificationCode.get().getCode()).isEqualTo("4321");
@@ -160,10 +160,10 @@ public class PendingAccountsTest {
 
     pendingAccounts.remove("+14151112222");
 
-    verificationCode = pendingAccounts.getCodeForNumber("+14151112222");
+    verificationCode = pendingAccounts.getCodeForUserLogin("+14151112222");
     assertThat(verificationCode.isPresent()).isFalse();
 
-    verificationCode = pendingAccounts.getCodeForNumber("+14151113333");
+    verificationCode = pendingAccounts.getCodeForUserLogin("+14151113333");
     assertThat(verificationCode.isPresent()).isTrue();
     assertThat(verificationCode.get().getCode()).isEqualTo("1212");
     assertThat(verificationCode.get().getTimestamp()).isEqualTo(5555);

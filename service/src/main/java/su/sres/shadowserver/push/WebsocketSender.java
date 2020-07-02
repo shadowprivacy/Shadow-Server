@@ -71,7 +71,7 @@ public class WebsocketSender {
   }
 
   public DeliveryStatus sendMessage(Account account, Device device, Envelope message, Type channel, boolean online) {
-    WebsocketAddress address       = new WebsocketAddress(account.getNumber(), device.getId());
+    WebsocketAddress address       = new WebsocketAddress(account.getUserLogin(), device.getId());
     PubSubMessage    pubSubMessage = PubSubMessage.newBuilder()
                                                   .setType(PubSubMessage.Type.DELIVER)
                                                   .setContent(message.toByteString())
@@ -96,9 +96,9 @@ public class WebsocketSender {
   public void queueMessage(Account account, Device device, Envelope message) {
     websocketRequeueMeter.mark();
 
-    WebsocketAddress address = new WebsocketAddress(account.getNumber(), device.getId());
+    WebsocketAddress address = new WebsocketAddress(account.getUserLogin(), device.getId());
 
-    messagesManager.insert(account.getNumber(), device.getId(), message);
+    messagesManager.insert(account.getUserLogin(), device.getId(), message);
     pubSubManager.publish(address, PubSubMessage.newBuilder()
                                                 .setType(PubSubMessage.Type.QUERY_DB)
                                                 .build());

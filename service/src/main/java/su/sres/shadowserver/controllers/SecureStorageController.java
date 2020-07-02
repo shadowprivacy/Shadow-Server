@@ -27,5 +27,5 @@ public class SecureStorageController {
   @Produces(MediaType.APPLICATION_JSON)
   public ExternalServiceCredentials getAuth(@Auth Account account) {
 	  return storageServiceCredentialGenerator.generateFor(account.getUuid().toString());
-  }
+  }  
 }

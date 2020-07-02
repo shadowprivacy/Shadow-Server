@@ -46,6 +46,7 @@ import su.sres.shadowserver.entities.ClientContacts;
 import su.sres.shadowserver.limits.RateLimiters;
 import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.storage.DirectoryManager;
+
 import su.sres.shadowserver.util.Base64;
 import su.sres.shadowserver.util.Constants;
 
@@ -71,7 +72,7 @@ public class DirectoryController {
   public Response getTokenPresence(@Auth Account account, @PathParam("token") String token)
       throws RateLimitExceededException
   {
-    rateLimiters.getContactsLimiter().validate(account.getNumber());
+    rateLimiters.getContactsLimiter().validate(account.getUserLogin());
 
     try {
       Optional<ClientContact> contact = directory.get(decodeToken(token));
@@ -93,7 +94,7 @@ public class DirectoryController {
   public ClientContacts getContactIntersection(@Auth Account account, @Valid ClientContactTokens contacts)
       throws RateLimitExceededException
   {
-    rateLimiters.getContactsLimiter().validate(account.getNumber(), contacts.getContacts().size());
+    rateLimiters.getContactsLimiter().validate(account.getUserLogin(), contacts.getContacts().size());
     contactsHistogram.update(contacts.getContacts().size());
 
     try {
@@ -109,7 +110,7 @@ public class DirectoryController {
       logger.info("Bad token", e);
       throw new WebApplicationException(Response.status(400).build());
     }
-  }
+  }	
 
   private byte[] decodeToken(String encoded) throws IOException {
     return Base64.decodeWithoutPadding(encoded.replace('-', '+').replace('_', '/'));

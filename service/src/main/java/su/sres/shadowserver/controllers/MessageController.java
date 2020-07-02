@@ -126,13 +126,16 @@ public class MessageController {
           @PathParam("destination")                 AmbiguousIdentifier destinationName,
           @Valid                                    IncomingMessageList messages)
 throws RateLimitExceededException
-  {
-	  if (!source.isPresent() && !accessKey.isPresent()) {
+  {  
+	  
+	  if (!source.isPresent() && !accessKey.isPresent()) {		  
+		  
 	      throw new WebApplicationException(Response.Status.UNAUTHORIZED);
-	    }
+	    }	  
+	 
 
 	  if (source.isPresent() && !source.get().isFor(destinationName)) {
-	      rateLimiters.getMessagesLimiter().validate(source.get().getNumber() + "__" + destinationName);
+	      rateLimiters.getMessagesLimiter().validate(source.get().getUserLogin() + "__" + destinationName);
     }
 	    
 	  if (source.isPresent() && !source.get().isFor(destinationName)) {
@@ -201,7 +204,7 @@ throws RateLimitExceededException
       RedisOperation.unchecked(() -> apnFallbackManager.cancel(account, account.getAuthenticatedDevice().get()));
     }
 
-    return messagesManager.getMessagesForDevice(account.getNumber(),
+    return messagesManager.getMessagesForDevice(account.getUserLogin(),
                                                 account.getAuthenticatedDevice().get().getId());
   }
 
@@ -216,7 +219,7 @@ throws RateLimitExceededException
     try {
       WebSocketConnection.messageTime.update(System.currentTimeMillis() - timestamp);
 
-      Optional<OutgoingMessageEntity> message = messagesManager.delete(account.getNumber(),
+      Optional<OutgoingMessageEntity> message = messagesManager.delete(account.getUserLogin(),
                                                                        account.getAuthenticatedDevice().get().getId(),
                                                                        source, timestamp);
 
@@ -243,7 +246,7 @@ throws RateLimitExceededException
   @Path("/uuid/{uuid}")
   public void removePendingMessage(@Auth Account account, @PathParam("uuid") UUID uuid) {
     try {
-      Optional<OutgoingMessageEntity> message = messagesManager.delete(account.getNumber(),
+      Optional<OutgoingMessageEntity> message = messagesManager.delete(account.getUserLogin(),
                                                                        account.getAuthenticatedDevice().get().getId(),
                                                                        uuid);
 
@@ -278,7 +281,7 @@ throws RateLimitExceededException
                     .setServerTimestamp(System.currentTimeMillis());
 
                     if (source.isPresent()) {
-                      messageBuilder.setSource(source.get().getNumber())
+                      messageBuilder.setSource(source.get().getUserLogin())
                                     .setSourceUuid(source.get().getUuid().toString())              
                                     .setSourceDevice((int)source.get().getAuthenticatedDevice().get().getId());
                     }

@@ -47,38 +47,38 @@ public class PendingAccountsManager {
     
   }
 
-  public void store(String number, StoredVerificationCode code) {
-    memcacheSet(number, code);
-    pendingAccounts.insert(number, code.getCode(), code.getTimestamp(), code.getPushCode());
+  public void store(String userLogin, StoredVerificationCode code) {
+    memcacheSet(userLogin, code);
+    pendingAccounts.insert(userLogin, code.getCode(), code.getTimestamp(), code.getPushCode());
   }
 
-  public void remove(String number) {
-    memcacheDelete(number);
-    pendingAccounts.remove(number);
+  public void remove(String userLogin) {
+    memcacheDelete(userLogin);
+    pendingAccounts.remove(userLogin);
   }
 
-  public Optional<StoredVerificationCode> getCodeForNumber(String number) {
-    Optional<StoredVerificationCode> code = memcacheGet(number);
+  public Optional<StoredVerificationCode> getCodeForUserLogin(String userLogin) {
+    Optional<StoredVerificationCode> code = memcacheGet(userLogin);
 
     if (!code.isPresent()) {
-    	 code = pendingAccounts.getCodeForNumber(number);
-         code.ifPresent(storedVerificationCode -> memcacheSet(number, storedVerificationCode));
+    	 code = pendingAccounts.getCodeForUserLogin(userLogin);
+         code.ifPresent(storedVerificationCode -> memcacheSet(userLogin, storedVerificationCode));
     }
 
     return code;
   }
 
-  private void memcacheSet(String number, StoredVerificationCode code) {
+  private void memcacheSet(String userLogin, StoredVerificationCode code) {
     try (Jedis jedis = cacheClient.getWriteResource()) {
-      jedis.set(CACHE_PREFIX + number, mapper.writeValueAsString(code));
+      jedis.set(CACHE_PREFIX + userLogin, mapper.writeValueAsString(code));
     } catch (JsonProcessingException e) {
       throw new IllegalArgumentException(e);
     }
   }
 
-  private Optional<StoredVerificationCode> memcacheGet(String number) {
+  private Optional<StoredVerificationCode> memcacheGet(String userLogin) {
     try (Jedis jedis = cacheClient.getReadResource()) {
-      String json = jedis.get(CACHE_PREFIX + number);
+      String json = jedis.get(CACHE_PREFIX + userLogin);
 
       if (json == null) return Optional.empty();
       else              return Optional.of(mapper.readValue(json, StoredVerificationCode.class));
@@ -88,9 +88,9 @@ public class PendingAccountsManager {
     }
   }
 
-  private void memcacheDelete(String number) {
+  private void memcacheDelete(String userLogin) {
     try (Jedis jedis = cacheClient.getWriteResource()) {
-      jedis.del(CACHE_PREFIX + number);
+      jedis.del(CACHE_PREFIX + userLogin);
     }
   }
 }

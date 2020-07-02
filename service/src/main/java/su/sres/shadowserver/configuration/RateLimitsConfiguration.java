@@ -39,7 +39,7 @@ public class RateLimitsConfiguration {
 	private RateLimitConfiguration autoBlock = new RateLimitConfiguration(500, 500);
 
 	@JsonProperty
-	private RateLimitConfiguration verifyNumber = new RateLimitConfiguration(2, 2);
+	private RateLimitConfiguration verifyUserLogin = new RateLimitConfiguration(2, 2);
 
 	@JsonProperty
 	private RateLimitConfiguration verifyPin = new RateLimitConfiguration(10, 1 / (24.0 * 60.0));
@@ -85,6 +85,9 @@ public class RateLimitsConfiguration {
 	
 	@JsonProperty
 	private RateLimitConfiguration certVerRequest = new RateLimitConfiguration(24, 24 / (24.0 * 60.0));
+	
+	@JsonProperty
+	private RateLimitConfiguration directoryRequest = new RateLimitConfiguration(60, 60 / (1.0 * 60.0));	
 
 	public RateLimitConfiguration getAutoBlock() {
 		return autoBlock;
@@ -134,8 +137,8 @@ public class RateLimitsConfiguration {
 		return smsVoicePrefix;
 	}
 
-	public RateLimitConfiguration getVerifyNumber() {
-		return verifyNumber;
+	public RateLimitConfiguration getVerifyUserLogin() {
+		return verifyUserLogin;
 	}
 
 	public RateLimitConfiguration getVerifyPin() {
@@ -173,6 +176,11 @@ public class RateLimitsConfiguration {
 	public RateLimitConfiguration getCertVerRequest() {
 		return certVerRequest;
 	}
+	
+	public RateLimitConfiguration getDirectoryRequest() {
+		return directoryRequest;
+	}
+	
 
 	public static class RateLimitConfiguration {
 		@JsonProperty

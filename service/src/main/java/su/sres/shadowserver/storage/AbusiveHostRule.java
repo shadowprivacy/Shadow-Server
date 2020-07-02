@@ -1,6 +1,5 @@
 package su.sres.shadowserver.storage;
 
-import java.net.InetAddress;
 import java.util.List;
 
 public class AbusiveHostRule {

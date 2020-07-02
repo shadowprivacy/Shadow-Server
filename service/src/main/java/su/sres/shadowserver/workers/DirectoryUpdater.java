@@ -64,13 +64,13 @@ public class DirectoryUpdater {
 
         for (Account account : accounts) {
           if (account.isEnabled()) {
-            byte[]        token         = Util.getContactToken(account.getNumber());
+            byte[]        token         = Util.getContactToken(account.getUserLogin());
             ClientContact clientContact = new ClientContact(token, null, true, true);
 
             directory.add(batchOperation, clientContact);
             contactsAdded++;
           } else {
-            directory.remove(batchOperation, account.getNumber());
+            directory.remove(batchOperation, account.getUserLogin());
             contactsRemoved++;
           }
         }

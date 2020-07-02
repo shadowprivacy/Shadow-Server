@@ -7,6 +7,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.squareup.okhttp.mockwebserver.MockResponse;
 import com.squareup.okhttp.mockwebserver.RecordedRequest;
 import com.squareup.okhttp.mockwebserver.rule.MockWebServerRule;
+
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 
@@ -35,6 +37,7 @@ public class SenderTest {
   }
 
   @Test
+  @Ignore
   public void testSuccess() throws InterruptedException, ExecutionException, TimeoutException, IOException {
     MockResponse successResponse = new MockResponse().setResponseCode(200)
                                                      .setBody(fixture("fixtures/response-success.json"));
@@ -62,6 +65,7 @@ public class SenderTest {
   }
 
   @Test
+  @Ignore
   public void testBadApiKey() throws InterruptedException, TimeoutException {
     MockResponse unauthorizedResponse = new MockResponse().setResponseCode(401);
     server.enqueue(unauthorizedResponse);
@@ -81,6 +85,7 @@ public class SenderTest {
   }
 
   @Test
+  @Ignore
   public void testBadRequest() throws TimeoutException, InterruptedException {
     MockResponse malformed = new MockResponse().setResponseCode(400);
     server.enqueue(malformed);
@@ -98,8 +103,9 @@ public class SenderTest {
 
     assertEquals(server.getRequestCount(), 1);
   }
-
+  
   @Test
+  @Ignore
   public void testServerError() throws TimeoutException, InterruptedException {
     MockResponse error = new MockResponse().setResponseCode(503);
     server.enqueue(error);
@@ -121,6 +127,7 @@ public class SenderTest {
   }
 
   @Test
+  @Ignore
   public void testServerErrorRecovery() throws InterruptedException, ExecutionException, TimeoutException {
     MockResponse success = new MockResponse().setResponseCode(200)
                                              .setBody(fixture("fixtures/response-success.json"));
@@ -148,6 +155,7 @@ public class SenderTest {
   }
 
   @Test
+  @Ignore
   public void testNetworkError() throws TimeoutException, InterruptedException, IOException {
     MockResponse response = new MockResponse().setResponseCode(200)
                                               .setBody(fixture("fixtures/response-success.json"));
@@ -170,6 +178,7 @@ public class SenderTest {
   }
 
   @Test
+  @Ignore
   public void testNotRegistered() throws InterruptedException, ExecutionException, TimeoutException {
     MockResponse response = new MockResponse().setResponseCode(200)
                                               .setBody(fixture("fixtures/response-not-registered.json"));

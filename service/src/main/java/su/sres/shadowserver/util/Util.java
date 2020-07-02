@@ -53,6 +53,10 @@ public class Util {
 	  return number.matches("^\\+[0-9]+") && PhoneNumberUtil.getInstance().isPossibleNumber(number, null); 
   }
   
+  public static boolean isValidUserLogin(String userLogin) {
+	  return userLogin.matches("^[0-9a-z\\-]{3,255}$"); 
+  }
+  
   public static String getCountryCode(String number) {
 	    Matcher matcher = COUNTRY_CODE_PATTERN.matcher(number);
 

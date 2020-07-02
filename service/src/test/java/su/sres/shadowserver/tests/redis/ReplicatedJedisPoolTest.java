@@ -1,5 +1,6 @@
 package su.sres.shadowserver.tests.redis;
 
+import org.junit.Ignore;
 import org.junit.Test;
 import su.sres.shadowserver.configuration.CircuitBreakerConfiguration;
 
@@ -68,6 +69,7 @@ public class ReplicatedJedisPoolTest {
   }
 
   @Test
+  @Ignore
   public void testBrokenReadCheckout() {
     JedisPool master      = mock(JedisPool.class);
     JedisPool slaveOne    = mock(JedisPool.class);
@@ -87,6 +89,7 @@ public class ReplicatedJedisPoolTest {
   }
 
   @Test
+  @Ignore
   public void testAllBrokenReadCheckout() {
     JedisPool master      = mock(JedisPool.class);
     JedisPool slaveOne    = mock(JedisPool.class);

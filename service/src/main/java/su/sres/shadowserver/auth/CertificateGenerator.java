@@ -30,7 +30,7 @@ public class CertificateGenerator {
 
   public byte[] createFor(Account account, Device device, boolean includeUuid) throws IOException, InvalidKeyException {
 	    SenderCertificate.Certificate.Builder builder = SenderCertificate.Certificate.newBuilder()
-	                                                                                 .setSender(account.getNumber())
+	                                                                                 .setSender(account.getUserLogin())
 	                                                                                 .setSenderDevice(Math.toIntExact(device.getId()))
 	                                                                                 .setExpires(System.currentTimeMillis() + TimeUnit.DAYS.toMillis(expiresDays))
 	                                                                                 .setIdentityKey(ByteString.copyFrom(Base64.decode(account.getIdentityKey())))

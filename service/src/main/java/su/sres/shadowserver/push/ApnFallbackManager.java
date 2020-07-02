@@ -81,7 +81,7 @@ public class ApnFallbackManager implements Managed, Runnable {
 
   public boolean isScheduled(Account account, Device device) throws RedisException {
     try {
-      String endpoint = "apn_device::" + account.getNumber() + "::" + device.getId();
+      String endpoint = "apn_device::" + account.getUserLogin() + "::" + device.getId();
 
       try (Jedis jedis = jedisPool.getReadResource()) {
         return jedis.zscore(PENDING_NOTIFICATIONS_KEY, endpoint) != null;
@@ -201,7 +201,7 @@ public class ApnFallbackManager implements Managed, Runnable {
     }
 
     boolean remove(Account account, Device device) {
-      String endpoint = "apn_device::" + account.getNumber() + "::" + device.getId();
+      String endpoint = "apn_device::" + account.getUserLogin() + "::" + device.getId();
       return remove(endpoint);
     }
 
@@ -244,11 +244,11 @@ public class ApnFallbackManager implements Managed, Runnable {
     }
 
     public void insert(Account account, Device device, long timestamp, long interval) {
-      String endpoint = "apn_device::" + account.getNumber() + "::" + device.getId();
+      String endpoint = "apn_device::" + account.getUserLogin() + "::" + device.getId();
 
       List<byte[]> keys = Arrays.asList(PENDING_NOTIFICATIONS_KEY.getBytes(), endpoint.getBytes());
       List<byte[]> args = Arrays.asList(String.valueOf(timestamp).getBytes(), String.valueOf(interval).getBytes(),
-                                        account.getNumber().getBytes(), String.valueOf(device.getId()).getBytes());
+                                        account.getUserLogin().getBytes(), String.valueOf(device.getId()).getBytes());
 
       luaScript.execute(keys, args);
     }

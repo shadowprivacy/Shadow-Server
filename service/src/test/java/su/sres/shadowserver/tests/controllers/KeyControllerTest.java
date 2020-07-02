@@ -120,13 +120,13 @@ public class KeyControllerTest {
 		when(existsAccount.getDevices()).thenReturn(allDevices);
 		when(existsAccount.isEnabled()).thenReturn(true);
 		when(existsAccount.getIdentityKey()).thenReturn("existsidentitykey");
-		when(existsAccount.getNumber()).thenReturn(EXISTS_NUMBER);
+		when(existsAccount.getUserLogin()).thenReturn(EXISTS_NUMBER);
 		when(existsAccount.getUnidentifiedAccessKey()).thenReturn(Optional.of("1337".getBytes()));
 
 		when(accounts.get(EXISTS_NUMBER)).thenReturn(Optional.of(existsAccount));
 		when(accounts.get(EXISTS_UUID)).thenReturn(Optional.of(existsAccount));
 		when(accounts.get(argThat((ArgumentMatcher<AmbiguousIdentifier>) identifier -> identifier != null
-				&& identifier.hasNumber() && identifier.getNumber().equals(EXISTS_NUMBER))))
+				&& identifier.hasUserLogin() && identifier.getUserLogin().equals(EXISTS_NUMBER))))
 						.thenReturn(Optional.of(existsAccount));
 		when(accounts.get(argThat((ArgumentMatcher<AmbiguousIdentifier>) identifier -> identifier != null
 				&& identifier.hasUuid() && identifier.getUuid().equals(EXISTS_UUID))))
@@ -135,7 +135,7 @@ public class KeyControllerTest {
 		when(accounts.get(NOT_EXISTS_NUMBER)).thenReturn(Optional.<Account>empty());
 		when(accounts.get(NOT_EXISTS_UUID)).thenReturn(Optional.empty());
 		when(accounts.get(argThat((ArgumentMatcher<AmbiguousIdentifier>) identifier -> identifier != null
-				&& identifier.hasNumber() && identifier.getNumber().equals(NOT_EXISTS_NUMBER))))
+				&& identifier.hasUserLogin() && identifier.getUserLogin().equals(NOT_EXISTS_NUMBER))))
 						.thenReturn(Optional.empty());
 		when(accounts.get(argThat((ArgumentMatcher<AmbiguousIdentifier>) identifier -> identifier != null
 				&& identifier.hasUuid() && identifier.getUuid().equals(NOT_EXISTS_UUID)))).thenReturn(Optional.empty());

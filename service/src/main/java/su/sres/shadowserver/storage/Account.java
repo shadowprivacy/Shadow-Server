@@ -37,7 +37,7 @@ public class Account implements Principal {
 	private UUID uuid;
 
 	@JsonProperty
-	private String number;
+	private String userLogin;
 
 	@JsonProperty
 	private Set<Device> devices = new HashSet<>();
@@ -76,10 +76,10 @@ public class Account implements Principal {
 	}
 
 	@VisibleForTesting
-	public Account(String number, UUID uuid, Set<Device> devices, byte[] unidentifiedAccessKey) {
-		this.number = number;
+	public Account(String userLogin, UUID uuid, Set<Device> devices, byte[] unidentifiedAccessKey) {
+		this.userLogin             = userLogin;
 		this.uuid                  = uuid;
-		this.devices = devices;
+		this.devices               = devices;
 		this.unidentifiedAccessKey = unidentifiedAccessKey;
 	}
 
@@ -99,12 +99,12 @@ public class Account implements Principal {
 	    this.uuid = uuid;
 	  }
 
-	public void setNumber(String number) {
-		this.number = number;
+	public void setUserLogin(String userLogin) {
+		this.userLogin = userLogin;
 	}
 
-	public String getNumber() {
-		return number;
+	public String getUserLogin() {
+		return userLogin;
 	}
 
 	public void addDevice(Device device) {
@@ -264,7 +264,7 @@ public class Account implements Principal {
 	
 	 public boolean isFor(AmbiguousIdentifier identifier) {
 		    if      (identifier.hasUuid())   return identifier.getUuid().equals(uuid);
-		    else if (identifier.hasNumber()) return identifier.getNumber().equals(number);
+		    else if (identifier.hasUserLogin()) return identifier.getUserLogin().equals(userLogin);
 		    else                             throw new AssertionError();
 		  }
 

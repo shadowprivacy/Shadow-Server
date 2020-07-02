@@ -127,7 +127,7 @@ public class ActiveUserCounter extends AccountDatabaseCrawlerListener {
         }
 
         if (platform != null) {
-          String country = Util.getCountryCode(account.getNumber());
+          String country = Util.getCountryCode(account.getUserLogin());
 
           long[] platformIncrement = getTallyFromMap(platformIncrements, platform);
           long[] countryIncrement  = getTallyFromMap(countryIncrements, country);

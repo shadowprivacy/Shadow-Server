@@ -237,6 +237,14 @@
                 <constraints nullable="false"/>
             </column>
         </createTable>
-    </changeSet>
+    </changeSet> 
+    
+    <changeSet id="11" author="2A">
+        <addColumn tableName="accounts">
+            <column name="directory_version" type="bigint">
+            <constraints nullable="false" />
+            </column>
+        </addColumn>
+    </changeSet>  
     
 </databaseChangeLog>

@@ -118,15 +118,15 @@ public class DeviceControllerTest {
     when(masterDevice.getId()).thenReturn(1L);
     
     when(account.getNextDeviceId()).thenReturn(42L);
-    when(account.getNumber()).thenReturn(AuthHelper.VALID_NUMBER);
+    when(account.getUserLogin()).thenReturn(AuthHelper.VALID_NUMBER);
 //    when(maxedAccount.getActiveDeviceCount()).thenReturn(6);
     
  // introduced with CDS
     when(account.getAuthenticatedDevice()).thenReturn(Optional.of(masterDevice));
     when(account.isEnabled()).thenReturn(false);
 
-    when(pendingDevicesManager.getCodeForNumber(AuthHelper.VALID_NUMBER)).thenReturn(Optional.of(new StoredVerificationCode("5678901", System.currentTimeMillis(), null, VERIFICATION_CODE_LIFETIME)));
-    when(pendingDevicesManager.getCodeForNumber(AuthHelper.VALID_NUMBER_TWO)).thenReturn(Optional.of(new StoredVerificationCode("1112223", System.currentTimeMillis() - TimeUnit.MINUTES.toMillis(31), null, VERIFICATION_CODE_LIFETIME)));
+    when(pendingDevicesManager.getCodeForUserLogin(AuthHelper.VALID_NUMBER)).thenReturn(Optional.of(new StoredVerificationCode("5678901", System.currentTimeMillis(), null, VERIFICATION_CODE_LIFETIME)));
+    when(pendingDevicesManager.getCodeForUserLogin(AuthHelper.VALID_NUMBER_TWO)).thenReturn(Optional.of(new StoredVerificationCode("1112223", System.currentTimeMillis() - TimeUnit.MINUTES.toMillis(31), null, VERIFICATION_CODE_LIFETIME)));
     when(accountsManager.get(AuthHelper.VALID_NUMBER)).thenReturn(Optional.of(account));
     when(accountsManager.get(AuthHelper.VALID_NUMBER_TWO)).thenReturn(Optional.of(maxedAccount));
   }

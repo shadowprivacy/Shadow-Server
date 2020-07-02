@@ -19,16 +19,14 @@ package su.sres.shadowserver.storage;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import su.sres.shadowserver.auth.AuthenticationCredentials;
-import su.sres.shadowserver.entities.UserCapabilities;
 import su.sres.shadowserver.entities.SignedPreKey;
 import su.sres.shadowserver.util.Util;
 
 import javax.annotation.Nullable;
-import javax.validation.constraints.Null;
 import java.util.concurrent.TimeUnit;
 
-public class Device {
-
+public class Device {	
+	
 	public static final long MASTER_ID = 1;
 
 	@JsonProperty
@@ -82,8 +80,7 @@ public class Device {
 	@JsonProperty
 	private DeviceCapabilities capabilities;
 
-	public Device() {
-	}
+	public Device() {}
 
 	public Device(long id, String name, String authToken, String salt, String signalingKey, String gcmId, String apnId,
 			String voipApnId, boolean fetchesMessages, int registrationId, SignedPreKey signedPreKey, long lastSeen,
@@ -103,7 +100,7 @@ public class Device {
 		this.created = created;
 		this.userAgent = userAgent;
 		this.uninstalledFeedback = uninstalledFeedback;
-		this.capabilities = capabilities;
+		this.capabilities = capabilities;        
 	}
 
 	public String getApnId() {
@@ -154,7 +151,7 @@ public class Device {
 		return gcmId;
 	}
 
-	public void setGcmId(String gcmId) {
+	public void setGcmId(String gcmId) {		
 		this.gcmId = gcmId;
 
 		if (gcmId != null) {

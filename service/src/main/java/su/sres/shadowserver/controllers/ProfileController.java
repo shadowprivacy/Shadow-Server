@@ -100,7 +100,7 @@ public class ProfileController {
 		}
 
 		if (requestAccount.isPresent()) {
-			rateLimiters.getProfileLimiter().validate(requestAccount.get().getNumber());
+			rateLimiters.getProfileLimiter().validate(requestAccount.get().getUserLogin());
 		}
 
 		Optional<Account> accountProfile = accountsManager.get(identifier);
@@ -108,7 +108,7 @@ public class ProfileController {
 
 		Optional<String> username = Optional.empty();
 
-		if (!identifier.hasNumber()) {
+		if (!identifier.hasUserLogin()) {
 			// noinspection OptionalGetWithoutIsPresent
 			username = usernamesManager.get(accountProfile.get().getUuid());
 		}

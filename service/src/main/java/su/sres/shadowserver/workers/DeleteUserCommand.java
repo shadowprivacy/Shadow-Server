@@ -8,7 +8,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.security.SecureRandom;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Optional;
+import java.util.Set;
 
 import io.dropwizard.Application;
 import io.dropwizard.cli.EnvironmentCommand;
@@ -65,19 +68,35 @@ public class DeleteUserCommand extends EnvironmentCommand<WhisperServerConfigura
       Jdbi                  accountJdbi     = jdbiFactory.build(environment, configuration.getAccountsDatabaseConfiguration(), "accountdb");
       FaultTolerantDatabase accountDatabase = new FaultTolerantDatabase("account_database_delete_user", accountJdbi, configuration.getAccountsDatabaseConfiguration().getCircuitBreakerConfiguration());
 
-      Accounts            accounts        = new Accounts(accountDatabase);
+      Accounts              accounts        = new Accounts(accountDatabase);
       
       ReplicatedJedisPool cacheClient     = new RedisClientFactory("main_cache_delete_command", configuration.getCacheConfiguration().getUrl(), configuration.getCacheConfiguration().getReplicaUrls(), configuration.getCacheConfiguration().getCircuitBreakerConfiguration()).getRedisClientPool();
       ReplicatedJedisPool redisClient     = new RedisClientFactory("directory_cache_delete_command", configuration.getDirectoryConfiguration().getUrl(), configuration.getDirectoryConfiguration().getReplicaUrls(), configuration.getDirectoryConfiguration().getCircuitBreakerConfiguration()).getRedisClientPool();
       
       DirectoryManager    directory       = new DirectoryManager(redisClient);
       AccountsManager     accountsManager = new AccountsManager(accounts, directory, cacheClient);
+      
+      if (accountsManager.getAccountCreationLock()   ||    	  
+    	  directory.getDirectoryReadLock()           ||
+          accountsManager.getDirectoryRestoreLock()) {
+    	  
+    	  logger.warn("There's a pending operation on directory right now, please try again a bit later");
+    	  return;
+      }    
+            
+      HashSet<Account> accountsToRemove = new HashSet<Account>();
 
       for (String user: users) {
         Optional<Account> account = accountsManager.get(user);
 
         if (account.isPresent()) {
-          Optional<Device> device = account.get().getDevice(1);
+        	
+        	if(!account.get().isEnabled()) {
+        		logger.warn("Account " + account.get().getUserLogin() + " is already inactive. Skipping.");
+        		continue;
+        	}        	
+        	
+            Optional<Device> device = account.get().getDevice(1);        
 
           if (device.isPresent()) {
             byte[] random = new byte[16];
@@ -86,10 +105,12 @@ public class DeleteUserCommand extends EnvironmentCommand<WhisperServerConfigura
             device.get().setGcmId(null);
             device.get().setFetchesMessages(false);
             device.get().setAuthenticationCredentials(new AuthenticationCredentials(Base64.encodeBytes(random)));
+           
+            accountsManager.update(account.get());                       
 
-            accountsManager.update(account.get());
-
-            logger.warn("Removed " + account.get().getNumber());
+            logger.warn("Removing " + account.get().getUserLogin());
+            accountsToRemove.add(account.get());
+            
           } else {
             logger.warn("No primary device found...");
           }
@@ -97,9 +118,12 @@ public class DeleteUserCommand extends EnvironmentCommand<WhisperServerConfigura
           logger.warn("Account not found...");
         }
       }
+      
+      if (!accountsToRemove.isEmpty()) accountsManager.remove(accountsToRemove);      
+      
     } catch (Exception ex) {
-      logger.warn("Removal Exception", ex);
+      logger.warn("Removal Exception!", ex);
       throw new RuntimeException(ex);
-    }
+    } 
   }
 }

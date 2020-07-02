@@ -86,15 +86,15 @@ public class ActiveUserCounterTest {
 
 		when(iosAccount.getUuid()).thenReturn(UUID_IOS);
 		when(iosAccount.getMasterDevice()).thenReturn(Optional.of(iosDevice));
-		when(iosAccount.getNumber()).thenReturn(ACCOUNT_NUMBER_IOS);
+		when(iosAccount.getUserLogin()).thenReturn(ACCOUNT_NUMBER_IOS);
 
 		when(androidAccount.getUuid()).thenReturn(UUID_ANDROID);
 		when(androidAccount.getMasterDevice()).thenReturn(Optional.of(androidDevice));
-		when(androidAccount.getNumber()).thenReturn(ACCOUNT_NUMBER_ANDROID);
+		when(androidAccount.getUserLogin()).thenReturn(ACCOUNT_NUMBER_ANDROID);
 
 		when(noDeviceAccount.getUuid()).thenReturn(UUID_NODEVICE);
 		when(noDeviceAccount.getMasterDevice()).thenReturn(Optional.ofNullable(null));
-		when(noDeviceAccount.getNumber()).thenReturn(ACCOUNT_NUMBER_NODEVICE);
+		when(noDeviceAccount.getUserLogin()).thenReturn(ACCOUNT_NUMBER_NODEVICE);
 
 		when(jedis.get(any(String.class))).thenReturn("{\"fromNumber\":\"+\",\"platforms\":{},\"countries\":{}}");
 		when(jedisPool.getWriteResource()).thenReturn(jedis);
@@ -148,7 +148,7 @@ public class ActiveUserCounterTest {
 		activeUserCounter.timeAndProcessCrawlChunk(Optional.of(UUID_IOS), Arrays.asList(iosAccount));
 
 		verify(iosAccount, times(1)).getMasterDevice();
-		verify(iosAccount, times(1)).getNumber();
+		verify(iosAccount, times(1)).getUserLogin();
 
 		verify(iosDevice, times(1)).getLastSeen();
 		verify(iosDevice, times(1)).getApnId();
@@ -204,9 +204,9 @@ public class ActiveUserCounterTest {
 				Arrays.asList(iosAccount, androidAccount, noDeviceAccount));
 
 		verify(iosAccount, times(1)).getMasterDevice();
-		verify(iosAccount, times(1)).getNumber();
+		verify(iosAccount, times(1)).getUserLogin();
 		verify(androidAccount, times(1)).getMasterDevice();
-		verify(androidAccount, times(1)).getNumber();
+		verify(androidAccount, times(1)).getUserLogin();
 		verify(noDeviceAccount, times(1)).getMasterDevice();
 
 		verify(iosDevice, times(1)).getLastSeen();

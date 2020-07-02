@@ -47,7 +47,7 @@ public class AttachmentControllerV1 extends AttachmentControllerBase {
 	@SuppressWarnings("unused")
 	private final Logger logger = LoggerFactory.getLogger(AttachmentControllerV1.class);
 
-  private static final String[] UNACCELERATED_REGIONS = {"+20", "+971", "+968", "+974"};
+//  private static final String[] UNACCELERATED_REGIONS = {"+20", "+971", "+968", "+974"};
 
   private final RateLimiters           rateLimiters;
 //excluded federation, reserved for future purposes 
@@ -72,11 +72,13 @@ public class AttachmentControllerV1 extends AttachmentControllerBase {
       throws RateLimitExceededException
   {
     if (account.isRateLimited()) {
-      rateLimiters.getAttachmentLimiter().validate(account.getNumber());
+      rateLimiters.getAttachmentLimiter().validate(account.getUserLogin());
     }
 
     long attachmentId = generateAttachmentId();
-    URL  url          = urlSigner.getPreSignedUrl(attachmentId, HttpMethod.PUT, Stream.of(UNACCELERATED_REGIONS).anyMatch(region -> account.getNumber().startsWith(region)));
+    URL  url          = urlSigner.getPreSignedUrl(attachmentId, HttpMethod.PUT,
+    		// Stream.of(UNACCELERATED_REGIONS).anyMatch(region -> account.getUserLogin().startsWith(region))
+    		false);
 
     return new AttachmentDescriptorV1(attachmentId, url.toExternalForm());
 
@@ -106,6 +108,8 @@ public class AttachmentControllerV1 extends AttachmentControllerBase {
       throw new WebApplicationException(Response.status(404).build());
     }
     */
-	  return new AttachmentUri(urlSigner.getPreSignedUrl(attachmentId, HttpMethod.GET, Stream.of(UNACCELERATED_REGIONS).anyMatch(region -> account.getNumber().startsWith(region))));
+	  return new AttachmentUri(urlSigner.getPreSignedUrl(attachmentId, HttpMethod.GET,
+			  // Stream.of(UNACCELERATED_REGIONS).anyMatch(region -> account.getNumber().startsWith(region))
+			  false));
   }  
 }

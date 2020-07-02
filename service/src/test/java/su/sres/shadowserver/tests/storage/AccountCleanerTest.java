@@ -64,7 +64,7 @@ public class AccountCleanerTest {
 	    when(deletedDisabledAccount.isEnabled()).thenReturn(false);
 	    when(deletedDisabledAccount.getLastSeen()).thenReturn(System.currentTimeMillis() - TimeUnit.DAYS.toMillis(1000));
 	    when(deletedDisabledAccount.getMasterDevice()).thenReturn(Optional.of(deletedDisabledDevice));
-	    when(deletedDisabledAccount.getNumber()).thenReturn("+14151231234");
+	    when(deletedDisabledAccount.getUserLogin()).thenReturn("+14151231234");
 	    when(deletedDisabledAccount.getUuid()).thenReturn(UUID.randomUUID());
 
 	    when(undeletedDisabledDevice.isEnabled()).thenReturn(false);
@@ -72,14 +72,14 @@ public class AccountCleanerTest {
 	    when(undeletedDisabledAccount.isEnabled()).thenReturn(false);
 	    when(undeletedDisabledAccount.getLastSeen()).thenReturn(System.currentTimeMillis() - TimeUnit.DAYS.toMillis(366));
 	    when(undeletedDisabledAccount.getMasterDevice()).thenReturn(Optional.of(undeletedDisabledDevice));
-	    when(undeletedDisabledAccount.getNumber()).thenReturn("+14152222222");
+	    when(undeletedDisabledAccount.getUserLogin()).thenReturn("+14152222222");
 	    when(undeletedDisabledAccount.getUuid()).thenReturn(UUID.randomUUID());
 
 	    when(undeletedEnabledDevice.isEnabled()).thenReturn(true);
 	    when(undeletedEnabledDevice.getApnId()).thenReturn("bar");
 	    when(undeletedEnabledAccount.isEnabled()).thenReturn(true);
 	    when(undeletedEnabledAccount.getMasterDevice()).thenReturn(Optional.of(undeletedEnabledDevice));
-	    when(undeletedEnabledAccount.getNumber()).thenReturn("+14153333333");
+	    when(undeletedEnabledAccount.getUserLogin()).thenReturn("+14153333333");
 	    when(undeletedEnabledAccount.getLastSeen()).thenReturn(System.currentTimeMillis() - TimeUnit.DAYS.toMillis(364));
 	    when(undeletedEnabledAccount.getUuid()).thenReturn(UUID.randomUUID());
   }

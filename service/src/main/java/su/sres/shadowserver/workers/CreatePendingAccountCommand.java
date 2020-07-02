@@ -27,6 +27,7 @@ import su.sres.shadowserver.storage.DirectoryManager;
 import su.sres.shadowserver.storage.FaultTolerantDatabase;
 import su.sres.shadowserver.storage.PendingAccounts;
 import su.sres.shadowserver.storage.PendingAccountsManager;
+import su.sres.shadowserver.util.Util;
 import su.sres.shadowserver.util.VerificationCode;
 
 public class CreatePendingAccountCommand extends EnvironmentCommand<WhisperServerConfiguration> {
@@ -46,7 +47,7 @@ public class CreatePendingAccountCommand extends EnvironmentCommand<WhisperServe
 	public void configure(Subparser subparser) {
 		super.configure(subparser);
 		subparser.addArgument("-u", "--user") // supplies a comma-separated list of users
-				.dest("user").type(String.class).required(true).help("The phone number of the user to add");
+				.dest("user").type(String.class).required(true).help("The user login of the user to add. Must be 3 characters or more. Allowed characters are: lowercase Latin letters, digits and hypen.");
 	}
 
 	@Override
@@ -76,8 +77,12 @@ public class CreatePendingAccountCommand extends EnvironmentCommand<WhisperServe
 
       for (String user: users) {
         Optional<Account> existingAccount = accountsManager.get(user);
+        
+        if (!Util.isValidUserLogin(user)) {
+        	logger.warn("Invalid user login " + user + ". This user was not added. Correct the user login and try again.");
+        }
 
-        if (!existingAccount.isPresent()) {
+        else if (!existingAccount.isPresent()) {
         	        	        	
         	VerificationCode       verificationCode       = generateVerificationCode(user);
       	    StoredVerificationCode storedVerificationCode = new StoredVerificationCode(verificationCode.getVerificationCode(),

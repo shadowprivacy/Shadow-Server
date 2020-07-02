@@ -5,15 +5,15 @@ import java.util.UUID;
 public class AmbiguousIdentifier {
 
   private final UUID   uuid;
-  private final String number;
+  private final String userLogin;
 
   public AmbiguousIdentifier(String target) {
-    if (target.startsWith("+")) {
+    if (!isUuid(target)) {
       this.uuid   = null;
-      this.number = target;
+      this.userLogin = target;
     } else {
       this.uuid   = UUID.fromString(target);
-      this.number = null;
+      this.userLogin = null;
     }
   }
 
@@ -21,15 +21,19 @@ public class AmbiguousIdentifier {
     return uuid;
   }
 
-  public String getNumber() {
-    return number;
+  public String getUserLogin() {
+    return userLogin;
   }
 
   public boolean hasUuid() {
     return uuid != null;
   }
 
-  public boolean hasNumber() {
-    return number != null;
+  public boolean hasUserLogin() {
+    return userLogin != null;
+  }
+  
+  private boolean isUuid(String test) {
+	  return test.matches("^[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$");	  
   }
 }

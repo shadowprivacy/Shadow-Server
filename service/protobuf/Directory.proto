@@ -1,0 +1,29 @@
+/**
+ * Copyright (C) 2020 Sophisticated Research
+ *
+ * Licensed according to the LICENSE file in this repository.
+ */
+syntax = "proto3";
+
+package shadowserver;
+
+option java_package = "su.sres.shadowserver.storage.protos";
+option java_multiple_files  = true;
+
+message DirectoryResponse {
+    uint64                      version  = 1;
+    oneof status_or_update {
+      bool            is_update          = 2;
+      DirectoryUpdate directory_update   = 3;
+    }    
+}
+
+message DirectoryUpdate {
+    Type                 type            = 1;
+    map<string, string>  directory_entry = 2;
+    
+    enum Type {
+      FULL        = 0;
+      INCREMENTAL = 1;
+    }    
+}

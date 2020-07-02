@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2013 Open WhisperSystems
+ * Modifications copyright (C) 2020 Sophisticated Research
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published by
@@ -43,33 +44,34 @@ public class PendingAccounts {
 		this.database.getDatabase().registerRowMapper(new StoredVerificationCodeRowMapper());
 	}
 
-	public void insert(String number, String verificationCode, long timestamp, String pushCode) {
+	public void insert(String userLogin, String verificationCode, long timestamp, String pushCode) {
 		database.use(jdbi -> jdbi.useHandle(handle -> {
 			try (Timer.Context ignored = insertTimer.time()) {
 				handle.createUpdate("INSERT INTO pending_accounts (number, verification_code, timestamp, push_code) "
 						+ "VALUES (:number, :verification_code, :timestamp, :push_code) "
 						+ "ON CONFLICT(number) DO UPDATE "
 						+ "SET verification_code = EXCLUDED.verification_code, timestamp = EXCLUDED.timestamp, push_code = EXCLUDED.push_code")
-						.bind("verification_code", verificationCode).bind("timestamp", timestamp).bind("number", number)
-						.bind("push_code", pushCode).execute();
+						.bind("verification_code", verificationCode).bind("timestamp", timestamp).bind("number", userLogin)
+						.bind("push_code", pushCode)						
+						.execute();
 			}
 		}));
 	}
 
-	public Optional<StoredVerificationCode> getCodeForNumber(String number) {
+	public Optional<StoredVerificationCode> getCodeForUserLogin(String userLogin) {
 		return database.with(jdbi -> jdbi.withHandle(handle -> {
 			try (Timer.Context ignored = getCodeForNumberTimer.time()) {
 				return handle.createQuery(
-						"SELECT verification_code, timestamp, push_code FROM pending_accounts WHERE number = :number")
-						.bind("number", number).mapTo(StoredVerificationCode.class).findFirst();
+						"SELECT verification_code, timestamp, push_code FROM pending_accounts WHERE number = :userlogin")
+						.bind("userlogin", userLogin).mapTo(StoredVerificationCode.class).findFirst();
 			}
 		}));
 	}
 
-	public void remove(String number) {
+	public void remove(String userLogin) {
 		database.use(jdbi -> jdbi.useHandle(handle -> {
 			try (Timer.Context ignored = removeTimer.time()) {
-				handle.createUpdate("DELETE FROM pending_accounts WHERE number = :number").bind("number", number)
+				handle.createUpdate("DELETE FROM pending_accounts WHERE number = :userlogin").bind("userlogin", userLogin)
 						.execute();
 			}
 		}));

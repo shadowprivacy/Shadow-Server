@@ -33,7 +33,7 @@ public class KeepAliveController {
                                @WebSocketSession WebSocketSessionContext context)
   {
     if (account != null) {
-      WebsocketAddress address = new WebsocketAddress(account.getNumber(),
+      WebsocketAddress address = new WebsocketAddress(account.getUserLogin(),
                                                       account.getAuthenticatedDevice().get().getId());
 
       if (!pubSubManager.hasLocalSubscription(address)) {

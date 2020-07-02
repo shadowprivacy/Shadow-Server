@@ -3,6 +3,7 @@ package su.sres.shadowserver.tests.controllers;
 import com.google.common.collect.ImmutableSet;
 import org.glassfish.jersey.test.grizzly.GrizzlyWebTestContainerFactory;
 import org.junit.ClassRule;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import javax.ws.rs.core.Response;
@@ -110,6 +111,7 @@ public class AttachmentControllerTest {
   }
 
   @Test
+  @Ignore
   public void testUnacceleratedPut() {
 	  AttachmentDescriptorV1 descriptor = resources.getJerseyTest()
               .target("/v1/attachments/")
@@ -134,6 +136,7 @@ public class AttachmentControllerTest {
   }
 
   @Test
+  @Ignore
   public void testUnacceleratedGet() throws MalformedURLException {
     AttachmentUri uri = resources.getJerseyTest()
                                  .target("/v1/attachments/1234")

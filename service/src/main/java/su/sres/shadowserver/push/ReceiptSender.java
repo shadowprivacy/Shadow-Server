@@ -78,14 +78,14 @@ public class ReceiptSender {
   public void sendReceipt(Account source, String destination, long messageId)
 	      throws NoSuchUserException, NotPushRegisteredException
 	  {
-	    if (source.getNumber().equals(destination)) {
+	    if (source.getUserLogin().equals(destination)) {
 	      return;
 	    }
  
     Account          destinationAccount = getDestinationAccount(destination);
     Set<Device>      destinationDevices = destinationAccount.getDevices();
     Envelope.Builder message            = Envelope.newBuilder()
-                                                  .setSource(source.getNumber())
+                                                  .setSource(source.getUserLogin())
                                                   .setSourceUuid(source.getUuid().toString())
                                                   .setSourceDevice((int) source.getAuthenticatedDevice().get().getId())
                                                   .setTimestamp(messageId)

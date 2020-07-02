@@ -16,7 +16,7 @@
  */
 syntax = "proto2"; 
  
-package textsecure;
+package shadowserver;
 
 option java_package = "su.sres.shadowserver.storage";
 option java_outer_classname = "PubSubProtos";

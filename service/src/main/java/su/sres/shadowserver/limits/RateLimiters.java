@@ -49,6 +49,7 @@ public class RateLimiters {
 	private final RateLimiter configLimiter;
 	private final RateLimiter certLimiter;
 	private final RateLimiter certVerLimiter;
+	private final RateLimiter directoryLimiter;	
 
 	public RateLimiters(RateLimitsConfiguration config, ReplicatedJedisPool cacheClient) {
 		this.smsDestinationLimiter = new RateLimiter(cacheClient, "smsDestination",
@@ -70,8 +71,8 @@ public class RateLimiters {
 		this.autoBlockLimiter = new RateLimiter(cacheClient, "autoBlock", config.getAutoBlock().getBucketSize(),
 				config.getAutoBlock().getLeakRatePerMinute());
 
-		this.verifyLimiter = new LockingRateLimiter(cacheClient, "verify", config.getVerifyNumber().getBucketSize(),
-				config.getVerifyNumber().getLeakRatePerMinute());
+		this.verifyLimiter = new LockingRateLimiter(cacheClient, "verify", config.getVerifyUserLogin().getBucketSize(),
+				config.getVerifyUserLogin().getLeakRatePerMinute());
 
 		this.pinLimiter = new LockingRateLimiter(cacheClient, "pin", config.getVerifyPin().getBucketSize(),
 				config.getVerifyPin().getLeakRatePerMinute());
@@ -117,6 +118,9 @@ public class RateLimiters {
 		
 		this.certVerLimiter = new RateLimiter(cacheClient, "certVerRequest", config.getCertVerRequest().getBucketSize(),
 				config.getCertVerRequest().getLeakRatePerMinute());
+		
+		this.directoryLimiter = new RateLimiter(cacheClient, "directoryRequest", config.getDirectoryRequest().getBucketSize(),
+				config.getDirectoryRequest().getLeakRatePerMinute());	
 	}
 
 	public RateLimiter getAllocateDeviceLimiter() {
@@ -206,4 +210,8 @@ public class RateLimiters {
 	public RateLimiter getCertVerLimiter() {
 		return certVerLimiter;
 	}
+	
+	public RateLimiter getDirectoryLimiter() {
+		return directoryLimiter;
+	}	
 }

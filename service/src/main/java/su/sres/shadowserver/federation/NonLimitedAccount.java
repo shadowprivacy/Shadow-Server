@@ -11,7 +11,7 @@ import su.sres.shadowserver.storage.Device;
 public class NonLimitedAccount extends Account {
 
   @JsonIgnore
-  private final String number;
+  private final String userLogin;
 
   @JsonIgnore
   private final String relay;
@@ -19,15 +19,15 @@ public class NonLimitedAccount extends Account {
   @JsonIgnore
   private final long deviceId;
 
-  public NonLimitedAccount(String number, long deviceId, String relay) {
-    this.number   = number;
-    this.deviceId = deviceId;
-    this.relay    = relay;
+  public NonLimitedAccount(String userLogin, long deviceId, String relay) {
+    this.userLogin = userLogin;
+    this.deviceId  = deviceId;
+    this.relay     = relay;
   }
 
   @Override
-  public String getNumber() {
-    return number;
+  public String getUserLogin() {
+    return userLogin;
   }
 
   @Override

@@ -45,38 +45,38 @@ public class PendingDevicesManager {
     this.mapper         = SystemMapper.getMapper();
   }
 
-  public void store(String number, StoredVerificationCode code) {
-    memcacheSet(number, code);
-    pendingDevices.insert(number, code.getCode(), code.getTimestamp());
+  public void store(String userLogin, StoredVerificationCode code) {
+    memcacheSet(userLogin, code);
+    pendingDevices.insert(userLogin, code.getCode(), code.getTimestamp());
   }
 
-  public void remove(String number) {
-    memcacheDelete(number);
-    pendingDevices.remove(number);
+  public void remove(String userLogin) {
+    memcacheDelete(userLogin);
+    pendingDevices.remove(userLogin);
   }
 
-  public Optional<StoredVerificationCode> getCodeForNumber(String number) {
-    Optional<StoredVerificationCode> code = memcacheGet(number);
+  public Optional<StoredVerificationCode> getCodeForUserLogin(String userLogin) {
+    Optional<StoredVerificationCode> code = memcacheGet(userLogin);
 
     if (!code.isPresent()) {
-    	code = pendingDevices.getCodeForNumber(number);
-        code.ifPresent(storedVerificationCode -> memcacheSet(number, storedVerificationCode));
+    	code = pendingDevices.getCodeForNumber(userLogin);
+        code.ifPresent(storedVerificationCode -> memcacheSet(userLogin, storedVerificationCode));
     }
 
     return code;
   }
 
-  private void memcacheSet(String number, StoredVerificationCode code) {
+  private void memcacheSet(String userLogin, StoredVerificationCode code) {
     try (Jedis jedis = cacheClient.getWriteResource()) {
-      jedis.set(CACHE_PREFIX + number, mapper.writeValueAsString(code));
+      jedis.set(CACHE_PREFIX + userLogin, mapper.writeValueAsString(code));
     } catch (JsonProcessingException e) {
       throw new IllegalArgumentException(e);
     }
   }
 
-  private Optional<StoredVerificationCode> memcacheGet(String number) {
+  private Optional<StoredVerificationCode> memcacheGet(String userLogin) {
     try (Jedis jedis = cacheClient.getReadResource()) {
-      String json = jedis.get(CACHE_PREFIX + number);
+      String json = jedis.get(CACHE_PREFIX + userLogin);
 
       if (json == null) return Optional.empty();
       else              return Optional.of(mapper.readValue(json, StoredVerificationCode.class));
@@ -86,9 +86,9 @@ public class PendingDevicesManager {
     }
   }
 
-  private void memcacheDelete(String number) {
+  private void memcacheDelete(String userLogin) {
     try (Jedis jedis = cacheClient.getWriteResource()) {
-      jedis.del(CACHE_PREFIX + number);
+      jedis.del(CACHE_PREFIX + userLogin);
     }
   }
 

@@ -41,6 +41,7 @@ import io.dropwizard.Application;
 import io.dropwizard.db.DataSourceFactory;
 import io.dropwizard.db.PooledDataSourceFactory;
 import io.dropwizard.jdbi3.JdbiFactory;
+import io.dropwizard.jersey.protobuf.ProtobufBundle;
 import io.dropwizard.setup.Bootstrap;
 import io.dropwizard.setup.Environment;
 import su.sres.dispatch.DispatchManager;
@@ -115,6 +116,8 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     bootstrap.addCommand(new PubKeyHashCommand());
     bootstrap.addCommand(new DeleteUserCommand());
     bootstrap.addCommand(new CertificateCommand());
+    
+    bootstrap.addBundle(new ProtobufBundle<WhisperServerConfiguration>());
     
     bootstrap.addBundle(new NameableMigrationsBundle<WhisperServerConfiguration>("keysdb", "keysdb.xml") {
         @Override
@@ -225,8 +228,8 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     TurnTokenGenerator       turnTokenGenerator  = new TurnTokenGenerator(config.getTurnConfiguration());    
     RecaptchaClient          recaptchaClient     = new RecaptchaClient(config.getRecaptchaConfiguration().getSecret());
     
-    ActiveUserCounter                          activeUserCounter               = new ActiveUserCounter(config.getMetricsFactory(), cacheClient);
-    AccountCleaner                             accountCleaner                  = new AccountCleaner(accountsManager);
+    ActiveUserCounter                    activeUserCounter               = new ActiveUserCounter(config.getMetricsFactory(), cacheClient);
+    AccountCleaner                       accountCleaner                  = new AccountCleaner(accountsManager);
     PushFeedbackProcessor                pushFeedbackProcessor           = new PushFeedbackProcessor(accountsManager);
     List<AccountDatabaseCrawlerListener> accountDatabaseCrawlerListeners = List.of(pushFeedbackProcessor, activeUserCounter, accountCleaner);
 
@@ -282,7 +285,8 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     		// , apnSender
     		, backupCredentialsGenerator, config.getServiceConfiguration()));
     environment.jersey().register(new DeviceController(pendingDevicesManager, accountsManager, messagesManager, rateLimiters, config.getMaxDevices(), config.getLocalParametersConfiguration().getVerificationCodeLifetime()));
-    environment.jersey().register(new DirectoryController(rateLimiters, directory));
+//  environment.jersey().register(new DirectoryController(rateLimiters, directory));
+    environment.jersey().register(new PlainDirectoryController(rateLimiters, accountsManager));
     
  // excluded federation (?), reserved for future purposes
    // environment.jersey().register(new FederationControllerV1(accountsManager, attachmentController, messageController));
@@ -300,6 +304,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     environment.jersey().register(messageController);
     environment.jersey().register(profileController);
     environment.jersey().register(stickerController);
+ // environment.jersey().register(new ProtocolBufferMessageBodyProvider());
 
     ///
     WebSocketEnvironment webSocketEnvironment = new WebSocketEnvironment(environment, config.getWebSocketConfiguration(), 90000);

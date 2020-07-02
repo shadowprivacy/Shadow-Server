@@ -45,6 +45,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.codahale.metrics.MetricRegistry.name;
 import io.dropwizard.auth.Auth;
@@ -115,8 +116,7 @@ public class AccountController {
 	private final GCMSender gcmSender;
 //	  private final APNSender              apnSender;
 	private final ExternalServiceCredentialGenerator backupServiceCredentialGenerator;
-	private final ServiceConfiguration serviceConfiguration;
-	
+	private final ServiceConfiguration serviceConfiguration;		
 
 	public AccountController(PendingAccountsManager pendingAccounts, AccountsManager accounts,
 			UsernamesManager usernames, AbusiveHostRules abusiveHostRules, RateLimiters rateLimiters,
@@ -138,26 +138,25 @@ public class AccountController {
 		this.gcmSender = gcmSender;
 //    this.apnSender          = apnSender;
 		this.backupServiceCredentialGenerator = backupServiceCredentialGenerator;
-		this.serviceConfiguration = serviceConfiguration;		
-		
+		this.serviceConfiguration = serviceConfiguration;				
 	}
 
 	@Timed
 	@GET
 	@Path("/{type}/preauth/{token}/{number}")
 	public Response getPreAuth(@PathParam("type") String pushType, @PathParam("token") String pushToken,
-			@PathParam("number") String number) {
+			@PathParam("number") String userLogin) {
 
 		if (!"apn".equals(pushType) && !"fcm".equals(pushType)) {
 			return Response.status(400).build();
 		}
 
-		if (!Util.isValidNumber(number)) {
+		if (!Util.isValidUserLogin(userLogin)) {
 			return Response.status(400).build();
 		}
 
 		String pushChallenge = generatePushChallenge();
-		Optional<StoredVerificationCode> presetVerificationCode = pendingAccounts.getCodeForNumber(number);
+		Optional<StoredVerificationCode> presetVerificationCode = pendingAccounts.getCodeForUserLogin(userLogin);		
 
 		if (presetVerificationCode.isPresent()) {
 
@@ -167,10 +166,10 @@ public class AccountController {
 			return Response.status(400).build();
 		}
 
-		pendingAccounts.store(number, presetVerificationCode.get());
+		pendingAccounts.store(userLogin, presetVerificationCode.get());
 
 		if ("fcm".equals(pushType)) {
-			gcmSender.sendMessage(new GcmMessage(pushToken, number, 0, GcmMessage.Type.CHALLENGE,
+			gcmSender.sendMessage(new GcmMessage(pushToken, userLogin, 0, GcmMessage.Type.CHALLENGE,
 					Optional.of(presetVerificationCode.get().getPushCode())));
 //    } else if ("apn".equals(pushType)) {
 //      apnSender.sendMessage(new ApnMessage(pushToken, number, 0, true, Optional.of(presetVerificationCode.get().getPushCode())));
@@ -184,15 +183,15 @@ public class AccountController {
 	@Timed
 	@GET
 	@Path("/{transport}/code/{number}")
-	public Response createAccount(@PathParam("transport") String transport, @PathParam("number") String number,
+	public Response createAccount(@PathParam("transport") String transport, @PathParam("number") String userLogin,
 			// @HeaderParam("X-Forwarded-For") String forwardedFor,
 			@HeaderParam("Accept-Language") Optional<String> locale, @QueryParam("client") Optional<String> client,
 			@QueryParam("captcha") Optional<String> captcha, @QueryParam("challenge") Optional<String> pushChallenge)
 
 			throws RateLimitExceededException {
 
-		if (!Util.isValidNumber(number)) {
-			logger.info("Invalid number: " + number);
+		if (!Util.isValidUserLogin(userLogin)) {
+			logger.info("Invalid user login: " + userLogin);
 			throw new WebApplicationException(Response.status(400).build());
 		}
 
@@ -207,8 +206,8 @@ public class AccountController {
 		String forwardedFor = "127.0.0.66";
 		String requester = "127.0.0.66";
 
-		Optional<StoredVerificationCode> storedVerificationCode = pendingAccounts.getCodeForNumber(number);
-		CaptchaRequirement requirement = requiresCaptcha(number, transport, forwardedFor, requester, captcha,
+		Optional<StoredVerificationCode> storedVerificationCode = pendingAccounts.getCodeForUserLogin(userLogin);
+		CaptchaRequirement requirement = requiresCaptcha(userLogin, transport, forwardedFor, requester, captcha,
 				storedVerificationCode, pushChallenge);
 
 		if (requirement.isCaptchaRequired()) {
@@ -222,17 +221,17 @@ public class AccountController {
 
 		switch (transport) {
 		case "sms":
-			rateLimiters.getSmsDestinationLimiter().validate(number);
+			rateLimiters.getSmsDestinationLimiter().validate(userLogin);
 			break;
 		case "voice":
-			rateLimiters.getVoiceDestinationLimiter().validate(number);
-			rateLimiters.getVoiceDestinationDailyLimiter().validate(number);
+			rateLimiters.getVoiceDestinationLimiter().validate(userLogin);
+			rateLimiters.getVoiceDestinationDailyLimiter().validate(userLogin);
 			break;
 		default:
 			throw new WebApplicationException(Response.status(422).build());
 		}
 
-		metricRegistry.meter(name(AccountController.class, "create", Util.getCountryCode(number))).mark();
+//		metricRegistry.meter(name(AccountController.class, "create", Util.getCountryCode(number))).mark();
 
 		return Response.ok().build();
 	}
@@ -245,36 +244,37 @@ public class AccountController {
 	public AccountCreationResult verifyAccount(@PathParam("verification_code") String verificationCode,
 			@HeaderParam("Authorization") String authorizationHeader, @HeaderParam("X-Signal-Agent") String userAgent,
 			@Valid AccountAttributes accountAttributes) throws RateLimitExceededException {
-		try {
+		try {		
+			 			
 			AuthorizationHeader header = AuthorizationHeader.fromFullHeader(authorizationHeader);
-			String number = header.getIdentifier().getNumber();
+			String userLogin = header.getIdentifier().getUserLogin();
 			String password = header.getPassword();
 
-			if (number == null) {
+			if (userLogin == null) {
 				throw new WebApplicationException(400);
 			}
 
-			rateLimiters.getVerifyLimiter().validate(number);
+			rateLimiters.getVerifyLimiter().validate(userLogin);
 
-			Optional<StoredVerificationCode> storedVerificationCode = pendingAccounts.getCodeForNumber(number);
+			Optional<StoredVerificationCode> storedVerificationCode = pendingAccounts.getCodeForUserLogin(userLogin);
 	
 			if (!storedVerificationCode.isPresent() || !storedVerificationCode.get().isValid(verificationCode)) {
 				throw new WebApplicationException(Response.status(403).build());
 			}
 
-			Optional<Account> existingAccount = accounts.get(number);
+			Optional<Account> existingAccount = accounts.get(userLogin);
 
 			if (existingAccount.isPresent()
 					&& (existingAccount.get().getPin().isPresent()
 							|| existingAccount.get().getRegistrationLock().isPresent())
 					&& System.currentTimeMillis() - existingAccount.get().getLastSeen() < TimeUnit.DAYS.toMillis(7)) {
-				rateLimiters.getVerifyLimiter().clear(number);
+				rateLimiters.getVerifyLimiter().clear(userLogin);
 
 				long timeRemaining = TimeUnit.DAYS.toMillis(7)
 						- (System.currentTimeMillis() - existingAccount.get().getLastSeen());
 				Optional<ExternalServiceCredentials> credentials = existingAccount.get().getRegistrationLock()
 						.isPresent() && existingAccount.get().getRegistrationLockSalt().isPresent()
-								? Optional.of(backupServiceCredentialGenerator.generateFor(number))
+								? Optional.of(backupServiceCredentialGenerator.generateFor(userLogin))
 								: Optional.empty();
 
 				if (Util.isEmpty(accountAttributes.getPin()) && Util.isEmpty(accountAttributes.getRegistrationLock())) {
@@ -282,7 +282,7 @@ public class AccountController {
 							.entity(new RegistrationLockFailure(timeRemaining, credentials.orElse(null))).build());
 				}
 
-				rateLimiters.getPinLimiter().validate(number);
+				rateLimiters.getPinLimiter().validate(userLogin);
 
 				boolean pinMatches;
 
@@ -303,12 +303,22 @@ public class AccountController {
 							.entity(new RegistrationLockFailure(timeRemaining, credentials.orElse(null))).build());
 				}
 
-				rateLimiters.getPinLimiter().clear(number);
+				rateLimiters.getPinLimiter().clear(userLogin);
 			}
 
-			Account account = createAccount(number, password, userAgent, accountAttributes);
+			if (accounts.getAccountCreationLock()                     ||
+				accounts.getAccountRemovalLock()                      ||
+				accounts.getDirectoryManager().getDirectoryReadLock() ||
+				accounts.getDirectoryRestoreLock()) {
+				    	  
+				    	  throw new WebApplicationException(Response.status(503)
+				    			                                    .header("Retry-After", Integer.valueOf(60))
+				    			                                    .build());
+			}  
+			
+			Account account = createAccount(userLogin, password, userAgent, accountAttributes);
 						
-			metricRegistry.meter(name(AccountController.class, "verify", Util.getCountryCode(number))).mark();
+//			metricRegistry.meter(name(AccountController.class, "verify", Util.getCountryCode(number))).mark();
 
 			return new AccountCreationResult(account.getUuid());
 
@@ -323,7 +333,7 @@ public class AccountController {
 	@Path("/turn/")
 	@Produces(MediaType.APPLICATION_JSON)
 	public TurnToken getTurnToken(@Auth Account account) throws RateLimitExceededException {
-		rateLimiters.getTurnLimiter().validate(account.getNumber());
+		rateLimiters.getTurnLimiter().validate(account.getUserLogin());
 		return turnTokenGenerator.generate();
 	}
 	
@@ -332,7 +342,7 @@ public class AccountController {
 	@Path("/config/")
 	@Produces(MediaType.APPLICATION_JSON)
 	public ServiceConfiguration getServiceConfiguration(@Auth Account account) throws RateLimitExceededException {
-		rateLimiters.getConfigLimiter().validate(account.getNumber());
+		rateLimiters.getConfigLimiter().validate(account.getUserLogin());
 		return serviceConfiguration;
 	}
 	
@@ -341,10 +351,9 @@ public class AccountController {
 	@Path("/cert/")
 	@Produces(MediaType.APPLICATION_JSON)
 	public SystemCerts getCerts(@Auth Account account) throws RateLimitExceededException {
-		rateLimiters.getCertLimiter().validate(account.getNumber());		
+		rateLimiters.getCertLimiter().validate(account.getUserLogin());		
 				
-		return (new CertsProvider(serviceConfiguration)).getCerts();
-					
+		return (new CertsProvider(serviceConfiguration)).getCerts();					
 	}
 	
 	@Timed
@@ -352,10 +361,9 @@ public class AccountController {
 	@Path("/certver/")
 	@Produces(MediaType.APPLICATION_JSON)
 	public SystemCertsVersion getCertsVersion(@Auth Account account) throws RateLimitExceededException {
-		rateLimiters.getCertVerLimiter().validate(account.getNumber());
+		rateLimiters.getCertVerLimiter().validate(account.getUserLogin());
 						
-		return (new CertsProvider(serviceConfiguration)).getCertsVersion();
-					
+		return (new CertsProvider(serviceConfiguration)).getCertsVersion();					
 	}
 
 	@Timed
@@ -554,7 +562,7 @@ public class AccountController {
 		return Response.ok().build();
 	}
 
-	private CaptchaRequirement requiresCaptcha(String number, String transport, String forwardedFor, String requester,
+	private CaptchaRequirement requiresCaptcha(String userLogin, String transport, String forwardedFor, String requester,
 			Optional<String> captchaToken, Optional<StoredVerificationCode> storedVerificationCode,
 			Optional<String> pushChallenge) {
 		if (captchaToken.isPresent()) {
@@ -585,14 +593,15 @@ public class AccountController {
 		for (AbusiveHostRule abuseRule : abuseRules) {
 			if (abuseRule.isBlocked()) {
 				logger.info(
-						"Blocked host: " + transport + ", " + number + ", " + requester + " (" + forwardedFor + ")");
+						"Blocked host: " + transport + ", " + userLogin + ", " + requester + " (" + forwardedFor + ")");
 				blockedHostMeter.mark();
 // captcha off
 				// return new CaptchaRequirement(true, false);
 				return new CaptchaRequirement(false, false);
 			}
 
-			if (!abuseRule.getRegions().isEmpty()) {
+// should always be empty, since we use E.164 numbers no more			
+/*			if (!abuseRule.getRegions().isEmpty()) {
 				if (abuseRule.getRegions().stream().noneMatch(number::startsWith)) {
 					logger.info("Restricted host: " + transport + ", " + number + ", " + requester + " (" + forwardedFor
 							+ ")");
@@ -601,13 +610,13 @@ public class AccountController {
 					// return new CaptchaRequirement(true, false);
 					return new CaptchaRequirement(false, false);
 				}
-			}
+			} */
 		}
 
 		try {
 			rateLimiters.getSmsVoiceIpLimiter().validate(requester);
 		} catch (RateLimitExceededException e) {
-			logger.info("Rate limited exceeded: " + transport + ", " + number + ", " + requester + " (" + forwardedFor
+			logger.info("Rate limited exceeded: " + transport + ", " + userLogin + ", " + requester + " (" + forwardedFor
 					+ ")");
 			rateLimitedHostMeter.mark();
 			// captcha off
@@ -615,7 +624,8 @@ public class AccountController {
 			return new CaptchaRequirement(false, true);
 		}
 
-		try {
+// this is excluded since with no E.164 numbers we observe prefixes no longer		
+/*		try {
 			rateLimiters.getSmsVoicePrefixLimiter().validate(Util.getNumberPrefix(number));
 		} catch (RateLimitExceededException e) {
 			logger.info("Prefix rate limit exceeded: " + transport + ", " + number + ", (" + forwardedFor + ")");
@@ -623,7 +633,7 @@ public class AccountController {
 			// captcha off
 			// return new CaptchaRequirement(true, true);
 			return new CaptchaRequirement(false, true);
-		}
+		} */
 
 		return new CaptchaRequirement(false, false);
 	}
@@ -638,7 +648,7 @@ public class AccountController {
 		return false;
 	}
 
-	private Account createAccount(String number, String password, String userAgent,
+	private Account createAccount(String userLogin, String password, String userAgent,
 			AccountAttributes accountAttributes) {
 		Device device = new Device();
 		device.setId(Device.MASTER_ID);
@@ -653,7 +663,7 @@ public class AccountController {
 		device.setUserAgent(userAgent);
 
 		Account account = new Account();
-		account.setNumber(number);
+		account.setUserLogin(userLogin);
 		account.setUuid(UUID.randomUUID());
 						
 		account.addDevice(device);
@@ -666,9 +676,9 @@ public class AccountController {
 			newUserMeter.mark();
 		}	
 		
-		messagesManager.clear(number);
+		messagesManager.clear(userLogin);
 			
-		pendingAccounts.remove(number);		
+		pendingAccounts.remove(userLogin);		
 
 		return account;
 	}
