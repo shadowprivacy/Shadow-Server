@@ -24,15 +24,7 @@ public class ServiceConfiguration {
 	@JsonProperty
 	@NotEmpty
 	private String storageUri;
-	
-	@JsonProperty
-	@NotEmpty
-	private String keyStorePath;
-	
-	@JsonProperty
-	@NotEmpty
-	private String keyStorePassword;
-
+		
 	@JsonProperty
 	@JsonSerialize(using = ByteArrayAdapter.Serializing.class)
 	@JsonDeserialize(using = ByteArrayAdapter.Deserializing.class)
@@ -58,15 +50,7 @@ public class ServiceConfiguration {
 	
 	public String getStorageUri() {
 		return storageUri;
-	}
-	
-	public String getKeyStorePath() {
-		return keyStorePath;
-	}
-	
-	public String getKeyStorePassword() {
-		return keyStorePassword;
-	}
+	}	
 	
 	public byte[] getUnidentifiedDeliveryCaPublicKey() {
 		return unidentifiedDeliveryCaPublicKey;

@@ -27,6 +27,7 @@ import su.sres.shadowserver.auth.DisabledPermittedAccount;
 import su.sres.shadowserver.auth.ExternalServiceCredentialGenerator;
 import su.sres.shadowserver.auth.StoredVerificationCode;
 import su.sres.shadowserver.auth.TurnTokenGenerator;
+import su.sres.shadowserver.configuration.LocalParametersConfiguration;
 import su.sres.shadowserver.configuration.ServiceConfiguration;
 import su.sres.shadowserver.controllers.AccountController;
 import su.sres.shadowserver.controllers.RateLimitExceededException;
@@ -108,6 +109,7 @@ public class AccountControllerTest {
   private byte[] registration_lock_key = new byte[32];
   private ExternalServiceCredentialGenerator storageCredentialGenerator = new ExternalServiceCredentialGenerator(new byte[32], new byte[32], false);
 
+  private LocalParametersConfiguration localParametersConfiguration = new LocalParametersConfiguration();
   private ServiceConfiguration serviceConfiguration = new ServiceConfiguration();
   
 
@@ -138,6 +140,7 @@ public class AccountControllerTest {
                                                                                                gcmSender,
                                                                        //                      apnSender,
                                                                                                storageCredentialGenerator,
+                                                                                               localParametersConfiguration,
                                                                                                serviceConfiguration
                                                                                                ))
                                                             .build();

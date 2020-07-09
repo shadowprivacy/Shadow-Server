@@ -58,6 +58,7 @@ import su.sres.shadowserver.auth.InvalidAuthorizationHeaderException;
 import su.sres.shadowserver.auth.StoredVerificationCode;
 import su.sres.shadowserver.auth.TurnToken;
 import su.sres.shadowserver.auth.TurnTokenGenerator;
+import su.sres.shadowserver.configuration.LocalParametersConfiguration;
 import su.sres.shadowserver.configuration.ServiceConfiguration;
 import su.sres.shadowserver.entities.AccountAttributes;
 import su.sres.shadowserver.entities.AccountCreationResult;
@@ -116,6 +117,7 @@ public class AccountController {
 	private final GCMSender gcmSender;
 //	  private final APNSender              apnSender;
 	private final ExternalServiceCredentialGenerator backupServiceCredentialGenerator;
+	private final LocalParametersConfiguration localParametersConfiguration;
 	private final ServiceConfiguration serviceConfiguration;		
 
 	public AccountController(PendingAccountsManager pendingAccounts, AccountsManager accounts,
@@ -124,6 +126,7 @@ public class AccountController {
 			RecaptchaClient recaptchaClient, GCMSender gcmSender,
 			// APNSender apnSender,
 			ExternalServiceCredentialGenerator backupServiceCredentialGenerator,
+			LocalParametersConfiguration localParametersConfiguration,
 			ServiceConfiguration serviceConfiguration) {
 		this.pendingAccounts = pendingAccounts;
 		this.accounts = accounts;
@@ -138,6 +141,7 @@ public class AccountController {
 		this.gcmSender = gcmSender;
 //    this.apnSender          = apnSender;
 		this.backupServiceCredentialGenerator = backupServiceCredentialGenerator;
+		this.localParametersConfiguration = localParametersConfiguration;
 		this.serviceConfiguration = serviceConfiguration;				
 	}
 
@@ -353,7 +357,7 @@ public class AccountController {
 	public SystemCerts getCerts(@Auth Account account) throws RateLimitExceededException {
 		rateLimiters.getCertLimiter().validate(account.getUserLogin());		
 				
-		return (new CertsProvider(serviceConfiguration)).getCerts();					
+		return (new CertsProvider(localParametersConfiguration, serviceConfiguration)).getCerts();					
 	}
 	
 	@Timed
@@ -363,7 +367,7 @@ public class AccountController {
 	public SystemCertsVersion getCertsVersion(@Auth Account account) throws RateLimitExceededException {
 		rateLimiters.getCertVerLimiter().validate(account.getUserLogin());
 						
-		return (new CertsProvider(serviceConfiguration)).getCertsVersion();					
+		return (new CertsProvider(localParametersConfiguration, serviceConfiguration)).getCertsVersion();					
 	}
 
 	@Timed

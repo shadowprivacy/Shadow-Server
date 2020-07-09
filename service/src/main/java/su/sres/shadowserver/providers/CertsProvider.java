@@ -10,6 +10,7 @@ import java.security.NoSuchProviderException;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
 
+import su.sres.shadowserver.configuration.LocalParametersConfiguration;
 import su.sres.shadowserver.configuration.ServiceConfiguration;
 
 public class CertsProvider {
@@ -18,16 +19,18 @@ public class CertsProvider {
 	private static final String SHADOW_CERT_ALIAS = "shadow";
 	private static final String STORAGE_CERT_ALIAS = "storage";
 
+	private LocalParametersConfiguration localParametersConfiguration;
 	private ServiceConfiguration serviceConfiguration;
 
-	public CertsProvider(ServiceConfiguration serviceConfiguration) {
+	public CertsProvider(LocalParametersConfiguration localParametersConfiguration, ServiceConfiguration serviceConfiguration) {
+		this.localParametersConfiguration = localParametersConfiguration;
 		this.serviceConfiguration = serviceConfiguration;
 	}
 
 	public SystemCerts getCerts() {
 
-		String  keystorePath     = serviceConfiguration.getKeyStorePath(),
-				keystorePassword = serviceConfiguration.getKeyStorePassword();
+		String  keystorePath     = localParametersConfiguration.getKeyStorePath(),
+				keystorePassword = localParametersConfiguration.getKeyStorePassword();
 
 		byte[]  cloudCertificateA   = null,
 				cloudCertificateB   = null,
