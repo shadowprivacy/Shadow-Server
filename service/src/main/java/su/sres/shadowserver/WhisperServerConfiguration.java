@@ -180,6 +180,11 @@ public class WhisperServerConfiguration extends Configuration {
 	@NotNull
 	@JsonProperty
 	private ZkConfig zkConfig;
+	
+    @Valid
+	@NotNull
+	@JsonProperty
+	private RemoteConfigConfiguration remoteConfig;
 
 	private Map<String, String> transparentDataIndex = new HashMap<>();
 
@@ -313,5 +318,9 @@ public class WhisperServerConfiguration extends Configuration {
 	
 	public ZkConfig getZkConfig() {
 	    return zkConfig;
+	}
+	
+	public RemoteConfigConfiguration getRemoteConfigConfiguration() {
+	    return remoteConfig;
 	}
 }
