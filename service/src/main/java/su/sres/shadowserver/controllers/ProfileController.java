@@ -44,6 +44,7 @@ import su.sres.shadowserver.s3.PostPolicyGenerator;
 import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.storage.AccountsManager;
 import su.sres.shadowserver.storage.UsernamesManager;
+import su.sres.shadowserver.util.ExactlySize;
 import su.sres.shadowserver.util.Pair;
 
 @SuppressWarnings("OptionalUsedAsFieldOrParameterType")
@@ -154,9 +155,7 @@ public class ProfileController {
 	@PUT
 	@Produces(MediaType.APPLICATION_JSON)
 	@Path("/name/{name}")
-	public void setProfile(@Auth Account account,
-			@PathParam("name") @UnwrapValidatedValue(true) // @Length(min = 72, max = 72)
-	Optional<String> name) {
+	public void setProfile(@Auth Account account, @PathParam("name") @UnwrapValidatedValue(true) @ExactlySize({72, 108}) Optional<String> name) {	
 		account.setProfileName(name.orElse(null));
 		accountsManager.update(account);
 	}
