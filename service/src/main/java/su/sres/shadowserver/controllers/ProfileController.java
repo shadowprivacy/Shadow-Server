@@ -45,15 +45,7 @@ import java.util.UUID;
 import io.dropwizard.auth.Auth;
 
 import io.minio.MinioClient;
-import io.minio.errors.ErrorResponseException;
-import io.minio.errors.InsufficientDataException;
-import io.minio.errors.InternalException;
-import io.minio.errors.InvalidArgumentException;
-import io.minio.errors.InvalidBucketNameException;
-import io.minio.errors.InvalidResponseException;
 import io.minio.errors.MinioException;
-import io.minio.errors.NoResponseException;
-import su.sres.shadowserver.configuration.CdnConfiguration;
 import su.sres.shadowserver.entities.CreateProfileRequest;
 import su.sres.shadowserver.entities.Profile;
 import su.sres.shadowserver.entities.ProfileAvatarUploadAttributes;
@@ -226,7 +218,7 @@ public class ProfileController {
 	                                     accountProfile.get().getIdentityKey(),
 	                                     UnidentifiedAccessChecksum.generateFor(accountProfile.get().getUnidentifiedAccessKey()),
 	                                     accountProfile.get().isUnrestrictedUnidentifiedAccess(),
-	                                     new UserCapabilities(accountProfile.get().isUuidAddressingSupported()),
+	                                     new UserCapabilities(accountProfile.get().isUuidAddressingSupported(), accountProfile.get().isGroupsV2Supported()),
 	                                     username.orElse(null),
 	                                     null, credential.orElse(null)));
 	    } catch (InvalidInputException e) {
@@ -261,7 +253,8 @@ public class ProfileController {
 				accountProfile.get().getIdentityKey(),
 				UnidentifiedAccessChecksum.generateFor(accountProfile.get().getUnidentifiedAccessKey()),
 				accountProfile.get().isUnrestrictedUnidentifiedAccess(),
-				new UserCapabilities(accountProfile.get().isUuidAddressingSupported()), username,
+			    new UserCapabilities(accountProfile.get().isUuidAddressingSupported(), accountProfile.get().isGroupsV2Supported()),
+				username,
 				accountProfile.get().getUuid(), null);
 	}
 	
@@ -332,7 +325,7 @@ public class ProfileController {
 	                       accountProfile.get().getIdentityKey(),
 	                       UnidentifiedAccessChecksum.generateFor(accountProfile.get().getUnidentifiedAccessKey()),
 	                       accountProfile.get().isUnrestrictedUnidentifiedAccess(),
-	                       new UserCapabilities(accountProfile.get().isUuidAddressingSupported()),
+	                       new UserCapabilities(accountProfile.get().isUuidAddressingSupported(), accountProfile.get().isGroupsV2Supported()),
 	                       username.orElse(null),
 	                       null, null);
 	}

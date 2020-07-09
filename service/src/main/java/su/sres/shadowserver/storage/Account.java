@@ -32,7 +32,7 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 public class Account implements Principal {
-	
+
 	@JsonIgnore
 	private UUID uuid;
 
@@ -77,9 +77,9 @@ public class Account implements Principal {
 
 	@VisibleForTesting
 	public Account(String userLogin, UUID uuid, Set<Device> devices, byte[] unidentifiedAccessKey) {
-		this.userLogin             = userLogin;
-		this.uuid                  = uuid;
-		this.devices               = devices;
+		this.userLogin = userLogin;
+		this.uuid = uuid;
+		this.devices = devices;
 		this.unidentifiedAccessKey = unidentifiedAccessKey;
 	}
 
@@ -90,14 +90,14 @@ public class Account implements Principal {
 	public void setAuthenticatedDevice(Device device) {
 		this.authenticatedDevice = device;
 	}
-	
-	public UUID getUuid() {
-	    return uuid;
-	  }
 
-	  public void setUuid(UUID uuid) {
-	    this.uuid = uuid;
-	  }
+	public UUID getUuid() {
+		return uuid;
+	}
+
+	public void setUuid(UUID uuid) {
+		this.uuid = uuid;
+	}
 
 	public void setUserLogin(String userLogin) {
 		this.userLogin = userLogin;
@@ -113,7 +113,8 @@ public class Account implements Principal {
 	}
 
 	public void removeDevice(long deviceId) {
-		this.devices.remove(new Device(deviceId, null, null, null, null, null, null, null, false, 0, null, 0, 0, "NA", 0, null));
+		this.devices.remove(
+				new Device(deviceId, null, null, null, null, null, null, null, false, 0, null, 0, 0, "NA", 0, null));
 	}
 
 	public Set<Device> getDevices() {
@@ -134,10 +135,14 @@ public class Account implements Principal {
 		return Optional.empty();
 	}
 
-	  public boolean isUuidAddressingSupported() {
-		  return devices.stream()
-                  .filter(Device::isEnabled)
-                  .allMatch(device -> device.getCapabilities() != null && device.getCapabilities().isUuid());
+	public boolean isUuidAddressingSupported() {
+		return devices.stream().filter(Device::isEnabled)
+				.allMatch(device -> device.getCapabilities() != null && device.getCapabilities().isUuid());
+	}
+
+	public boolean isGroupsV2Supported() {
+		return devices.stream().filter(Device::isEnabled)
+				.allMatch(device -> device.getCapabilities() != null && device.getCapabilities().isGv2());
 	}
 
 	public boolean isEnabled() {
@@ -261,12 +266,15 @@ public class Account implements Principal {
 	public void setUnrestrictedUnidentifiedAccess(boolean unrestrictedUnidentifiedAccess) {
 		this.unrestrictedUnidentifiedAccess = unrestrictedUnidentifiedAccess;
 	}
-	
-	 public boolean isFor(AmbiguousIdentifier identifier) {
-		    if      (identifier.hasUuid())   return identifier.getUuid().equals(uuid);
-		    else if (identifier.hasUserLogin()) return identifier.getUserLogin().equals(userLogin);
-		    else                             throw new AssertionError();
-		  }
+
+	public boolean isFor(AmbiguousIdentifier identifier) {
+		if (identifier.hasUuid())
+			return identifier.getUuid().equals(uuid);
+		else if (identifier.hasUserLogin())
+			return identifier.getUserLogin().equals(userLogin);
+		else
+			throw new AssertionError();
+	}
 
 	// Principal implementation
 
