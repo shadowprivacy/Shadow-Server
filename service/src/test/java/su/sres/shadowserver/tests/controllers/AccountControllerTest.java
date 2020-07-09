@@ -16,6 +16,7 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.security.SecureRandom;
 
@@ -72,6 +73,7 @@ public class AccountControllerTest {
 		private static final String SENDER_OVER_PREFIX = "+14156666666";
 		private static final String SENDER_PREAUTH     = "+14157777777";
 		private static final String SENDER_REG_LOCK    = "+14158888888";
+		private static final String SENDER_HAS_STORAGE = "miketyson";
 
 		private static final String ABUSIVE_HOST             = "192.168.1.1";
 		private static final String RESTRICTED_HOST          = "192.168.1.2";
@@ -101,6 +103,7 @@ public class AccountControllerTest {
   private        TurnTokenGenerator     turnTokenGenerator     = mock(TurnTokenGenerator.class);
   private        Account                senderPinAccount       = mock(Account.class);
   private        Account                senderRegLockAccount   = mock(Account.class);
+  private        Account                senderHasStorage       = mock(Account.class);
   private        RecaptchaClient        recaptchaClient        = mock(RecaptchaClient.class);
   private        GCMSender              gcmSender              = mock(GCMSender.class);
 //  private        APNSender              apnSender              = mock(APNSender.class);
@@ -164,6 +167,10 @@ public class AccountControllerTest {
     when(senderPinAccount.getPin()).thenReturn(Optional.of("31337"));
     when(senderPinAccount.getLastSeen()).thenReturn(System.currentTimeMillis());
     
+    
+    when(senderHasStorage.getUuid()).thenReturn(UUID.randomUUID());
+    when(senderHasStorage.isStorageSupported()).thenReturn(true);
+    
     when(senderRegLockAccount.getPin()).thenReturn(Optional.empty());
     when(senderRegLockAccount.getRegistrationLock()).thenReturn(Optional.of(registrationLockCredentials.getHashedAuthenticationToken()));
     when(senderRegLockAccount.getRegistrationLockSalt()).thenReturn(Optional.of(registrationLockCredentials.getSalt()));
@@ -175,6 +182,7 @@ public class AccountControllerTest {
     when(pendingAccountsManager.getCodeForUserLogin(SENDER_REG_LOCK)).thenReturn(Optional.of(new StoredVerificationCode("666666", System.currentTimeMillis(), null, VERIFICATION_CODE_LIFETIME)));
     when(pendingAccountsManager.getCodeForUserLogin(SENDER_OVER_PIN)).thenReturn(Optional.of(new StoredVerificationCode("444444", System.currentTimeMillis(), null, VERIFICATION_CODE_LIFETIME)));
     when(pendingAccountsManager.getCodeForUserLogin(SENDER_PREAUTH)).thenReturn(Optional.of(new StoredVerificationCode("555555", System.currentTimeMillis(), "validchallenge", VERIFICATION_CODE_LIFETIME)));
+    when(pendingAccountsManager.getCodeForUserLogin(SENDER_HAS_STORAGE)).thenReturn(Optional.of(new StoredVerificationCode("666666", System.currentTimeMillis(), null, VERIFICATION_CODE_LIFETIME)));
 
     when(accountsManager.get(eq(SENDER_PIN))).thenReturn(Optional.of(senderPinAccount));
     when(accountsManager.get(eq(SENDER_REG_LOCK))).thenReturn(Optional.of(senderRegLockAccount));
@@ -182,6 +190,7 @@ public class AccountControllerTest {
     when(accountsManager.get(eq(SENDER))).thenReturn(Optional.empty());
     when(accountsManager.get(eq(SENDER_OLD))).thenReturn(Optional.empty());
     when(accountsManager.get(eq(SENDER_PREAUTH))).thenReturn(Optional.empty());
+    when(accountsManager.get(eq(SENDER_HAS_STORAGE))).thenReturn(Optional.of(senderHasStorage));
     
     when(usernamesManager.put(eq(AuthHelper.VALID_UUID), eq("n00bkiller"))).thenReturn(true);
     when(usernamesManager.put(eq(AuthHelper.VALID_UUID), eq("takenusername"))).thenReturn(false);
@@ -510,6 +519,22 @@ public class AccountControllerTest {
 	    assertThat(result.getUuid()).isNotNull();
 
     verify(accountsManager, times(1)).create(isA(Account.class));
+  }
+  
+  // TODO: this one is currently pointless and needs be redeveloped if we implement storage in future
+  @Test
+  public void testVerifySupportsStorage() throws Exception {
+    AccountCreationResult result =
+        resources.getJerseyTest()
+                 .target(String.format("/v1/accounts/code/%s", "666666"))
+                 .request()
+                 .header("Authorization", AuthHelper.getAuthHeader(SENDER_HAS_STORAGE, "bar"))
+                 .put(Entity.entity(new AccountAttributes("keykeykeykey", false, 2222, null),
+                                    MediaType.APPLICATION_JSON_TYPE), AccountCreationResult.class);
+
+    assertThat(result.getUuid()).isNotNull();
+    
+    verify(accountsManager, times(1)).create(isA(Account.class));    
   }
 
   @Test

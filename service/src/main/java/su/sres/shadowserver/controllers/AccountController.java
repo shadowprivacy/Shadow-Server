@@ -259,7 +259,7 @@ public class AccountController {
 
 			Optional<StoredVerificationCode> storedVerificationCode = pendingAccounts.getCodeForUserLogin(userLogin);
 	
-			if (!storedVerificationCode.isPresent() || !storedVerificationCode.get().isValid(verificationCode)) {
+			if (storedVerificationCode.isEmpty() || !storedVerificationCode.get().isValid(verificationCode)) {
 				throw new WebApplicationException(Response.status(403).build());
 			}
 

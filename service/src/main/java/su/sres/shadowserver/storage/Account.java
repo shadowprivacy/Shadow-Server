@@ -144,6 +144,10 @@ public class Account implements Principal {
 		return devices.stream().filter(Device::isEnabled)
 				.allMatch(device -> device.getCapabilities() != null && device.getCapabilities().isGv2());
 	}
+	
+	public boolean isStorageSupported() {
+	    return devices.stream().anyMatch(device -> device.getCapabilities() != null && device.getCapabilities().isStorage());
+	  }
 
 	public boolean isEnabled() {
 		return getMasterDevice().isPresent() && getMasterDevice().get().isEnabled()
