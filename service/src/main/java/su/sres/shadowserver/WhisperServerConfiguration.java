@@ -35,285 +35,274 @@ import su.sres.shadowserver.configuration.*;
 /** @noinspection MismatchedQueryAndUpdateOfCollection, WeakerAccess */
 public class WhisperServerConfiguration extends Configuration {
 
-  @NotNull
-  @Valid
-  @JsonProperty
-  private PushConfiguration push;
+	@NotNull
+	@Valid
+	@JsonProperty
+	private PushConfiguration push;
 
-  @NotNull
-  @Valid
-  @JsonProperty
-  private AttachmentsConfiguration attachments;
-  
-  @NotNull
-  @Valid
-  @JsonProperty
-  private AttachmentsConfiguration debuglogs;
+	@NotNull
+	@Valid
+	@JsonProperty
+	private AttachmentsConfiguration attachments;
 
-  @NotNull
-  @Valid
-  @JsonProperty
-  private CdnConfiguration cdn;
+	@NotNull
+	@Valid
+	@JsonProperty
+	private AttachmentsConfiguration debuglogs;
 
-  @NotNull
-  @Valid
-  @JsonProperty
-  private RedisConfiguration cache;
+	@NotNull
+	@Valid
+	@JsonProperty
+	private CdnConfiguration cdn;
 
-  @NotNull
-  @Valid
-  @JsonProperty
-  private RedisConfiguration directory;
-  
-  @NotNull
-  @Valid
-  @JsonProperty
-  private AccountDatabaseCrawlerConfiguration accountDatabaseCrawler;
+	@NotNull
+	@Valid
+	@JsonProperty
+	private RedisConfiguration cache;
 
-  @NotNull
-  @Valid
-  @JsonProperty
-  private RedisConfiguration pushScheduler;
+	@NotNull
+	@Valid
+	@JsonProperty
+	private RedisConfiguration directory;
 
-  @NotNull
-  @Valid
-  @JsonProperty
-  private MessageCacheConfiguration messageCache;
+	@NotNull
+	@Valid
+	@JsonProperty
+	private AccountDatabaseCrawlerConfiguration accountDatabaseCrawler;
 
-  @Valid
-  @NotNull
-  @JsonProperty
-  private DatabaseConfiguration messageStore;
-  
-  @Valid
-  @NotNull
-  @JsonProperty
-  private DatabaseConfiguration abuseDatabase;
+	@NotNull
+	@Valid
+	@JsonProperty
+	private RedisConfiguration pushScheduler;
 
-  @Valid
-  @NotNull
-  @JsonProperty
-  private List<TestDeviceConfiguration> testDevices = new LinkedList<>();
+	@NotNull
+	@Valid
+	@JsonProperty
+	private MessageCacheConfiguration messageCache;
 
-  @Valid
-  @NotNull
-  @JsonProperty
-  private List<MaxDeviceConfiguration> maxDevices = new LinkedList<>();
+	@Valid
+	@NotNull
+	@JsonProperty
+	private DatabaseConfiguration messageStore;
 
-  /*
-   * excluded federation configuration, let's preserve for future purposes 
-   * 
-  @Valid
-  @JsonProperty
-  private FederationConfiguration federation = new FederationConfiguration();
-  
-  */
+	@Valid
+	@NotNull
+	@JsonProperty
+	private DatabaseConfiguration abuseDatabase;
 
-  @Valid
-  @NotNull
-  @JsonProperty
-  private DatabaseConfiguration keysDatabase;
+	@Valid
+	@NotNull
+	@JsonProperty
+	private List<TestDeviceConfiguration> testDevices = new LinkedList<>();
 
-  @Valid
-  @NotNull
-  @JsonProperty
-  private DatabaseConfiguration accountsDatabase;
+	@Valid
+	@NotNull
+	@JsonProperty
+	private List<MaxDeviceConfiguration> maxDevices = new LinkedList<>();
 
-  @JsonProperty
-  private DatabaseConfiguration read_database;
+	/*
+	 * excluded federation configuration, let's preserve for future purposes
+	 * 
+	 * @Valid
+	 * 
+	 * @JsonProperty private FederationConfiguration federation = new
+	 * FederationConfiguration();
+	 * 
+	 */
 
-  @Valid
-  @NotNull
-  @JsonProperty
-  private RateLimitsConfiguration limits = new RateLimitsConfiguration();
+	@Valid
+	@NotNull
+	@JsonProperty
+	private DatabaseConfiguration keysDatabase;
 
-  @Valid
-  @NotNull
-  @JsonProperty
-  private JerseyClientConfiguration httpClient = new JerseyClientConfiguration();
+	@Valid
+	@NotNull
+	@JsonProperty
+	private DatabaseConfiguration accountsDatabase;
 
-  @Valid
-  @NotNull
-  @JsonProperty
-  private WebSocketConfiguration webSocket = new WebSocketConfiguration();
+	@JsonProperty
+	private DatabaseConfiguration read_database;
 
-  @Valid
-  @NotNull
-  @JsonProperty
-  private TurnConfiguration turn;
+	@Valid
+	@NotNull
+	@JsonProperty
+	private RateLimitsConfiguration limits = new RateLimitsConfiguration();
 
-  @Valid
-  @NotNull
-  @JsonProperty
-  private GcmConfiguration gcm;
+	@Valid
+	@NotNull
+	@JsonProperty
+	private JerseyClientConfiguration httpClient = new JerseyClientConfiguration();
 
-  @Valid
-  @NotNull
-  @JsonProperty
-  private ApnConfiguration apn;
-  
-  @Valid
-  @NotNull
-  @JsonProperty
-  private UnidentifiedDeliveryConfiguration unidentifiedDelivery;
-  
-  @Valid
-  @NotNull
-  @JsonProperty
-  private RecaptchaConfiguration recaptcha;
-  
-  @Valid
-  @NotNull
-  @JsonProperty
-  private SecureStorageServiceConfiguration storageService;
-  
-  @Valid
-  @NotNull
-  @JsonProperty
-  private SecureBackupServiceConfiguration backupService;
-  
-  @NotNull
-  @JsonProperty
-  private LocalParametersConfiguration localParametersConfiguration;
-  
-  @NotNull
-  @JsonProperty
-  private ServiceConfiguration serviceConfiguration;
-  
-  private Map<String, String> transparentDataIndex = new HashMap<>();
-  
-  public RecaptchaConfiguration getRecaptchaConfiguration() {
-	    return recaptcha;
-	  }
+	@Valid
+	@NotNull
+	@JsonProperty
+	private WebSocketConfiguration webSocket = new WebSocketConfiguration();
 
-  public WebSocketConfiguration getWebSocketConfiguration() {
-    return webSocket;
-  }
+	@Valid
+	@NotNull
+	@JsonProperty
+	private TurnConfiguration turn;
 
-  public PushConfiguration getPushConfiguration() {
-    return push;
-  }
+	@Valid
+	@NotNull
+	@JsonProperty
+	private GcmConfiguration gcm;
 
-  public JerseyClientConfiguration getJerseyClientConfiguration() {
-    return httpClient;
-  }
+	@Valid
+	@NotNull
+	@JsonProperty
+	private ApnConfiguration apn;
 
-  public AttachmentsConfiguration getAttachmentsConfiguration() {
-    return attachments;
-  }
-  
-  public AttachmentsConfiguration getDebugLogsConfiguration() {
-	    return debuglogs;
-	  }
+	@Valid
+	@NotNull
+	@JsonProperty
+	private UnidentifiedDeliveryConfiguration unidentifiedDelivery;
 
-  public RedisConfiguration getCacheConfiguration() {
-    return cache;
-  }
+	@Valid
+	@NotNull
+	@JsonProperty
+	private RecaptchaConfiguration recaptcha;
 
-  public RedisConfiguration getDirectoryConfiguration() {
-    return directory;
-  }
-  
-  public SecureStorageServiceConfiguration getSecureStorageServiceConfiguration() {
-	    return storageService;
-	  }
-  
-  public AccountDatabaseCrawlerConfiguration getAccountDatabaseCrawlerConfiguration() {
-	    return accountDatabaseCrawler;
-	  }
+	@Valid
+	@NotNull
+	@JsonProperty
+	private SecureStorageServiceConfiguration storageService;
 
-  public MessageCacheConfiguration getMessageCacheConfiguration() {
-    return messageCache;
-  }
+	@NotNull
+	@JsonProperty
+	private LocalParametersConfiguration localParametersConfiguration;
 
-  public RedisConfiguration getPushScheduler() {
-    return pushScheduler;
-  }
+	@NotNull
+	@JsonProperty
+	private ServiceConfiguration serviceConfiguration;
 
-  public DatabaseConfiguration getMessageStoreConfiguration() {
-    return messageStore;
-  }
-  
-  public DatabaseConfiguration getAbuseDatabaseConfiguration() {
-	    return abuseDatabase;
-	  }
+	private Map<String, String> transparentDataIndex = new HashMap<>();
 
-  public DatabaseConfiguration getKeysDatabase() {
-	    return keysDatabase;
-  }
+	public RecaptchaConfiguration getRecaptchaConfiguration() {
+		return recaptcha;
+	}
 
-  public DatabaseConfiguration getAccountsDatabaseConfiguration() {
-	    return accountsDatabase;
-  }
+	public WebSocketConfiguration getWebSocketConfiguration() {
+		return webSocket;
+	}
 
-  public RateLimitsConfiguration getLimitsConfiguration() {
-    return limits;
-  }
+	public PushConfiguration getPushConfiguration() {
+		return push;
+	}
 
-  /*
-   * excluded federation configuration, let's preserve for future purposes 
-   *   
-  public FederationConfiguration getFederationConfiguration() {
-    return federation;
-  }
-  
-  */
+	public JerseyClientConfiguration getJerseyClientConfiguration() {
+		return httpClient;
+	}
 
-  public TurnConfiguration getTurnConfiguration() {
-    return turn;
-  }
+	public AttachmentsConfiguration getAttachmentsConfiguration() {
+		return attachments;
+	}
 
-  public GcmConfiguration getGcmConfiguration() {
-    return gcm;
-  }
+	public AttachmentsConfiguration getDebugLogsConfiguration() {
+		return debuglogs;
+	}
 
-  public ApnConfiguration getApnConfiguration() {
-    return apn;
-  }
+	public RedisConfiguration getCacheConfiguration() {
+		return cache;
+	}
 
-  public CdnConfiguration getCdnConfiguration() {
-	    return cdn;
-  }
-  
-  public UnidentifiedDeliveryConfiguration getDeliveryCertificate() {
-	    return unidentifiedDelivery;
-	  }
+	public RedisConfiguration getDirectoryConfiguration() {
+		return directory;
+	}
 
-  public Map<String, Integer> getTestDevices() {
-    Map<String, Integer> results = new HashMap<>();
+	public SecureStorageServiceConfiguration getSecureStorageServiceConfiguration() {
+		return storageService;
+	}
 
-    for (TestDeviceConfiguration testDeviceConfiguration : testDevices) {
-      results.put(testDeviceConfiguration.getNumber(),
-                  testDeviceConfiguration.getCode());
-    }
+	public AccountDatabaseCrawlerConfiguration getAccountDatabaseCrawlerConfiguration() {
+		return accountDatabaseCrawler;
+	}
 
-    return results;
-  }
+	public MessageCacheConfiguration getMessageCacheConfiguration() {
+		return messageCache;
+	}
 
-  public Map<String, Integer> getMaxDevices() {
-    Map<String, Integer> results = new HashMap<>();
+	public RedisConfiguration getPushScheduler() {
+		return pushScheduler;
+	}
 
-    for (MaxDeviceConfiguration maxDeviceConfiguration : maxDevices) {
-      results.put(maxDeviceConfiguration.getNumber(),
-                  maxDeviceConfiguration.getCount());
-    }
+	public DatabaseConfiguration getMessageStoreConfiguration() {
+		return messageStore;
+	}
 
-    return results;
-  }
-  
-  public Map<String, String> getTransparentDataIndex() {
-	    return transparentDataIndex;
-	  }
-  
-  public SecureBackupServiceConfiguration getSecureBackupServiceConfiguration() {
-	    return backupService;
-	  }
-  
-  public LocalParametersConfiguration getLocalParametersConfiguration() {
-	    return localParametersConfiguration;
-	  }
-  
-  public ServiceConfiguration getServiceConfiguration() {
-	    return serviceConfiguration;
-	  }
+	public DatabaseConfiguration getAbuseDatabaseConfiguration() {
+		return abuseDatabase;
+	}
+
+	public DatabaseConfiguration getKeysDatabase() {
+		return keysDatabase;
+	}
+
+	public DatabaseConfiguration getAccountsDatabaseConfiguration() {
+		return accountsDatabase;
+	}
+
+	public RateLimitsConfiguration getLimitsConfiguration() {
+		return limits;
+	}
+
+	/*
+	 * excluded federation configuration, let's preserve for future purposes
+	 * 
+	 * public FederationConfiguration getFederationConfiguration() { return
+	 * federation; }
+	 * 
+	 */
+
+	public TurnConfiguration getTurnConfiguration() {
+		return turn;
+	}
+
+	public GcmConfiguration getGcmConfiguration() {
+		return gcm;
+	}
+
+	public ApnConfiguration getApnConfiguration() {
+		return apn;
+	}
+
+	public CdnConfiguration getCdnConfiguration() {
+		return cdn;
+	}
+
+	public UnidentifiedDeliveryConfiguration getDeliveryCertificate() {
+		return unidentifiedDelivery;
+	}
+
+	public Map<String, Integer> getTestDevices() {
+		Map<String, Integer> results = new HashMap<>();
+
+		for (TestDeviceConfiguration testDeviceConfiguration : testDevices) {
+			results.put(testDeviceConfiguration.getNumber(), testDeviceConfiguration.getCode());
+		}
+
+		return results;
+	}
+
+	public Map<String, Integer> getMaxDevices() {
+		Map<String, Integer> results = new HashMap<>();
+
+		for (MaxDeviceConfiguration maxDeviceConfiguration : maxDevices) {
+			results.put(maxDeviceConfiguration.getNumber(), maxDeviceConfiguration.getCount());
+		}
+
+		return results;
+	}
+
+	public Map<String, String> getTransparentDataIndex() {
+		return transparentDataIndex;
+	}
+
+	public LocalParametersConfiguration getLocalParametersConfiguration() {
+		return localParametersConfiguration;
+	}
+
+	public ServiceConfiguration getServiceConfiguration() {
+		return serviceConfiguration;
+	}
 }

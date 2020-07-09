@@ -216,8 +216,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     AccountAuthenticator                  accountAuthenticator                  = new AccountAuthenticator(accountsManager);
     DisabledPermittedAccountAuthenticator disabledPermittedAccountAuthenticator = new DisabledPermittedAccountAuthenticator(accountsManager);
     
-    ExternalServiceCredentialGenerator storageCredentialsGenerator = new ExternalServiceCredentialGenerator(config.getSecureStorageServiceConfiguration().getUserAuthenticationTokenSharedSecret(), new byte[0], false);
-    ExternalServiceCredentialGenerator backupCredentialsGenerator  = new ExternalServiceCredentialGenerator(config.getSecureBackupServiceConfiguration().getUserAuthenticationTokenSharedSecret(), new byte[0], false);
+    ExternalServiceCredentialGenerator storageCredentialsGenerator = new ExternalServiceCredentialGenerator(config.getSecureStorageServiceConfiguration().getUserAuthenticationTokenSharedSecret(), new byte[0], false);    
 
 //    ApnFallbackManager       apnFallbackManager  = new ApnFallbackManager(pushSchedulerClient, apnSender, accountsManager);
     
@@ -283,7 +282,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
    
     environment.jersey().register(new AccountController(pendingAccountsManager, accountsManager, usernamesManager, abusiveHostRules, rateLimiters, messagesManager, turnTokenGenerator, config.getTestDevices(), recaptchaClient, gcmSender
     		// , apnSender
-    		, backupCredentialsGenerator, config.getLocalParametersConfiguration(), config.getServiceConfiguration()));
+    		, config.getLocalParametersConfiguration(), config.getServiceConfiguration()));
     environment.jersey().register(new DeviceController(pendingDevicesManager, accountsManager, messagesManager, rateLimiters, config.getMaxDevices(), config.getLocalParametersConfiguration().getVerificationCodeLifetime()));
 //  environment.jersey().register(new DirectoryController(rateLimiters, directory));
     environment.jersey().register(new PlainDirectoryController(rateLimiters, accountsManager));
@@ -295,8 +294,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     environment.jersey().register(new ProvisioningController(rateLimiters, pushSender));
     environment.jersey().register(new CertificateController(new CertificateGenerator(config.getDeliveryCertificate().getCertificate(), config.getDeliveryCertificate().getPrivateKey(), config.getDeliveryCertificate().getExpiresDays())));
 
-    environment.jersey().register(new SecureStorageController(storageCredentialsGenerator));
-    environment.jersey().register(new SecureBackupController(backupCredentialsGenerator));
+    environment.jersey().register(new SecureStorageController(storageCredentialsGenerator));    
     environment.jersey().register(attachmentControllerV1);
     environment.jersey().register(attachmentControllerV2);
     environment.jersey().register(debugLogController);

@@ -115,8 +115,7 @@ public class AccountController {
 	private final Map<String, Integer> testDevices;
 	private final RecaptchaClient recaptchaClient;
 	private final GCMSender gcmSender;
-//	  private final APNSender              apnSender;
-	private final ExternalServiceCredentialGenerator backupServiceCredentialGenerator;
+//	  private final APNSender              apnSender;	
 	private final LocalParametersConfiguration localParametersConfiguration;
 	private final ServiceConfiguration serviceConfiguration;		
 
@@ -124,8 +123,7 @@ public class AccountController {
 			UsernamesManager usernames, AbusiveHostRules abusiveHostRules, RateLimiters rateLimiters,
 			MessagesManager messagesManager, TurnTokenGenerator turnTokenGenerator, Map<String, Integer> testDevices,
 			RecaptchaClient recaptchaClient, GCMSender gcmSender,
-			// APNSender apnSender,
-			ExternalServiceCredentialGenerator backupServiceCredentialGenerator,
+			// APNSender apnSender,			
 			LocalParametersConfiguration localParametersConfiguration,
 			ServiceConfiguration serviceConfiguration) {
 		this.pendingAccounts = pendingAccounts;
@@ -139,8 +137,7 @@ public class AccountController {
 		this.turnTokenGenerator = turnTokenGenerator;
 		this.recaptchaClient = recaptchaClient;
 		this.gcmSender = gcmSender;
-//    this.apnSender          = apnSender;
-		this.backupServiceCredentialGenerator = backupServiceCredentialGenerator;
+//    this.apnSender          = apnSender;		
 		this.localParametersConfiguration = localParametersConfiguration;
 		this.serviceConfiguration = serviceConfiguration;				
 	}
@@ -275,15 +272,11 @@ public class AccountController {
 				rateLimiters.getVerifyLimiter().clear(userLogin);
 
 				long timeRemaining = TimeUnit.DAYS.toMillis(7)
-						- (System.currentTimeMillis() - existingAccount.get().getLastSeen());
-				Optional<ExternalServiceCredentials> credentials = existingAccount.get().getRegistrationLock()
-						.isPresent() && existingAccount.get().getRegistrationLockSalt().isPresent()
-								? Optional.of(backupServiceCredentialGenerator.generateFor(userLogin))
-								: Optional.empty();
+						- (System.currentTimeMillis() - existingAccount.get().getLastSeen());				
 
 				if (Util.isEmpty(accountAttributes.getPin()) && Util.isEmpty(accountAttributes.getRegistrationLock())) {
 					throw new WebApplicationException(Response.status(423)
-							.entity(new RegistrationLockFailure(timeRemaining, credentials.orElse(null))).build());
+							.entity(new RegistrationLockFailure(timeRemaining)).build());
 				}
 
 				rateLimiters.getPinLimiter().validate(userLogin);
@@ -304,7 +297,7 @@ public class AccountController {
 
 				if (!pinMatches) {
 					throw new WebApplicationException(Response.status(423)
-							.entity(new RegistrationLockFailure(timeRemaining, credentials.orElse(null))).build());
+							.entity(new RegistrationLockFailure(timeRemaining)).build());
 				}
 
 				rateLimiters.getPinLimiter().clear(userLogin);

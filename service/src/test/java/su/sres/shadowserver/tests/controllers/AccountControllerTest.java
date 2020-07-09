@@ -106,8 +106,7 @@ public class AccountControllerTest {
 //  private        APNSender              apnSender              = mock(APNSender.class);
   private UsernamesManager              usernamesManager       = mock(UsernamesManager.class);
   
-  private byte[] registration_lock_key = new byte[32];
-  private ExternalServiceCredentialGenerator storageCredentialGenerator = new ExternalServiceCredentialGenerator(new byte[32], new byte[32], false);
+  private byte[] registration_lock_key = new byte[32];  
 
   private LocalParametersConfiguration localParametersConfiguration = new LocalParametersConfiguration();
   private ServiceConfiguration serviceConfiguration = new ServiceConfiguration();
@@ -138,8 +137,7 @@ public class AccountControllerTest {
                                                                                                new HashMap<>(),
                                                                                                recaptchaClient,
                                                                                                gcmSender,
-                                                                       //                      apnSender,
-                                                                                               storageCredentialGenerator,
+                                                                       //                      apnSender,                                                                                               
                                                                                                localParametersConfiguration,
                                                                                                serviceConfiguration
                                                                                                ))
@@ -619,8 +617,7 @@ public class AccountControllerTest {
 
     assertThat(response.getStatus()).isEqualTo(423);
 
-    RegistrationLockFailure failure = response.readEntity(RegistrationLockFailure.class);
-    assertThat(failure.getBackupCredentials()).isNull();
+    RegistrationLockFailure failure = response.readEntity(RegistrationLockFailure.class);    
 
     verifyNoMoreInteractions(pinLimiter);
   }
@@ -638,10 +635,7 @@ public class AccountControllerTest {
     assertThat(response.getStatus()).isEqualTo(423);
 
     RegistrationLockFailure failure = response.readEntity(RegistrationLockFailure.class);
-    assertThat(failure.getBackupCredentials()).isNotNull();
-    assertThat(failure.getBackupCredentials().getUsername()).isEqualTo(SENDER_REG_LOCK);
-    assertThat(failure.getBackupCredentials().getPassword()).isNotEmpty();
-    assertThat(failure.getBackupCredentials().getPassword().startsWith(SENDER_REG_LOCK)).isTrue();
+    
     assertThat(failure.getTimeRemaining()).isGreaterThan(0);
 
     verifyNoMoreInteractions(pinLimiter);
