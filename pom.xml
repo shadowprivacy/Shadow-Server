@@ -20,7 +20,7 @@
         <jackson.api.version>2.9.10.20191020</jackson.api.version>
         <resilience4j.version>0.14.1</resilience4j.version>                
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <ShadowServer.version>1.01</ShadowServer.version>
+        <ShadowServer.version>1.02</ShadowServer.version>
                
     </properties>
     
