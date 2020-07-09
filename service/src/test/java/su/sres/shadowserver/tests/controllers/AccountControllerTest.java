@@ -517,11 +517,11 @@ public class AccountControllerTest {
                 		 MediaType.APPLICATION_JSON_TYPE), AccountCreationResult.class);
 
 	    assertThat(result.getUuid()).isNotNull();
+	    assertThat(result.isStorageCapable()).isFalse();
 
     verify(accountsManager, times(1)).create(isA(Account.class));
   }
-  
-  // TODO: this one is currently pointless and needs be redeveloped if we implement storage in future
+    
   @Test
   public void testVerifySupportsStorage() throws Exception {
     AccountCreationResult result =
@@ -533,6 +533,7 @@ public class AccountControllerTest {
                                     MediaType.APPLICATION_JSON_TYPE), AccountCreationResult.class);
 
     assertThat(result.getUuid()).isNotNull();
+    assertThat(result.isStorageCapable()).isTrue();
     
     verify(accountsManager, times(1)).create(isA(Account.class));    
   }

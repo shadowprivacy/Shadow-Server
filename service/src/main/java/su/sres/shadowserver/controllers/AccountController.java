@@ -317,7 +317,7 @@ public class AccountController {
 						
 //			metricRegistry.meter(name(AccountController.class, "verify", Util.getCountryCode(number))).mark();
 
-			return new AccountCreationResult(account.getUuid());
+			return new AccountCreationResult(account.getUuid(), existingAccount.map(Account::isStorageSupported).orElse(false));
 
 		} catch (InvalidAuthorizationHeaderException e) {
 			logger.info("Bad Authorization Header", e);
@@ -525,7 +525,7 @@ public class AccountController {
 	@Path("/whoami")
 	@Produces(MediaType.APPLICATION_JSON)
 	public AccountCreationResult whoAmI(@Auth Account account) {
-		return new AccountCreationResult(account.getUuid());
+		return new AccountCreationResult(account.getUuid(), account.isStorageSupported());
 	}
 
 	@DELETE

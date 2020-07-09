@@ -1,7 +1,6 @@
 package su.sres.shadowserver.s3;
 
 import com.amazonaws.util.Base16Lower;
-import com.google.common.annotations.VisibleForTesting;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;

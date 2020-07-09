@@ -8,14 +8,22 @@ public class AccountCreationResult {
 
   @JsonProperty
   private UUID uuid;
+  
+  @JsonProperty
+  private boolean storageCapable;
 
   public AccountCreationResult() {}
 
-  public AccountCreationResult(UUID uuid) {
-    this.uuid = uuid;
+  public AccountCreationResult(UUID uuid, boolean storageCapable) {
+	    this.uuid           = uuid;
+	    this.storageCapable = storageCapable;
   }
 
   public UUID getUuid() {
     return uuid;
+  }
+  
+  public boolean isStorageCapable() {
+	    return storageCapable;
   }
 }

@@ -251,8 +251,8 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     environment.lifecycle().manage(remoteConfigsManager);
     
     MinioClient            minioClient = new MinioClient(config.getCdnConfiguration().getUri(), config.getCdnConfiguration().getAccessKey(), config.getCdnConfiguration().getAccessSecret());
-    PostPolicyGenerator    cdnPolicyGenerator  = new PostPolicyGenerator(config.getCdnConfiguration().getRegion(), config.getCdnConfiguration().getBucket(), config.getCdnConfiguration().getAccessKey());
-    PolicySigner           cdnPolicySigner     = new PolicySigner(config.getCdnConfiguration().getAccessSecret(), config.getCdnConfiguration().getRegion());
+    PostPolicyGenerator    profileCdnPolicyGenerator  = new PostPolicyGenerator(config.getCdnConfiguration().getRegion(), config.getCdnConfiguration().getBucket(), config.getCdnConfiguration().getAccessKey());
+    PolicySigner           profileCdnPolicySigner     = new PolicySigner(config.getCdnConfiguration().getAccessSecret(), config.getCdnConfiguration().getRegion());
     
     ServerSecretParams        zkSecretParams      = new ServerSecretParams(config.getZkConfig().getServerSecret());
     ServerZkProfileOperations zkProfileOperations = new ServerZkProfileOperations(zkSecretParams);
@@ -265,12 +265,12 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     KeysController       keysController       = new KeysController(rateLimiters, keys, accountsManager, federatedClientManager);
     MessageController    messageController    = new MessageController(rateLimiters, pushSender, receiptSender, accountsManager, messagesManager, federatedClientManager, null);
     */
-    AttachmentControllerV1 attachmentControllerV1 = new AttachmentControllerV1(rateLimiters, config.getAttachmentsConfiguration().getAccessKey(), config.getAttachmentsConfiguration().getAccessSecret(), config.getAttachmentsConfiguration().getBucket()                                                  );
-    AttachmentControllerV2 attachmentControllerV2 = new AttachmentControllerV2(rateLimiters, config.getAttachmentsConfiguration().getAccessKey(), config.getAttachmentsConfiguration().getAccessSecret(), config.getAttachmentsConfiguration().getRegion(), config.getAttachmentsConfiguration().getBucket());
+    AttachmentControllerV1 attachmentControllerV1 = new AttachmentControllerV1(rateLimiters, config.getAwsAttachmentsConfiguration().getAccessKey(), config.getAwsAttachmentsConfiguration().getAccessSecret(), config.getAwsAttachmentsConfiguration().getBucket()                                                  );
+    AttachmentControllerV2 attachmentControllerV2 = new AttachmentControllerV2(rateLimiters, config.getAwsAttachmentsConfiguration().getAccessKey(), config.getAwsAttachmentsConfiguration().getAccessSecret(), config.getAwsAttachmentsConfiguration().getRegion(), config.getAwsAttachmentsConfiguration().getBucket());
     DebugLogController     debugLogController     = new DebugLogController    (rateLimiters, config.getDebugLogsConfiguration().getAccessKey(),    config.getDebugLogsConfiguration().getAccessSecret(),  config.getDebugLogsConfiguration().getRegion(),   config.getDebugLogsConfiguration().getBucket());
     KeysController         keysController         = new KeysController        (rateLimiters, keys, accountsManager);
     MessageController      messageController      = new MessageController     (rateLimiters, pushSender, receiptSender, accountsManager, messagesManager, null);
-    ProfileController      profileController      = new ProfileController     (rateLimiters, accountsManager, profilesManager, usernamesManager, minioClient, cdnPolicyGenerator, cdnPolicySigner, config.getCdnConfiguration().getBucket(), zkProfileOperations, isZkEnabled);
+    ProfileController      profileController      = new ProfileController     (rateLimiters, accountsManager, profilesManager, usernamesManager, minioClient, profileCdnPolicyGenerator, profileCdnPolicySigner, config.getCdnConfiguration().getBucket(), zkProfileOperations, isZkEnabled);
     StickerController      stickerController      = new StickerController     (rateLimiters, config.getCdnConfiguration().getAccessKey(),         config.getCdnConfiguration().getAccessSecret(), config.getCdnConfiguration().getRegion(), config.getCdnConfiguration().getBucket());
     RemoteConfigController remoteConfigController = new RemoteConfigController(remoteConfigsManager, config.getRemoteConfigConfiguration().getAuthorizedTokens());
 
