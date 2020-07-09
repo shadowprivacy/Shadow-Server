@@ -19,9 +19,10 @@ package su.sres.websocket.auth;
 import org.eclipse.jetty.server.Authentication;
 import org.eclipse.jetty.websocket.api.UpgradeRequest;
 
+import java.security.Principal;
 import java.util.Optional;
 
-public interface WebSocketAuthenticator<T> {
+public interface WebSocketAuthenticator<T extends Principal> {
   AuthenticationResult<T> authenticate(UpgradeRequest request) throws AuthenticationException;
 
   @SuppressWarnings("OptionalUsedAsFieldOrParameterType")

@@ -293,7 +293,7 @@ public class ProfileControllerTest {
 
 @Test
 public void testSetProfileWantAvatarUpload() throws InvalidInputException {
-  ProfileKeyCommitment commitment = new ProfileKey(new byte[32]).getCommitment();
+	ProfileKeyCommitment commitment = new ProfileKey(new byte[32]).getCommitment(AuthHelper.VALID_UUID);
 
   ProfileAvatarUploadAttributes uploadAttributes = resources.getJerseyTest()
                                                             .target("/v1/profile/")
@@ -316,7 +316,7 @@ public void testSetProfileWantAvatarUpload() throws InvalidInputException {
 
 @Test
 public void testSetProfileWantAvatarUploadWithBadProfileSize() throws InvalidInputException {
-  ProfileKeyCommitment commitment = new ProfileKey(new byte[32]).getCommitment();
+	ProfileKeyCommitment commitment = new ProfileKey(new byte[32]).getCommitment(AuthHelper.VALID_UUID);
 
   Response response = resources.getJerseyTest()
                                .target("/v1/profile/")
@@ -329,7 +329,7 @@ public void testSetProfileWantAvatarUploadWithBadProfileSize() throws InvalidInp
 
 @Test
 public void testSetProfileWithoutAvatarUpload() throws InvalidInputException {
-  ProfileKeyCommitment commitment = new ProfileKey(new byte[32]).getCommitment();
+	ProfileKeyCommitment commitment = new ProfileKey(new byte[32]).getCommitment(AuthHelper.VALID_UUID);
 
   Response response = resources.getJerseyTest()
                                .target("/v1/profile/")
@@ -355,7 +355,7 @@ public void testSetProfileWithoutAvatarUpload() throws InvalidInputException {
 
 @Test
 public void testSetProvfileWithAvatarUploadAndPreviousAvatar() throws InvalidInputException, MinioException, XmlPullParserException, InvalidKeyException, IOException, NoSuchAlgorithmException {
-  ProfileKeyCommitment commitment = new ProfileKey(new byte[32]).getCommitment();
+	ProfileKeyCommitment commitment = new ProfileKey(new byte[32]).getCommitment(AuthHelper.VALID_UUID_TWO);
 
   ProfileAvatarUploadAttributes uploadAttributes= resources.getJerseyTest()
                                                            .target("/v1/profile/")

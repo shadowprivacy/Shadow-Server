@@ -4,7 +4,6 @@ import com.codahale.metrics.annotation.Timed;
 import org.apache.commons.codec.DecoderException;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.codec.binary.Hex;
-import org.hibernate.validator.valuehandling.UnwrapValidatedValue;
 import org.signal.zkgroup.InvalidInputException;
 import org.signal.zkgroup.VerificationFailedException;
 import org.signal.zkgroup.profiles.ProfileKeyCommitment;
@@ -21,6 +20,7 @@ import su.sres.shadowserver.auth.Anonymous;
 import su.sres.shadowserver.auth.UnidentifiedAccessChecksum;
 
 import javax.validation.Valid;
+import javax.validation.valueextraction.Unwrapping;
 import javax.ws.rs.Consumes;
 import javax.ws.rs.GET;
 import javax.ws.rs.HeaderParam;
@@ -286,7 +286,7 @@ public class ProfileController {
 	@PUT
 	@Produces(MediaType.APPLICATION_JSON)
 	@Path("/name/{name}")
-	public void setProfile(@Auth Account account, @PathParam("name") @UnwrapValidatedValue(true) @ExactlySize({72, 108}) Optional<String> name) {	
+	public void setProfile(@Auth Account account, @PathParam("name") @ExactlySize(value = {72, 108}, payload = {Unwrapping.Unwrap.class}) Optional<String> name) {	
 		account.setProfileName(name.orElse(null));
 		accountsManager.update(account);
 	}
