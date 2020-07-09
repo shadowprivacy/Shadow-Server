@@ -26,6 +26,9 @@ import com.google.common.collect.ImmutableSet;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.eclipse.jetty.servlets.CrossOriginFilter;
 import org.jdbi.v3.core.Jdbi;
+import org.signal.zkgroup.ServerSecretParams;
+import org.signal.zkgroup.auth.ServerZkAuthOperations;
+import org.signal.zkgroup.profiles.ServerZkProfileOperations;
 import su.sres.websocket.WebSocketResourceProviderFactory;
 import su.sres.websocket.setup.WebSocketEnvironment;
 
@@ -44,6 +47,7 @@ import io.dropwizard.jdbi3.JdbiFactory;
 import io.dropwizard.jersey.protobuf.ProtobufBundle;
 import io.dropwizard.setup.Bootstrap;
 import io.dropwizard.setup.Environment;
+import io.minio.MinioClient;
 import su.sres.dispatch.DispatchManager;
 import su.sres.shadowserver.auth.AccountAuthenticator;
 import su.sres.shadowserver.auth.CertificateGenerator;
@@ -80,6 +84,8 @@ import su.sres.shadowserver.push.ReceiptSender;
 import su.sres.shadowserver.push.WebsocketSender;
 import su.sres.shadowserver.recaptcha.RecaptchaClient;
 import su.sres.shadowserver.redis.ReplicatedJedisPool;
+import su.sres.shadowserver.s3.PolicySigner;
+import su.sres.shadowserver.s3.PostPolicyGenerator;
 import su.sres.shadowserver.storage.*;
 import su.sres.shadowserver.util.Constants;
 import su.sres.shadowserver.websocket.AuthenticatedConnectListener;
@@ -92,6 +98,7 @@ import su.sres.shadowserver.workers.PubKeyHashCommand;
 import su.sres.shadowserver.workers.DeleteUserCommand;
 import su.sres.shadowserver.workers.DirectoryCommand;
 import su.sres.shadowserver.workers.VacuumCommand;
+import su.sres.shadowserver.workers.ZkParamsCommand;
 
 import java.util.Optional;
 
@@ -116,6 +123,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     bootstrap.addCommand(new PubKeyHashCommand());
     bootstrap.addCommand(new DeleteUserCommand());
     bootstrap.addCommand(new CertificateCommand());
+    bootstrap.addCommand(new ZkParamsCommand());
     
     bootstrap.addBundle(new ProtobufBundle<WhisperServerConfiguration>());
     
@@ -178,6 +186,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     PendingDevices    pendingDevices    = new PendingDevices (accountDatabase);
     Usernames         usernames         = new Usernames(accountDatabase);
     ReservedUsernames reservedUsernames = new ReservedUsernames(accountDatabase);
+    Profiles          profiles          = new Profiles(accountDatabase);
     Keys              keys              = new Keys(keysDatabase);
     Messages          messages          = new Messages(messageDatabase);
     AbusiveHostRules  abusiveHostRules  = new AbusiveHostRules(abuseDatabase);
@@ -197,8 +206,9 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     PendingDevicesManager      pendingDevicesManager      = new PendingDevicesManager (pendingDevices, cacheClient );
     AccountsManager            accountsManager            = new AccountsManager(accounts, directory, cacheClient);
     UsernamesManager           usernamesManager           = new UsernamesManager(usernames, reservedUsernames, cacheClient);
- // excluded federation, reserved for future purposes
-    //   FederatedClientManager     federatedClientManager     = new FederatedClientManager(environment, config.getJerseyClientConfiguration(), config.getFederationConfiguration());
+    // excluded federation, reserved for future purposes
+    // FederatedClientManager     federatedClientManager     = new FederatedClientManager(environment, config.getJerseyClientConfiguration(), config.getFederationConfiguration());
+    ProfilesManager            profilesManager            = new ProfilesManager(profiles, cacheClient);
     MessagesCache              messagesCache              = new MessagesCache(messagesClient, messages, accountsManager, config.getMessageCacheConfiguration().getPersistDelayMinutes());
     MessagesManager            messagesManager            = new MessagesManager(messages, messagesCache);
     DeadLetterHandler          deadLetterHandler          = new DeadLetterHandler(messagesManager);
@@ -244,6 +254,16 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     environment.lifecycle().manage(messagesCache);
     environment.lifecycle().manage(accountDatabaseCrawler);
 
+    
+    MinioClient            minioClient = new MinioClient(config.getCdnConfiguration().getUri(), config.getCdnConfiguration().getAccessKey(), config.getCdnConfiguration().getAccessSecret());
+    PostPolicyGenerator    cdnPolicyGenerator  = new PostPolicyGenerator(config.getCdnConfiguration().getRegion(), config.getCdnConfiguration().getBucket(), config.getCdnConfiguration().getAccessKey());
+    PolicySigner           cdnPolicySigner     = new PolicySigner(config.getCdnConfiguration().getAccessSecret(), config.getCdnConfiguration().getRegion());
+    
+    ServerSecretParams        zkSecretParams      = new ServerSecretParams(config.getZkConfig().getServerSecret());
+    ServerZkProfileOperations zkProfileOperations = new ServerZkProfileOperations(zkSecretParams);
+    ServerZkAuthOperations    zkAuthOperations    = new ServerZkAuthOperations(zkSecretParams);
+    boolean                   isZkEnabled         = config.getZkConfig().isEnabled();
+    
     /* excluded federation, reserved for future purposes
      *    
     AttachmentController attachmentController = new AttachmentController(rateLimiters, federatedClientManager, urlSigner);
@@ -255,7 +275,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     DebugLogController     debugLogController     = new DebugLogController    (rateLimiters, config.getDebugLogsConfiguration().getAccessKey(),    config.getDebugLogsConfiguration().getAccessSecret(),  config.getDebugLogsConfiguration().getRegion(),   config.getDebugLogsConfiguration().getBucket());
     KeysController         keysController         = new KeysController        (rateLimiters, keys, accountsManager);
     MessageController      messageController      = new MessageController     (rateLimiters, pushSender, receiptSender, accountsManager, messagesManager, null);
-    ProfileController      profileController      = new ProfileController     (rateLimiters, accountsManager, usernamesManager, config.getCdnConfiguration());
+    ProfileController      profileController      = new ProfileController     (rateLimiters, accountsManager, profilesManager, usernamesManager, minioClient, cdnPolicyGenerator, cdnPolicySigner, config.getCdnConfiguration().getBucket(), zkProfileOperations, isZkEnabled);
     StickerController      stickerController      = new StickerController     (rateLimiters, config.getCdnConfiguration().getAccessKey(),         config.getCdnConfiguration().getAccessSecret(), config.getCdnConfiguration().getRegion(), config.getCdnConfiguration().getBucket());
 
     /* excluded federation, reserved for future purposes
@@ -292,7 +312,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
    // environment.jersey().register(new FederationControllerV2(accountsManager, attachmentController, messageController, keysController));
     
     environment.jersey().register(new ProvisioningController(rateLimiters, pushSender));
-    environment.jersey().register(new CertificateController(new CertificateGenerator(config.getDeliveryCertificate().getCertificate(), config.getDeliveryCertificate().getPrivateKey(), config.getDeliveryCertificate().getExpiresDays())));
+    environment.jersey().register(new CertificateController(new CertificateGenerator(config.getDeliveryCertificate().getCertificate(), config.getDeliveryCertificate().getPrivateKey(), config.getDeliveryCertificate().getExpiresDays()), zkAuthOperations, isZkEnabled));
 
     environment.jersey().register(new SecureStorageController(storageCredentialsGenerator));    
     environment.jersey().register(attachmentControllerV1);

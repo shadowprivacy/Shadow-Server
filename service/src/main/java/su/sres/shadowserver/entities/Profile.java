@@ -1,7 +1,12 @@
 package su.sres.shadowserver.entities;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.google.common.annotations.VisibleForTesting;
+
+import org.signal.zkgroup.profiles.ProfileKeyCredentialResponse;
+
 import java.util.UUID;
 
 public class Profile {
@@ -29,12 +34,18 @@ public class Profile {
 
   @JsonProperty
   private UUID uuid;
+  
+  @JsonProperty
+  @JsonSerialize(using = ProfileKeyCredentialResponseAdapter.Serializing.class)
+  @JsonDeserialize(using = ProfileKeyCredentialResponseAdapter.Deserializing.class)
+  private ProfileKeyCredentialResponse credential;
 
   public Profile() {}
 
   public Profile(String name, String avatar, String identityKey,
           String unidentifiedAccess, boolean unrestrictedUnidentifiedAccess,
-          UserCapabilities capabilities, String username, UUID uuid)
+          UserCapabilities capabilities, String username, UUID uuid,
+          ProfileKeyCredentialResponse credential)
 {
 	    this.name                           = name;
 	    this.avatar                         = avatar;
@@ -44,6 +55,7 @@ public class Profile {
 	    this.capabilities                   = capabilities;
 	    this.username                       = username;
 	    this.uuid                           = uuid;
+	    this.credential                     = credential;
   }
 
   @VisibleForTesting
