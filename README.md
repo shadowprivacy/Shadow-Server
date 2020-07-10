@@ -1,14 +1,14 @@
 Shadow-Server
 =================
 
-This product is a modified version of Signal-Server by Open Whisper Systems https://github.com/signalapp/Signal-Server and is aimed at corporate environments.
+This product is a modified version of <a href="https://github.com/signalapp/Signal-Server">Signal-Server</a> by Open Whisper Systems and is aimed at corporate environments.
 
 Documentation
 -------------
 
-Some protocol and implementation documentation is available here: https://signal.org/docs/
+Some Signal protocol and implementation documentation is available <a href="https://signal.org/docs/">here</a>. 
 
-Installation and operation documentation is coming soon.
+For building, installation and operation documentation check <a href="http://sres.su/shadow">this page</a>.
 
 
 Cryptography Notice
@@ -18,15 +18,12 @@ This distribution includes cryptographic software. The country in which you curr
 BEFORE using any encryption software, please check your country's laws, regulations and policies concerning the import, possession, or use, and re-export of encryption software, to see if this is permitted.
 See <http://www.wassenaar.org/> for more information.
 
-The U.S. Government Department of Commerce, Bureau of Industry and Security (BIS), has classified this software as Export Commodity Control Number (ECCN) 5D002.C.1, which includes information security software using or performing cryptographic functions with asymmetric algorithms.
-The form and manner of this distribution makes it eligible for export under the License Exception ENC Technology Software Unrestricted (TSU) exception (see the BIS Export Administration Regulations, Section 740.13) for both object code and source code.
-
 License
 ---------------------
-Original product:
+Original software:
 Copyright 2013-2016 Open Whisper Systems
 
-Modified product:
-Copyright 2019 Sophisticated Research
+Modified software:
+Copyright 2019-2020 Anton Alipov, sole trader
 
 Licensed under the AGPLv3: https://www.gnu.org/licenses/agpl-3.0.html
