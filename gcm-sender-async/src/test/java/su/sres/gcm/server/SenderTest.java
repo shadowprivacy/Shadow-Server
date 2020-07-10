@@ -36,8 +36,7 @@ public class SenderTest {
     mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
   }
 
-  @Test
-  @Ignore
+  @Test  
   public void testSuccess() throws InterruptedException, ExecutionException, TimeoutException, IOException {
     MockResponse successResponse = new MockResponse().setResponseCode(200)
                                                      .setBody(fixture("fixtures/response-success.json"));

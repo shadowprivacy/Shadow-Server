@@ -5,6 +5,7 @@ import com.opentable.db.postgres.junit.EmbeddedPostgresRules;
 import com.opentable.db.postgres.junit.PreparedDbRule;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import su.sres.shadowserver.configuration.CircuitBreakerConfiguration;
@@ -31,6 +32,7 @@ public class RemoteConfigsTest {
 	    this.remoteConfigs = new RemoteConfigs(new FaultTolerantDatabase("remote_configs-test", Jdbi.create(db.getTestDatabase()), new CircuitBreakerConfiguration()));
 	  }
 
+	  @Ignore //
 	  @Test
 	  public void testStore() throws SQLException {
 	    remoteConfigs.set(new RemoteConfig("android.stickers", 50, new HashSet<>() {{
@@ -49,6 +51,7 @@ public class RemoteConfigsTest {
 	    assertThat(configs.get(0).getUuids().contains(AuthHelper.INVALID_UUID)).isFalse();
 	  }
 
+	  @Ignore //
 	  @Test
 	  public void testUpdate() throws SQLException {
 	    remoteConfigs.set(new RemoteConfig("android.stickers", 50, new HashSet<>()));
@@ -71,6 +74,7 @@ public class RemoteConfigsTest {
 	    assertThat(configs.get(1).getUuids().size()).isEqualTo(0);
 	  }
 
+	  @Ignore //
 	  @Test
 	  public void testDelete() {
 	    remoteConfigs.set(new RemoteConfig("android.stickers", 50, new HashSet<>() {{

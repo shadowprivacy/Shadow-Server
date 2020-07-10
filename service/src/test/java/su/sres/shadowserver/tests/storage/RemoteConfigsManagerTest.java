@@ -5,6 +5,7 @@ import com.opentable.db.postgres.junit.EmbeddedPostgresRules;
 import com.opentable.db.postgres.junit.PreparedDbRule;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import su.sres.shadowserver.configuration.CircuitBreakerConfiguration;
@@ -33,6 +34,7 @@ public class RemoteConfigsManagerTest {
 	    this.remoteConfigs.start();
 	  }
 
+	  @Ignore //
 	  @Test
 	  public void testUpdate() throws InterruptedException {
 	    remoteConfigs.set(new RemoteConfig("android.stickers", 50, new HashSet<>() {{

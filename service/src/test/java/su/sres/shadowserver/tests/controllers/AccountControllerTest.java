@@ -523,6 +523,7 @@ public class AccountControllerTest {
   }
     
   @Test
+  @Ignore
   public void testVerifySupportsStorage() throws Exception {
     AccountCreationResult result =
         resources.getJerseyTest()

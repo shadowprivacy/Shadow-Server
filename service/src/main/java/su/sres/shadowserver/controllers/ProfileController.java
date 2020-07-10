@@ -123,11 +123,15 @@ public class ProfileController {
 	    if (request.isAvatar()) {
 	        Optional<String> currentAvatar = Optional.empty();
 
-	        if (currentProfile.isPresent() && currentProfile.get().getAvatar() != null && currentProfile.get().getAvatar().startsWith("profiles/")) {
+	        if (currentProfile.isPresent() && currentProfile.get().getAvatar() != null 
+	        		// && currentProfile.get().getAvatar().startsWith("profiles/")
+	        		) {
 	            currentAvatar = Optional.of(currentProfile.get().getAvatar());
 	          }
 
-	        if (currentAvatar.isEmpty() && account.getAvatar() != null && account.getAvatar().startsWith("profiles/")) {
+	        if (currentAvatar.isEmpty() && account.getAvatar() != null 
+	        		// && account.getAvatar().startsWith("profiles/")
+	        		) {
 	            currentAvatar = Optional.of(account.getAvatar());
 	          }
 

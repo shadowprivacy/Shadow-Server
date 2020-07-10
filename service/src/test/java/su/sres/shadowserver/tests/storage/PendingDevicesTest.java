@@ -32,6 +32,7 @@ public class PendingDevicesTest {
 	  this.pendingDevices = new PendingDevices(new FaultTolerantDatabase("peding_devices-test", Jdbi.create(db.getTestDatabase()), new CircuitBreakerConfiguration()));
   }
 
+  @Ignore //
   @Test
   public void testStore() throws SQLException {
     pendingDevices.insert("+14151112222", "1234", 1111);
