@@ -26,6 +26,6 @@ import su.sres.shadowserver.controllers.RateLimitExceededException;
 public class RateLimitExceededExceptionMapper implements ExceptionMapper<RateLimitExceededException> {
   @Override
   public Response toResponse(RateLimitExceededException e) {
-    return Response.status(413).build();
+    return Response.status(429).build();
   }
 }

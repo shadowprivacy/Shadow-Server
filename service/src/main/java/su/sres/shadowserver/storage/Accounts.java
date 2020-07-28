@@ -53,7 +53,7 @@ public class Accounts {
 	private final MetricRegistry metricRegistry = SharedMetricRegistries.getOrCreate(Constants.METRICS_NAME);
 	private final Timer createTimer = metricRegistry.timer(name(Accounts.class, "create"));
 	private final Timer updateTimer = metricRegistry.timer(name(Accounts.class, "update"));
-	private final Timer getByUserLoginTimer = metricRegistry.timer(name(Accounts.class, "getByuserLogin"));
+	private final Timer getByUserLoginTimer = metricRegistry.timer(name(Accounts.class, "getByUserLogin"));
 	private final Timer getByUuidTimer = metricRegistry.timer(name(Accounts.class, "getByUuid"));
 	private final Timer getAllFromTimer = metricRegistry.timer(name(Accounts.class, "getAllFrom"));
 	private final Timer getAllFromOffsetTimer = metricRegistry.timer(name(Accounts.class, "getAllFromOffset"));
