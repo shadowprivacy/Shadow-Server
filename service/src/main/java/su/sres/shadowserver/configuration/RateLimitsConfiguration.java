@@ -87,7 +87,10 @@ public class RateLimitsConfiguration {
 	private RateLimitConfiguration certVerRequest = new RateLimitConfiguration(24, 24 / (24.0 * 60.0));
 	
 	@JsonProperty
-	private RateLimitConfiguration directoryRequest = new RateLimitConfiguration(60, 60 / (1.0 * 60.0));	
+	private RateLimitConfiguration directoryRequest = new RateLimitConfiguration(60, 60 / (1.0 * 60.0));
+	
+	@JsonProperty
+	private RateLimitConfiguration licenseRequest = new RateLimitConfiguration(2, 2);
 
 	public RateLimitConfiguration getAutoBlock() {
 		return autoBlock;
@@ -179,6 +182,10 @@ public class RateLimitsConfiguration {
 	
 	public RateLimitConfiguration getDirectoryRequest() {
 		return directoryRequest;
+	}
+	
+	public RateLimitConfiguration getLicenseRequest() {
+		return licenseRequest;
 	}
 	
 

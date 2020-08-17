@@ -1,6 +1,6 @@
 package su.sres.shadowserver.configuration;
 
-import org.hibernate.validator.constraints.NotEmpty;
+import javax.validation.constraints.NotEmpty;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
@@ -17,6 +17,10 @@ public class LocalParametersConfiguration {
 	@JsonProperty
 	@NotEmpty
 	private String keyStorePassword;
+	
+	@JsonProperty
+	@NotEmpty
+	private String licensePath;
 
 	public int getVerificationCodeLifetime() {
 		return verificationCodeLifetime;
@@ -28,6 +32,10 @@ public class LocalParametersConfiguration {
 
 	public String getKeyStorePassword() {
 		return keyStorePassword;
+	}
+	
+	public String getLicensePath() {
+		return licensePath;
 	}
 
 }

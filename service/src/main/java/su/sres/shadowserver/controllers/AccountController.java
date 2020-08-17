@@ -36,8 +36,13 @@ import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
 import javax.ws.rs.QueryParam;
 import javax.ws.rs.WebApplicationException;
+import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
+
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.InputStream;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.List;
@@ -362,6 +367,29 @@ public class AccountController {
 						
 		return (new CertsProvider(localParametersConfiguration, serviceConfiguration)).getCertsVersion();					
 	}
+	
+	@Timed
+	@GET
+	@Path("/license")
+	@Produces(MediaType.APPLICATION_OCTET_STREAM)
+	public Response getLicenseFile(@Auth Account account) throws RateLimitExceededException {
+		
+		String login = account.getUserLogin();
+		
+		rateLimiters.getLicenseLimiter().validate(login);
+		
+		String filename = login + ".bin";
+		
+		try {
+			InputStream is = new FileInputStream(localParametersConfiguration.getLicensePath() + "/" + filename);
+			
+			return Response.ok(is)
+	                       .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+	                       .build();	
+		} catch(FileNotFoundException e) {
+			throw new WebApplicationException(Response.status(404).build());			
+		}        						
+	}	
 
 	@Timed
 	@PUT
