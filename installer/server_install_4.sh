@@ -87,8 +87,21 @@ else
 fi
 
 
-PSQL_USER="shadow_psql_user"
-PSQL_PASSWORD="psqlpassword"
+echo "Please enter your PostgreSQL user name >>"
+read PSQL_USER 
+
+if [ -z "$PSQL_USER" ]
+then 
+    error_quit "Entered unser name is empty"
+fi 
+
+echo "Please enter password for new PostgreSQL user >>"
+read PSQL_PASSWORD 
+
+if [ -z "$PSQL_PASSWORD" ]
+then 
+    error_quit "Entered password is empty"
+fi 
 
 # Create postgeSQL user 
 # Error in case if ${PSQL_USER} already exists 
