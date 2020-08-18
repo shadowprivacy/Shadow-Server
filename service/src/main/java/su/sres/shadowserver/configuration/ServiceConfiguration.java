@@ -1,9 +1,8 @@
 package su.sres.shadowserver.configuration;
 
+import javax.validation.constraints.NotEmpty;
 import javax.validation.constraints.NotNull;
 import javax.validation.constraints.Size;
-
-import org.hibernate.validator.constraints.NotEmpty;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
@@ -39,6 +38,13 @@ public class ServiceConfiguration {
 	@JsonProperty
 	@NotEmpty
 	private String supportEmail;
+	
+
+    @JsonProperty
+	@JsonSerialize(using = ByteArrayAdapter.Serializing.class)
+	@JsonDeserialize(using = ByteArrayAdapter.Deserializing.class)
+	@NotNull
+	private byte[] serverZkPublic;
 
 	public String getCloudUri() {
 		return cloudUri;
@@ -63,5 +69,9 @@ public class ServiceConfiguration {
 	public String getSupportEmail() {
 		return supportEmail;
 	}
+	
+	public byte[] getServerZkPublic() {
+	    return serverZkPublic;
+	  }
 	
 }

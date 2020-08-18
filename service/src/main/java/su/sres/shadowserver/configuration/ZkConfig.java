@@ -15,11 +15,12 @@ public class ZkConfig {
   @NotNull
   private byte[] serverSecret;
 
-  @JsonProperty
+/*  @JsonProperty
   @JsonSerialize(using = ByteArrayAdapter.Serializing.class)
   @JsonDeserialize(using = ByteArrayAdapter.Deserializing.class)
   @NotNull
   private byte[] serverPublic;
+  */
   
   @JsonProperty
   @NotNull
@@ -29,9 +30,10 @@ public class ZkConfig {
     return serverSecret;
   }
 
-  public byte[] getServerPublic() {
+/*  public byte[] getServerPublic() {
     return serverPublic;
   }
+  */
   
   public boolean isEnabled() {
 	    return enabled;
