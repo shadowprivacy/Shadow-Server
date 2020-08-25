@@ -107,3 +107,19 @@ fi
 # Error in case if ${PSQL_USER} already exists 
 su -c "psql -c \"CREATE USER ${PSQL_USER} WITH PASSWORD '${PSQL_PASSWORD}';\"" - postgres
 
+# Create postgeSQL databases
+
+su -c "psql -c \"CREATE DATABASE accountdb;\"" - postgres
+su -c "psql -c \"CREATE DATABASE messagedb;\"" - postgres
+su -c "psql -c \"CREATE DATABASE abusedb;\"" - postgres
+
+# Grant permissions on databases
+
+su -c "psql -c \"GRANT ALL privileges ON DATABASE accountdb TO ${PSQL_USER};\"" - postgres
+su -c "psql -c \"GRANT ALL privileges ON DATABASE messagedb TO ${PSQL_USER};\"" - postgres
+su -c "psql -c \"GRANT ALL privileges ON DATABASE abusedb TO ${PSQL_USER};\"" - postgres
+
+# Configure authentication
+
+NEW_LINE_POSTGRES ="host    all             ${PSQL_USER}        127.0.0.1/32            password"
+sed -i "/^# IPv4 local connections\:/a${NEW_LINE_POSTGRES}" /var/lib/pgsql/12/data/pg_hba.conf
