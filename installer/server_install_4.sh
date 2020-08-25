@@ -123,3 +123,7 @@ su -c "psql -c \"GRANT ALL privileges ON DATABASE abusedb TO ${PSQL_USER};\"" - 
 
 NEW_LINE_POSTGRES ="host    all             ${PSQL_USER}        127.0.0.1/32            password"
 sed -i "/^# IPv4 local connections\:/a${NEW_LINE_POSTGRES}" /var/lib/pgsql/12/data/pg_hba.conf
+
+# Restart postgres
+
+systemctl restart postgresql-12
