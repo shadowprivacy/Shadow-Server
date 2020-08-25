@@ -318,8 +318,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     environment.jersey().register(messageController);
     environment.jersey().register(profileController);
     environment.jersey().register(stickerController);
-    environment.jersey().register(remoteConfigController);
- // environment.jersey().register(new ProtocolBufferMessageBodyProvider());
+//    environment.jersey().register(remoteConfigController);
 
     ///
     WebSocketEnvironment<Account> webSocketEnvironment = new WebSocketEnvironment<>(environment, config.getWebSocketConfiguration(), 90000);
