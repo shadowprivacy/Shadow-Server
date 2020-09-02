@@ -38,7 +38,17 @@ else
     echo "wget already installed" 
 fi
 
-# check if java already installed 
+if [ $(check_app screen) -ne 0 ] 
+then 
+    dnf -y install screen 
+else
+    echo "screen already installed" 
+fi
+
+# check if java already installed
+
+echo "Installing Java..."
+ 
 if [ $(check_app java) -ne 0 ] 
 then 
     dnf -y install java-11-openjdk
@@ -49,7 +59,9 @@ else
 fi
 
 
-# check and install PostgreSQL 
+# check and install PostgreSQL
+
+echo "Installing PostgreSQL..." 
 
 if [ $(check_app psql) -ne 0 ] 
 then 
@@ -74,7 +86,10 @@ fi
 
 # how can I check postgre is running? 
 
-#Redis installation 
+#Redis installation
+
+echo "Installing Redis..."
+ 
 if [ $(check_app redis-server) -ne 0 ] 
 then 
     dnf -y install epel-release
@@ -107,7 +122,9 @@ fi
 # Error in case if ${PSQL_USER} already exists 
 su -c "psql -c \"CREATE USER ${PSQL_USER} WITH PASSWORD '${PSQL_PASSWORD}';\"" - postgres
 
-# Create postgeSQL databases
+# Create PostgreSQL databases
+
+echo "Creating databases..."
 
 su -c "psql -c \"CREATE DATABASE accountdb;\"" - postgres
 su -c "psql -c \"CREATE DATABASE messagedb;\"" - postgres
@@ -121,9 +138,35 @@ su -c "psql -c \"GRANT ALL privileges ON DATABASE abusedb TO ${PSQL_USER};\"" - 
 
 # Configure authentication
 
-NEW_LINE_POSTGRES ="host    all             ${PSQL_USER}        127.0.0.1/32            password"
+NEW_LINE_POSTGRES="host    all             ${PSQL_USER}        127.0.0.1/32            password"
 sed -i "/^# IPv4 local connections\:/a${NEW_LINE_POSTGRES}" /var/lib/pgsql/12/data/pg_hba.conf
 
 # Restart postgres
 
 systemctl restart postgresql-12
+
+# Create a Shadow user
+
+useradd -m shadow
+
+# Set up a password for the shadow user
+
+echo "A user named 'shadow' has been created under which main system components will be run. Please enter the password for this user"
+passwd shadow
+
+mkdir /home/shadow/shadowserver
+
+
+# ----- CREDENTIALS -------
+
+./gencreds.sh
+
+
+# ----- MINIO -------
+
+
+read -p "Do you want to install Minio now [y/n]? If you don't, you will have to do that manually on this or another machine >> " -n 1 -r
+if [[ $REPLY =~ ^[Yy]$ ]]
+then
+    ./install_minio.sh
+fi

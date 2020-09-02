@@ -1,5 +1,7 @@
 #!/bin/bash
 
+cd /home/shadow/shadowserver
+
 # Create private key for the root CA certificate
 
 echo "Generating the root CA private key..."
