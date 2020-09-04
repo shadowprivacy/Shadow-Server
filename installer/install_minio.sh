@@ -2,6 +2,7 @@
 
 mkdir /home/shadow/minio
 cp shadow.json /home/shadow/minio/
+cp minio.service /etc/systemd/system/
 cd /home/shadow/minio
 
 echo "Downloading Minio..."
@@ -16,9 +17,9 @@ read MINIO_ADMIN_PASSWORD
 echo "Enter the secret key (password) which will be used by the Shadow system components to access the Minio service >>"
 read MINIO_SERVICE_PASSWORD
 
-echo "export MINIO_ACCESS_KEY=$MINIO_ADMIN_LOGIN" >> /home/shadow/.bashrc
-echo "export MINIO_SECRET_KEY=$MINIO_ADMIN_PASSWORD" >> /home/shadow/.bashrc
-echo "export MINIO_BROWSER=off" >> /home/shadow/.bashrc
+echo "export MINIO_ACCESS_KEY=$MINIO_ADMIN_LOGIN" >> /home/test2/.bashrc
+echo "export MINIO_SECRET_KEY=$MINIO_ADMIN_PASSWORD" >> /home/test2/.bashrc
+echo "export MINIO_BROWSER=off" >> /home/test2/.bashrc
 
 echo "Copying credentials.."
 
@@ -42,10 +43,23 @@ chown -R shadow /home/shadow/minio
 chown -R shadow /home/shadow/.minio
 chmod +x minio
 chmod +x mc
+mv minio /usr/local/bin/minio
+restorecon -rv /usr/local/bin/
 
-echo "Launching Minio server..."
+echo "Creating Minio environment file..."
 
-su -c "screen -dmS minio bash -c '/home/shadow/minio/minio server /home/shadow/data'" - shadow
+echo "MINIO_ACCESS_KEY=$MINIO_ADMIN_LOGIN" > /etc/default/minio_env
+echo "MINIO_SECRET_KEY=$MINIO_ADMIN_PASSWORD" >> /etc/default/minio_env
+echo "MINIO_BROWSER=off" >> /etc/default/minio_env
+
+echo "Creating Minio service..."
+
+systemctl daemon-reload
+systemctl enable minio.service
+
+echo "Starting Minio service..."
+
+systemctl start minio.service
 
 echo "Creating Minio config file..."
 
