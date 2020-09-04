@@ -17,9 +17,9 @@ read MINIO_ADMIN_PASSWORD
 echo "Enter the secret key (password) which will be used by the Shadow system components to access the Minio service >>"
 read MINIO_SERVICE_PASSWORD
 
-echo "export MINIO_ACCESS_KEY=$MINIO_ADMIN_LOGIN" >> /home/test2/.bashrc
-echo "export MINIO_SECRET_KEY=$MINIO_ADMIN_PASSWORD" >> /home/test2/.bashrc
-echo "export MINIO_BROWSER=off" >> /home/test2/.bashrc
+echo "export MINIO_ACCESS_KEY=$MINIO_ADMIN_LOGIN" >> /home/shadow/.bashrc
+echo "export MINIO_SECRET_KEY=$MINIO_ADMIN_PASSWORD" >> /home/shadow/.bashrc
+echo "export MINIO_BROWSER=off" >> /home/shadow/.bashrc
 
 echo "Copying credentials.."
 
