@@ -149,17 +149,17 @@ systemctl restart postgresql-12
 
 useradd -m shadow
 
-# Set up a password for the shadow user
-
-echo "A user named 'shadow' has been created under which main system components will be run. Please enter the password for this user"
-passwd shadow
-
 mkdir /home/shadow/shadowserver
+
+# Request the server domain name
+
+echo "Enter the domain name of your server as accessible by your Shadow clients (e.g. shadow.example.com) >>"
+read SERVER_DOMAIN
 
 
 # ----- CREDENTIALS -------
 
-./gencreds.sh
+./gencreds.sh $SERVER_DOMAIN
 
 
 # ----- MINIO -------
@@ -169,4 +169,12 @@ read -p "Do you want to install Minio now [y/n]? If you don't, you will have to 
 if [[ $REPLY =~ ^[Yy]$ ]]
 then
     ./install_minio.sh
+fi
+
+# ----- COTURN -------
+
+read -p "Do you want to install Coturn now [y/n]? If you don't, you will have to do that manually on this or another machine, or use an external (perhaps public) service >> " -n 1 -r
+if [[ $REPLY =~ ^[Yy]$ ]]
+then
+    ./install_coturn.sh $SERVER_DOMAIN
 fi

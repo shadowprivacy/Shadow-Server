@@ -1,5 +1,7 @@
 #!/bin/bash
 
+SERVER_DOMAIN=$1
+
 cd /home/shadow/shadowserver
 
 # Create private key for the root CA certificate
@@ -9,9 +11,7 @@ openssl genrsa -out rootCA.key 4096
 
 # Create a self-signed root CA certificate
 
-echo "We are going to create a self-signed root CA certificate. Enter the domain name of your server as accessible by your Shadow clients (e.g. shadow.example.com) >>"
-read SERVER_DOMAIN
-echo "Enter the root CA validity period in days (e.g. 3650 for ten years) >>"
+echo "We are going to create a self-signed root CA certificate. Enter the root CA validity period in days (e.g. 3650 for ten years) >>"
 read ROOT_CA_VALIDITY_PERIOD
 echo "Enter your country name (2 letter code) [XX] >>"
 read COUNTRY_NAME
