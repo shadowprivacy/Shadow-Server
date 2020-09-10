@@ -35,7 +35,7 @@ echo "Tuning configuration..."
 
 cp /usr/local/etc/turnserver.conf.default /usr/local/etc/turnserver.conf
 
-read -p "Is Your server behind NAT [y/n]?" -n 1 -r
+read -p "Is your server behind NAT [y/n]?" -n 1 -r
 if [[ $REPLY =~ ^[Yy]$ ]]
 then
     printf "\nEnter the outside IP address of your server >>"
@@ -79,7 +79,6 @@ then
     echo "Installing telnet..."
     dnf -y install telnet  
 fi
-
 
 # Setting up firewall
 

@@ -1,6 +1,6 @@
 [Unit]
 Description=Coturn
-Documentation=https://docs.min.io
+Documentation=https://github.com/coturn/coturn/wiki
 Wants=network-online.target
 After=network-online.target
 AssertFileIsExecutable=/usr/local/bin/turnserver
@@ -10,8 +10,6 @@ WorkingDirectory=/usr/local/
 
 User=shadow
 Group=shadow
-
-# EnvironmentFile=/etc/default/minio_env
 
 ExecStart=/usr/local/bin/turnserver -c /usr/local/etc/turnserver.conf
 
