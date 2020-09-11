@@ -102,7 +102,7 @@ logging:                      # logging configuration
 turn:                         # NAT-T server parameters
   secret: your_turn_secret                                              # shared secret for the TURN authorization (must match the Coturn configuration)
   uris:
-   - stun:shadow.example.com:3478                                       # URL of the STUN service (your Coturn server or 3rd party, may add several to the list). Comment it out if you disabled STUN during the Coturn installation
+   - stun:shadow.example.com:3478                                       # URL of the STUN service (your Coturn server or 3rd party, may add several to the list). Comment it out if you would like to rely on the hardcoded Google STUN server exclusively
    - turn:shadow.example.com:3478                                       # URL of the TURN service (your Coturn server or 3rd party)
 
 gcm:
@@ -141,7 +141,7 @@ storageService:
 localParametersConfiguration: # locally significant server parameters
  verificationCodeLifetime: 24                                           # account verification code lifetime in hours
  keyStorePath: /home/shadow/shadowserver/auxiliary.keystore             # path to the auxiliary keystore 
- keyStorePassword: your_aux_keystore_password                           # password of the auxiliary keystore
+ keyStorePassword: your_aux_keystore_password                           # password of the auxiliary keystore configured when generating credentials
  licensePath: /home/shadow/shadowserver/license                         # path to the folder where activation keys will be stored
 
 serviceConfiguration:         # client-server parameters
