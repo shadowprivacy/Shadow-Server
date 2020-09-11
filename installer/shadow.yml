@@ -1,0 +1,154 @@
+push:                         # FCM push server configuration
+  queueSize:                                                            # Size of the push pending queue (can be left empty)
+
+awsAttachments:               # private cloud access configuration for attachments
+  accessKey: minio_shadow                                               # Minio service access key
+  accessSecret: your_service_password                                   # Minio service secret key configured when installing Minio  
+  bucket: attachments
+  region: us-east-1
+
+cdn:                          # private cloud access configuration for profiles and sticker uploads
+  uri: "https://localhost:9000"                                         # Minio URL as seen by the Shadow server
+  accessKey: minio_shadow                                               # Minio service access key
+  accessSecret: your_service_password                                   # Minio service secret key configured when installing Minio
+  bucket: profiles
+  region: us-east-1
+
+debuglogs:                    # private cloud access configuration for debug logs
+  accessKey: minio_shadow                                               # Minio service access key
+  accessSecret: your_service_password                                   # Minio service secret key configured when installing Minio  
+  bucket: debuglogs
+  region: us-east-1
+
+accountDatabaseCrawler:       # account database crawler configuration
+  chunkSize: 1000
+  chunkIntervalMs:                                                      # can be left empty
+
+directory:                    # Redis server configuration for directory
+  url: "redis://localhost:6379"
+  replicaUrls:
+              - "redis://localhost:6379"                                # dummy (or actual) replication URL(s)
+
+cache:                        # Redis server configuration for general purpose caching
+  url: "redis://localhost:6379"
+  replicaUrls:
+              - "redis://localhost:6379"                                # dummy (or actual) replication URL(s)
+
+messageCache:                 # Redis server configuration for message store cache
+  redis:
+     url: "redis://localhost:6379"
+     replicaUrls:
+              - "redis://localhost:6379"                                # dummy (or actual) replication URL(s) 
+
+pushScheduler:                # Redis server configuration for push scheduler
+     url: "redis://localhost:6379/3"
+     replicaUrls:
+              - "redis://localhost:6379"                                # dummy (or actual) replication URL(s)
+
+pubsub:                       # Redis server configuration for publisher/subscriber
+     url: "redis://localhost:6379"
+     replicaUrls:
+              - "redis://localhost:6379"                                # dummy (or actual) replication URL(s)
+
+server:
+  applicationConnectors:      # Shadow service configuration
+    - type: https                                                       # connection type
+      port: 8080                                                        # connection port
+      keyStoreType: PKCS12
+      keyStorePath: /home/shadow/shadowserver/shadow.keystore           # path to the main keystore 
+      keyStorePassword: your_main_store_password                        # password to access the main keystore configured when generating credentials 
+      validateCerts: true
+      trustStorePath: /usr/lib/jvm/jre-11/lib/security/cacerts          # path to the system truststore
+      trustStorePassword: changeit                                      # password to access the truststore 
+           
+  adminConnectors:            # admin web interface configuration
+    - type: https                                                       # connection type
+      port: 8081                                                        # connection port
+      keyStoreType: PKCS12
+      keyStorePath: /home/shadow/shadowserver/shadow.keystore           # path to the main keystore
+      keyStorePassword: your_main_store_password                        # password to access the main keystore configured when generating credentials
+      validateCerts: true
+      trustStorePath: /usr/lib/jvm/jre-11/lib/security/cacerts          # path to the system truststore
+      trustStorePassword: changeit                                      # password to access the truststore
+      needClientAuth: true                                              # uncommenting this effectively disables the web admin access
+              
+messageStore:                 # Postgres database configuration for messages database
+  driverClass: org.postgresql.Driver
+  user:  shadow                                                         # username of the Postgres user
+  password: your_postgres_user_password                                 # password of the Postgres user configured at installation
+  url: "jdbc:postgresql://localhost:5432/messagedb"                     # URL of the messages database   
+
+accountsDatabase:             # Postgres database configuration for accounts database  
+  driverClass: org.postgresql.Driver  
+  user: shadow                                                          # username of the Postgres user
+  password: your_postgres_user_password                                 # password of the Postgres user configured at installation  
+  url: "jdbc:postgresql://localhost:5432/accountdb"                     # URL of the accounts database
+
+abuseDatabase:                # Postgres database configuration for abuse database
+  driverClass: org.postgresql.Driver
+  user: shadow                                                          # username of the Postgres user
+  password: your_postgres_user_password                                 # password of the Postgres user configured at installation
+  url: "jdbc:postgresql://localhost:5432/abusedb"                       # URL of the abuse database
+
+logging:                      # logging configuration
+  level: INFO                 # desired logging level (DEBUG not recommended in production)
+  appenders:
+    - type: file              # configuration to write logs in file
+      currentLogFilename: /var/log/shadow.log                           # location to save the current log file
+      archivedLogFilenamePattern: /var/log/shadow-%d.log.gz             # location and pattern to save archived logs
+      archivedFileCount: 5                                              # number of archived files to keep
+    - type: console           # include this if you want the logs be written to console as well
+
+turn:                         # NAT-T server parameters
+  secret: your_turn_secret                                              # shared secret for the TURN authorization (must match the Coturn configuration)
+  uris:
+   - stun:shadow.example.com:3478                                       # URL of the STUN service (your Coturn server or 3rd party, may add several to the list). Comment it out if you disabled STUN during the Coturn installation
+   - turn:shadow.example.com:3478                                       # URL of the TURN service (your Coturn server or 3rd party)
+
+gcm:
+  senderId: xxxxxxxxxxx                                                 # your Google project number
+  apiKey: GoogleFCMKey                                                  # your Google FCM key     
+  
+apn:                          # this is not used currently 
+  pushKey: /path/to/your/pushcertificates/xxx.pem                       # fake/unused
+  pushCertificate: /path/to/your/pushcertificates/xxx-cert.pem          # fake/unused
+  bundleId: 12345                                                       # fake/unused
+
+unidentifiedDelivery:         # unidentified access credentials configuration
+  certificate: xxxxx                                                    # server certificate
+  privateKey: xxxxx                                                     # server private key 
+  expiresDays: 365                                                      # account certificate validity lifetime in days
+
+recaptcha:
+  secret: 123 #fake
+
+limits:
+  contactQueries:
+   bucketSize: 50000
+   leakRatePerMinute: 50000
+
+zkConfig:
+   serverSecret: xxxx                                                   # server ZK private key   
+   enabled: true                                                        # whether the functionality is enabled
+
+remoteConfig:
+   authorizedTokens:
+      -                                                                 # leave the list empty               
+
+storageService:
+  userAuthenticationTokenSharedSecret: 6730674e1bd4f3a9cfdb2645159230b1 # fake/unused
+
+localParametersConfiguration: # locally significant server parameters
+ verificationCodeLifetime: 24                                           # account verification code lifetime in hours
+ keyStorePath: /home/shadow/shadowserver/auxiliary.keystore             # path to the auxiliary keystore 
+ keyStorePassword: your_aux_keystore_password                           # password of the auxiliary keystore
+ licensePath: /home/shadow/shadowserver/license                         # path to the folder where activation keys will be stored
+
+serviceConfiguration:         # client-server parameters
+ cloudUri: https://shadow.example.com:9000                              # Minio server URL as accessible from the Internet                             
+ statusUri: shadowuptime.example.com                                    # offline alarm signaling URL
+ storageUri: https://example.com                                        # fake/unused
+ unidentifiedDeliveryCaPublicKey: xxxxx                                 # public key of the unidentified access CA 
+ serverZkPublic:                                                        # server ZK public key
+ certsVersion: 1                                                        # should be 1 if certificate rotation is not used
+ supportEmail: shadow@example.com                                       # email address whither debug reports will be sent
