@@ -80,6 +80,11 @@ EOF
 echo "We are going to create the main keystore for the Shadow server. Enter the main keystore password >>"
 read SHADOW_STORE_PASS
 
+if [ -z "$SHADOW_STORE_PASS" ]
+then 
+    error_quit "Entered password is empty"
+fi
+
 # Export the Shadow server key and certificate to PKCS12
 
 echo "Exporting to PKCS12..."
@@ -92,6 +97,11 @@ keytool -importkeystore -srcstoretype PKCS12 -srckeystore shadow_a.p12 -srcstore
 
 echo "We are going to create the auxiliary keystore for the Shadow server. Enter the auxiliary keystore password >>"
 read AUX_STORE_PASS
+
+if [ -z "$AUX_STORE_PASS" ]
+then 
+    error_quit "Entered password is empty"
+fi
 
 # Write the Minio key and certificate to auxiliary.keystore
 

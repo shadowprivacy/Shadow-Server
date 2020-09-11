@@ -101,16 +101,9 @@ else
     redis-server --version
 fi
 
+PSQL_USER=shadow 
 
-echo "Please enter your PostgreSQL user name >>"
-read PSQL_USER 
-
-if [ -z "$PSQL_USER" ]
-then 
-    error_quit "Entered unser name is empty"
-fi 
-
-echo "Please enter password for new PostgreSQL user >>"
+echo "A PostgreSQL user named 'shadow' will be created. Please enter password for this new PostgreSQL user >>"
 read PSQL_PASSWORD 
 
 if [ -z "$PSQL_PASSWORD" ]
@@ -118,7 +111,7 @@ then
     error_quit "Entered password is empty"
 fi 
 
-# Create postgeSQL user 
+# Create postgeSQL user
 # Error in case if ${PSQL_USER} already exists 
 su -c "psql -c \"CREATE USER ${PSQL_USER} WITH PASSWORD '${PSQL_PASSWORD}';\"" - postgres
 

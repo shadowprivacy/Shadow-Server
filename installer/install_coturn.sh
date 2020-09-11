@@ -61,6 +61,12 @@ sed -i "s/^#use-auth-secret/use-auth-secret/" /usr/local/etc/turnserver.conf
 
 printf "\nEnter the shared secret for the TURN authorization (should match that configured in the Shadow server) >>"
     read TURN_AUTH_SECRET
+    
+    if [ -z "$TURN_AUTH_SECRET" ]
+    then 
+        error_quit "Entered secret is empty"
+    fi
+    
     sed -i "s/^#static-auth-secret=north/static-auth-secret=${TURN_AUTH_SECRET}/" /usr/local/etc/turnserver.conf
 
 sed -i "s/^#redis-userdb=\"ip=<ip-address> dbname=<database-number> password=<database-user-password> port=<port> connect_timeout=<seconds>\"/redis-userdb=\"ip=127.0.0.1 port=6379\"/" /usr/local/etc/turnserver.conf
@@ -73,7 +79,13 @@ read -p "Do you want to enable CLI access for Coturn [y/n]?" -n 1 -r
 if [[ $REPLY =~ ^[Yy]$ ]]
 then  
     printf "\nEnter the CLI password >>"
-    read CLI_PASSWORD    
+    read CLI_PASSWORD
+    
+    if [ -z "$CLI_PASSWORD" ]
+    then 
+        error_quit "Entered password is empty"
+    fi
+        
     sed -i "s/^#cli-password=qwerty/cli-password=${CLI_PASSWORD}/" /usr/local/etc/turnserver.conf
     
     echo "Installing telnet..."
