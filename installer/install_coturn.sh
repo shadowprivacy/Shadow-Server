@@ -80,12 +80,30 @@ then
     dnf -y install telnet  
 fi
 
-# Setting up firewall
-
-echo "Opening port 3478..."
-
-firewall-cmd --zone=public --permanent --add-port=3478/tcp
-firewall-cmd --reload
+read -p "Do you want to set up custom media port range for Coturn (default is 49152 to 65535) [y/n]?" -n 1 -r
+if [[ $REPLY =~ ^[Yy]$ ]]
+then  
+    printf "\nEnter the first port of the range >>"
+    read STARTING_PORT    
+    sed -i "s/^#min-port=49152/min-port=${STARTING_PORT}/" /usr/local/etc/turnserver.conf
+    
+    printf "\nEnter the last port of the range >>"
+    read ENDING_PORT    
+    sed -i "s/^#max-port=65535/max-port=${ENDING_PORT}/" /usr/local/etc/turnserver.conf
+    
+    echo "Opening ports..."
+    
+    firewall-cmd --zone=public --permanent --add-port=3478/tcp
+    firewall-cmd --zone=public --permanent --add-port=$STARTING_PORT-$ENDING_PORT/udp
+    firewall-cmd --reload
+else
+    echo "Opening ports..."
+    
+    firewall-cmd --zone=public --permanent --add-port=3478/tcp
+    firewall-cmd --zone=public --permanent --add-port=49152-65535/udp
+    firewall-cmd --reload  
+      
+fi
 
 echo "Creating Coturn service..."
 
