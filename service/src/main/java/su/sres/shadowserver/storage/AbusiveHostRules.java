@@ -21,6 +21,7 @@ public class AbusiveHostRules {
 	  private final MetricRegistry metricRegistry = SharedMetricRegistries.getOrCreate(Constants.METRICS_NAME);
 	  private final Timer          getTimer       = metricRegistry.timer(name(AbusiveHostRules.class, "get"));
 	  private final Timer          insertTimer    = metricRegistry.timer(name(AbusiveHostRules.class, "setBlockedHost"));
+	  private final Timer          vacuumTimer    = metricRegistry.timer(name(AbusiveHostRules.class, "vacuum"));
 
 	  private final FaultTolerantDatabase database;
 
@@ -51,4 +52,12 @@ public class AbusiveHostRules {
 		      }
 		    }));
 		  }
+	  
+	  public void vacuum() {
+			database.use(jdbi -> jdbi.useHandle(handle -> {
+				try (Timer.Context ignored = vacuumTimer.time()) {
+					handle.execute("VACUUM abusive_host_rules");
+				}
+			}));
+		}
 }
