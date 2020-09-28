@@ -55,7 +55,7 @@ server:
     - type: https                                                       # connection type
       port: 8080                                                        # connection port
       keyStoreType: PKCS12
-      keyStorePath: /home/shadow/shadowserver/shadow.keystore           # path to the main keystore 
+      keyStorePath: /home/shadow/shadowserver/shadow.p12                # path to the main keystore 
       keyStorePassword: your_main_store_password                        # password to access the main keystore configured when generating credentials 
       validateCerts: true
       trustStorePath: /usr/lib/jvm/jre-11/lib/security/cacerts          # path to the system truststore
@@ -65,7 +65,7 @@ server:
     - type: https                                                       # connection type
       port: 8081                                                        # connection port
       keyStoreType: PKCS12
-      keyStorePath: /home/shadow/shadowserver/shadow.keystore           # path to the main keystore
+      keyStorePath: /home/shadow/shadowserver/shadow.p12                # path to the main keystore
       keyStorePassword: your_main_store_password                        # password to access the main keystore configured when generating credentials
       validateCerts: true
       trustStorePath: /usr/lib/jvm/jre-11/lib/security/cacerts          # path to the system truststore
@@ -102,12 +102,11 @@ logging:                      # logging configuration
 turn:                         # NAT-T server parameters
   secret: your_turn_secret                                              # shared secret for the TURN authorization (must match the Coturn configuration)
   uris:
-   - stun:shadow.example.com:3478                                       # URL of the STUN service (your Coturn server or 3rd party, may add several to the list). Comment it out if you would like to rely on the hardcoded Google STUN server exclusively
+   - stun:shadow.example.com:3478                                       # URL of the STUN service (your Coturn server or 3rd party, may add several to the list)
    - turn:shadow.example.com:3478                                       # URL of the TURN service (your Coturn server or 3rd party)
 
-gcm:
-  senderId: xxxxxxxxxxx                                                 # your Google project number
-  apiKey: GoogleFCMKey                                                  # your Google FCM key     
+gcm:  
+  apiKey: GoogleFCMKey                                                  # the server key of your Firebase project     
   
 apn:                          # this is not used currently 
   pushKey: /path/to/your/pushcertificates/xxx.pem                       # fake/unused
@@ -116,11 +115,11 @@ apn:                          # this is not used currently
 
 unidentifiedDelivery:         # unidentified access credentials configuration
   certificate: xxxxx                                                    # server certificate
-  privateKey: xxxxx                                                     # server private key 
+  privateKey: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx=              # server private key 
   expiresDays: 365                                                      # account certificate validity lifetime in days
 
 recaptcha:
-  secret: 123 #fake
+  secret: 123                                                           # fake/unused
 
 limits:
   contactQueries:
@@ -149,6 +148,7 @@ serviceConfiguration:         # client-server parameters
  statusUri: shadowuptime.example.com                                    # offline alarm signaling URL
  storageUri: https://example.com                                        # fake/unused
  unidentifiedDeliveryCaPublicKey: xxxxx                                 # public key of the unidentified access CA 
- serverZkPublic:                                                        # server ZK public key
+ serverZkPublic: xxxxx                                                  # server ZK public key
+ fcmSenderId: 12345                                                     # the sender ID of your Firebase project 
  certsVersion: 1                                                        # should be 1 if certificate rotation is not used
  supportEmail: shadow@example.com                                       # email address whither debug reports will be sent

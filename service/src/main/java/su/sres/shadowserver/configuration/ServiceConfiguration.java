@@ -39,6 +39,9 @@ public class ServiceConfiguration {
 	@NotEmpty
 	private String supportEmail;
 	
+	@JsonProperty
+	@NotEmpty
+	private String fcmSenderId;	
 
     @JsonProperty
 	@JsonSerialize(using = ByteArrayAdapter.Serializing.class)
@@ -68,6 +71,10 @@ public class ServiceConfiguration {
 	
 	public String getSupportEmail() {
 		return supportEmail;
+	}
+	
+	public String getFcmSenderId() {
+		return fcmSenderId;
 	}
 	
 	public byte[] getServerZkPublic() {
