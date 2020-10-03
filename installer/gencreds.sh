@@ -85,15 +85,14 @@ then
     error_quit "Entered password is empty"
 fi
 
+# Update config
+
+sed -i "s/keyStorePassword\: your_main_store_password/keyStorePassword\: ${SHADOW_STORE_PASS}/" /home/shadow/shadowserver/config/shadow.yml
+
 # Export the Shadow server key and certificate to PKCS12
 
 echo "Exporting to PKCS12..."
-openssl pkcs12 -export -password pass:"$SHADOW_STORE_PASS" -in shadow_a.crt -inkey shadow_a.key -out shadow_a.p12 -name shadow_a -CAfile rootCA.crt
-
-# Write the key and certificate to a Java keystore format, so it can be used by dropwizard
-
-echo "Writing the Shadow server key and certificate to the main keystore..."
-keytool -importkeystore -srcstoretype PKCS12 -srckeystore shadow_a.p12 -srcstorepass "$SHADOW_STORE_PASS" -destkeystore shadow.keystore -deststorepass "$SHADOW_STORE_PASS"
+openssl pkcs12 -export -password pass:"$SHADOW_STORE_PASS" -in shadow_a.crt -inkey shadow_a.key -out shadow.p12 -name shadow_a -CAfile rootCA.crt
 
 echo "We are going to create the auxiliary keystore for the Shadow server. Enter the auxiliary keystore password >>"
 read AUX_STORE_PASS
@@ -103,10 +102,14 @@ then
     error_quit "Entered password is empty"
 fi
 
+# Update config
+
+sed -i "s/keyStorePassword\: your_aux_keystore_password/keyStorePassword\: ${AUX_STORE_PASS}/" /home/shadow/shadowserver/config/shadow.yml
+
 # Write the Minio key and certificate to auxiliary.keystore
 
 echo "Writing the Minio server certificate to the auxiliary keystore..."
-keytool -importcert -file cloud_a.crt -alias cloud_a -keystore auxiliary.keystore -storepass "$AUX_STORE_PASS" -noprompt
+keytool -importcert -file cloud_a.crt -alias cloud_a -keystore /home/shadow/shadowserver/auxiliary.keystore -storepass "$AUX_STORE_PASS" -noprompt
 
 # Add the root CA as trusted
 
@@ -119,10 +122,20 @@ update-ca-trust extract
 
 echo "We are going to add the Shadow server certificate to cacerts. Enter the cacerts password. (In case you never ever changed it, it's 'changeit') >>"
 read CACERTS_PASS
+
+if [ -z "$CACERTS_PASS" ]
+then 
+    error_quit "Entered password is empty"
+fi
+
 keytool -importcert -file shadow_a.crt -alias shadow_a -cacerts -storepass "$CACERTS_PASS"
+
+# Update config
+
+sed -i "s/trustStorePassword\: changeit/trustStorePassword\: ${CACERTS_PASS}/" /home/shadow/shadowserver/config/shadow.yml
 
 # Remove files
 
 echo "Cleanup..."
 
-rm -f cloud_a.csr shadow_a.csr shadow_a.p12
+rm -f cloud_a.csr shadow_a.csr

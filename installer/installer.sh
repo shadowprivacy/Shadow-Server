@@ -11,7 +11,7 @@ function check_root_and_exit
 
 function error_quit 
 {
-    echo "Error: $1"
+    printf "\nError: $1"
     exit 1
 }
 
@@ -31,6 +31,15 @@ function check_app
 
 check_root_and_exit
 
+SHADOW_SERVER_VERSION=1.04
+
+sed -i "s/SHADOW_VER/${SHADOW_SERVER_VERSION}/" shadow.service
+cp shadow.service /etc/systemd/system/
+
+chmod +x gencreds.sh
+chmod +x install_minio.sh
+chmod +x install_coturn.sh
+
 if [ $(check_app wget) -ne 0 ] 
 then 
     dnf -y install wget 
@@ -38,12 +47,14 @@ else
     echo "wget already installed" 
 fi
 
-if [ $(check_app screen) -ne 0 ] 
+if [ $(check_app tmux) -ne 0 ] 
 then 
-    dnf -y install screen 
+    dnf -y install tmux 
 else
-    echo "screen already installed" 
+    echo "tmux already installed" 
 fi
+
+cp /usr/bin/tmux /usr/local/bin/tmux
 
 # check if java already installed
 
@@ -72,12 +83,12 @@ then
     dnf -qy module disable postgresql
 
     # Install PostgreSQL:
-    dnf install -y postgresql12-server
+    dnf install -y postgresql13-server
 
     # Optionally initialize the database and enable automatic start:
-    /usr/pgsql-12/bin/postgresql-12-setup initdb
-    systemctl enable postgresql-12
-    systemctl start postgresql-12
+    /usr/pgsql-13/bin/postgresql-13-setup initdb
+    systemctl enable postgresql-13
+    systemctl start postgresql-13
 else
     echo "PosgreSQL already installed" 
     psql --version
@@ -132,23 +143,26 @@ su -c "psql -c \"GRANT ALL privileges ON DATABASE abusedb TO ${PSQL_USER};\"" - 
 # Configure authentication
 
 NEW_LINE_POSTGRES="host    all             ${PSQL_USER}        127.0.0.1/32            password"
-sed -i "/^# IPv4 local connections\:/a${NEW_LINE_POSTGRES}" /var/lib/pgsql/12/data/pg_hba.conf
+sed -i "/^# IPv4 local connections\:/a${NEW_LINE_POSTGRES}" /var/lib/pgsql/13/data/pg_hba.conf
 
 # Restart postgres
 
-systemctl restart postgresql-12
+systemctl restart postgresql-13
 
 # Create a Shadow user
 
 useradd -m shadow
 
-mkdir /home/shadow/shadowserver
+# Create the folder structure
+
+mkdir -p /home/shadow/shadowserver/license
+mkdir /home/shadow/shadowserver/config
+cp shadow.yml /home/shadow/shadowserver/config/
 
 # Request the server domain name
 
 echo "Enter the domain name of your server as accessible by your Shadow clients (e.g. shadow.example.com) >>"
 read SERVER_DOMAIN
-
 
 # ----- CREDENTIALS -------
 
@@ -161,7 +175,7 @@ read SERVER_DOMAIN
 read -p "Do you want to install Minio now [y/n]? If you don't, you will have to do that manually on this or another machine >> " -n 1 -r
 if [[ $REPLY =~ ^[Yy]$ ]]
 then
-    ./install_minio.sh
+    ./install_minio.sh $SERVER_DOMAIN
 fi
 
 # ----- COTURN -------
@@ -171,3 +185,52 @@ if [[ $REPLY =~ ^[Yy]$ ]]
 then
     ./install_coturn.sh $SERVER_DOMAIN
 fi
+
+# ----- SHADOW SERVER ------
+
+# Update config
+
+sed -i "s/password\: your_postgres_user_password/password\: ${PSQL_PASSWORD}/" /home/shadow/shadowserver/config/shadow.yml
+
+printf "\n"
+
+read -p "Do you want to download the pre-compiled Shadow server jar file now [y/n]? >> " -n 1 -r
+if [[ $REPLY =~ ^[Yy]$ ]]
+then
+    cd /home/shadow/shadowserver/
+# Download the Shadow-Server jar
+    wget https://shadowupdate.sres.su:19080/server/ShadowServer-${SHADOW_SERVER_VERSION}.jar
+    echo "The SHA256 checksum of the downloaded jar is: "
+    sha256sum < ShadowServer-${SHADOW_SERVER_VERSION}.jar
+    read -p "Is that OK [y/n]? >> " -n 1 -r
+    if [[ $REPLY =~ ^[Yy]$ ]]
+    then
+    # Markup the databases
+    
+    java -jar ShadowServer-${SHADOW_SERVER_VERSION}.jar accountdb migrate /home/shadow/shadowserver/config/shadow.yml
+    java -jar ShadowServer-${SHADOW_SERVER_VERSION}.jar messagedb migrate /home/shadow/shadowserver/config/shadow.yml
+    java -jar ShadowServer-${SHADOW_SERVER_VERSION}.jar abusedb migrate /home/shadow/shadowserver/config/shadow.yml
+    
+    else
+         error_quit "The jar file has been tampered with!!!"  
+    fi    
+fi
+
+# Ensure proper access rights on Shadow folders
+
+chown -R shadow /home/shadow/shadowserver
+chown shadow /var/log/shadow.log
+
+# Shadow service
+
+echo "Opening port 8080..."
+
+firewall-cmd --zone=public --permanent --add-port=8080/tcp
+firewall-cmd --reload
+
+echo "Creating and enabling Shadow service..."
+
+systemctl daemon-reload
+systemctl enable shadow
+
+printf "\nInstallation complete. Follow the Administration Manual to perform necessary post-installation tasks, then start the Shadow server: 'systemctl start shadow'.\n"

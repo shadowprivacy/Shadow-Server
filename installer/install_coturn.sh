@@ -4,7 +4,7 @@ SERVER_DOMAIN=$1
 
 cp coturn.service /etc/systemd/system/
 
-echo "Installing necessary packages..."
+printf "\nInstalling necessary packages..."
 
 dnf -y install openssl-devel libevent libevent-devel hiredis hiredis-devel gcc make
 
@@ -54,7 +54,13 @@ fi
 read -p "Do you want to enable STUN (this will make your installation a public STUN server!) [y/n]?" -n 1 -r
 if [[ $REPLY =~ ^[Nn]$ ]]
 then    
-    sed -i "s/^#no-stun/no-stun/" /usr/local/etc/turnserver.conf  
+    sed -i "s/^#no-stun/no-stun/" /usr/local/etc/turnserver.conf
+    sed -i "s/- stun/# - stun/" /home/shadow/shadowserver/config/shadow.yml
+else
+    if test -f /home/shadow/shadowserver/config/shadow.yml
+    then      
+       sed -i "s/stun\:shadow.example.com/stun\:${SERVER_DOMAIN}/" /home/shadow/shadowserver/config/shadow.yml
+    fi       
 fi
 
 sed -i "s/^#use-auth-secret/use-auth-secret/" /usr/local/etc/turnserver.conf
@@ -67,9 +73,17 @@ printf "\nEnter the shared secret for the TURN authorization (should match that 
         error_quit "Entered secret is empty"
     fi
     
+# Update config
+    
     sed -i "s/^#static-auth-secret=north/static-auth-secret=${TURN_AUTH_SECRET}/" /usr/local/etc/turnserver.conf
+    
+    if test -f /home/shadow/shadowserver/config/shadow.yml
+    then   
+       sed -i "s/secret: your_turn_secret/secret\: ${TURN_AUTH_SECRET}/" /home/shadow/shadowserver/config/shadow.yml
+       sed -i "s/turn\:shadow.example.com/turn\:${SERVER_DOMAIN}/" /home/shadow/shadowserver/config/shadow.yml
+    fi
 
-sed -i "s/^#redis-userdb=\"ip=<ip-address> dbname=<database-number> password=<database-user-password> port=<port> connect_timeout=<seconds>\"/redis-userdb=\"ip=127.0.0.1 port=6379\"/" /usr/local/etc/turnserver.conf
+# sed -i "s/^#redis-userdb=\"ip=<ip-address> dbname=<database-number> password=<database-user-password> port=<port> connect_timeout=<seconds>\"/redis-userdb=\"ip=127.0.0.1 port=6379\"/" /usr/local/etc/turnserver.conf
 sed -i "s/^#realm=mycompany.org/realm=${SERVER_DOMAIN}/" /usr/local/etc/turnserver.conf
 sed -i "s/^#no-tcp/no-tcp/" /usr/local/etc/turnserver.conf
 sed -i "s/^#no-multicast-peers/no-multicast-peers/" /usr/local/etc/turnserver.conf
