@@ -12,7 +12,7 @@ import org.signal.zkgroup.profiles.ProfileKeyCredentialResponse;
 import org.signal.zkgroup.profiles.ServerZkProfileOperations;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.xmlpull.v1.XmlPullParserException;
+
 
 import su.sres.shadowserver.auth.OptionalAccess;
 import su.sres.shadowserver.auth.AmbiguousIdentifier;
@@ -45,6 +45,7 @@ import java.util.UUID;
 import io.dropwizard.auth.Auth;
 
 import io.minio.MinioClient;
+import io.minio.RemoveObjectArgs;
 import io.minio.errors.MinioException;
 import su.sres.shadowserver.entities.CreateProfileRequest;
 import su.sres.shadowserver.entities.Profile;
@@ -136,11 +137,9 @@ public class ProfileController {
 	          }
 
 	          currentAvatar.ifPresent(s -> {
-				try {
-					minioClient.removeObject(bucket, s);
-				} catch (MinioException | InvalidKeyException | NoSuchAlgorithmException
-						| IOException
-						| XmlPullParserException e) {
+				try {					
+					minioClient.removeObject(RemoveObjectArgs.builder().bucket(bucket).object(s).build());
+				} catch (MinioException | InvalidKeyException | NoSuchAlgorithmException | IOException e) {
 					logger.warn("Removal of current avatar failed!");
 					e.printStackTrace();
 				}
@@ -347,13 +346,14 @@ public class ProfileController {
 
 		if (previousAvatar != null 
 	//			&& previousAvatar.startsWith("profiles/")
-				) {
+				) {			
 			try
-			{
-				minioClient.removeObject(bucket, previousAvatar);
-			} catch (MinioException | InvalidKeyException | NoSuchAlgorithmException | IOException
-					| XmlPullParserException e) {
+			{								
+				minioClient.removeObject(RemoveObjectArgs.builder().bucket(bucket).object(previousAvatar).build());				
+			} catch (MinioException | InvalidKeyException | NoSuchAlgorithmException | IOException e) {
 				e.printStackTrace();
+				// remove after testing
+				logger.info("The exact exception thrown is: " + e.getClass().getCanonicalName());
 
 				throw new WebApplicationException(
 						"An exception has occurred while trying to remove the previous avatar",
