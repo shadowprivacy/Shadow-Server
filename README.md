@@ -1,14 +1,14 @@
 Shadow-Server
 =================
 
-This product is a modified version of <a href="https://github.com/signalapp/Signal-Server">Signal-Server</a> by Open Whisper Systems and is aimed at corporate environments.
+This product is a modified version of <a href="https://github.com/signalapp/Signal-Server">Signal-Server</a> and is aimed at corporate environments.
 
 Documentation
 -------------
 
 Some Signal protocol and implementation documentation is available <a href="https://signal.org/docs/">here</a>. 
 
-For building, installation and operation documentation check <a href="http://sres.su/shadow">this page</a>.
+For building, installation and operation documentation check <a href="http://shadowprivacy.com/documentation">this page</a>.
 
 
 Cryptography Notice
