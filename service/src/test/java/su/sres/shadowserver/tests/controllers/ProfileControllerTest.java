@@ -3,7 +3,7 @@ package su.sres.shadowserver.tests.controllers;
 import com.google.common.collect.ImmutableSet;
 import org.glassfish.jersey.test.grizzly.GrizzlyWebTestContainerFactory;
 import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatcher;
 import org.signal.zkgroup.InvalidInputException;
@@ -65,7 +65,7 @@ public class ProfileControllerTest {
 			"accessKey");
 	private static PolicySigner policySigner = new PolicySigner("accessSecret", "us-east-1");
 	private static ServerZkProfileOperations zkProfileOperations = mock(ServerZkProfileOperations.class);
-
+	
 	public static final ResourceExtension resources;
 	// static initializer for resources
 	static {
