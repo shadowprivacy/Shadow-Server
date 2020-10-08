@@ -20,7 +20,7 @@
 		<resilience4j.version>0.14.1</resilience4j.version>
 		<mockito.version>2.25.1</mockito.version>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-		<ShadowServer.version>1.08</ShadowServer.version>
+		<ShadowServer.version>1.08</ShadowServer.version>		
 
 	</properties>
 
@@ -154,7 +154,7 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-jar-plugin</artifactId>
-				<version>3.1.1</version>
+				<version>3.2.0</version>
 				<configuration>
 					<archive>
 						<manifest>
