@@ -31,7 +31,7 @@ function check_app
 
 check_root_and_exit
 
-SHADOW_SERVER_VERSION=1.06
+SHADOW_SERVER_VERSION=1.07
 
 sed -i "s/SHADOW_VER/${SHADOW_SERVER_VERSION}/" shadow.service
 cp shadow.service /etc/systemd/system/
