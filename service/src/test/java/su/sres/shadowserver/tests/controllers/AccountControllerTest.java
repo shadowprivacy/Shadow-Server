@@ -678,7 +678,7 @@ public class AccountControllerTest {
                  .put(Entity.entity(new AccountAttributes("keykeykeykey", false, 3333, "31337"),
                                     MediaType.APPLICATION_JSON_TYPE));
 
-    assertThat(response.getStatus()).isEqualTo(413);
+    assertThat(response.getStatus()).isEqualTo(429);
 
     verify(rateLimiter).clear(eq(SENDER_OVER_PIN));
   }
