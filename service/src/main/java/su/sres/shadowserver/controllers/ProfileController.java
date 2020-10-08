@@ -351,9 +351,7 @@ public class ProfileController {
 			{								
 				minioClient.removeObject(RemoveObjectArgs.builder().bucket(bucket).object(previousAvatar).build());				
 			} catch (MinioException | InvalidKeyException | NoSuchAlgorithmException | IOException e) {
-				e.printStackTrace();
-				// remove after testing
-				logger.info("The exact exception thrown is: " + e.getClass().getCanonicalName());
+				e.printStackTrace();				
 
 				throw new WebApplicationException(
 						"An exception has occurred while trying to remove the previous avatar",
