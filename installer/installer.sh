@@ -1,5 +1,7 @@
 #!/bin/bash
 
+. ./lib.sh
+
 function check_root_and_exit
 {
     if [ $(id -u) -ne 0 ] 

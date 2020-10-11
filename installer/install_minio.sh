@@ -1,5 +1,7 @@
 #!/bin/bash
 
+. ./lib.sh
+
 function download_sticker_pack
 {
     PACK_ID=$1

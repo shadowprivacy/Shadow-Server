@@ -1,5 +1,7 @@
 #!/bin/bash
 
+. ./lib.sh
+
 SERVER_DOMAIN=$1
 
 cd /home/shadow/shadowserver
