@@ -41,7 +41,7 @@ public class CertHashCommand extends Command {
 			X509Certificate x509Certificate = (X509Certificate) CertificateFactory.getInstance("X509")
 					                                                              .generateCertificate(inputStream);
 
-			System.out.println("The certificate's public key hash is: sha256/"
+			System.out.println("The certificate's hash is: sha256/"
 					+ calculatePublicKeyHash(x509Certificate.getEncoded()));
 
 		} catch (IOException e) {
