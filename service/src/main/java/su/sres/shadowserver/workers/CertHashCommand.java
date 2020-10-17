@@ -16,10 +16,10 @@ import java.security.cert.X509Certificate;
 import io.dropwizard.cli.Command;
 import io.dropwizard.setup.Bootstrap;
 
-public class PubKeyHashCommand extends Command {
+public class CertHashCommand extends Command {
 
-	public PubKeyHashCommand() {
-		super("hashcalc", "Generates a SHA256 hash of a public key of an X509 certificate");
+	public CertHashCommand() {
+		super("hashcalc", "Generates a SHA256 hash of an X509 certificate");
 	}
 
 	@Override
@@ -42,7 +42,7 @@ public class PubKeyHashCommand extends Command {
 					                                                              .generateCertificate(inputStream);
 
 			System.out.println("The certificate's public key hash is: sha256/"
-					+ calculatePublicKeyHash(x509Certificate.getPublicKey().getEncoded()));
+					+ calculatePublicKeyHash(x509Certificate.getEncoded()));
 
 		} catch (IOException e) {
 			e.printStackTrace();
@@ -58,9 +58,9 @@ public class PubKeyHashCommand extends Command {
 
 	}
 
-	private static String calculatePublicKeyHash(byte[] key) throws NoSuchAlgorithmException {
+	private static String calculatePublicKeyHash(byte[] cert) throws NoSuchAlgorithmException {
 		MessageDigest messageDigest = MessageDigest.getInstance("SHA-256");
-		return Base64.encodeBytes(messageDigest.digest(key));
+		return Base64.encodeBytes(messageDigest.digest(cert));
 	}
 
 }
