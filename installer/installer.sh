@@ -36,6 +36,9 @@ check_root_and_exit
 SHADOW_SERVER_VERSION=1.11
 
 sed -i "s/SHADOW_VER/${SHADOW_SERVER_VERSION}/" shadow.service
+sed -i "s|/home/shadow/shadowserver|${SERVER_PATH}|" shadow.service
+sed -i "s/=shadow/=${USER_SH}/" shadow.service
+sed -i "s/shadow bash/${USER_SH} bash/" shadow.service
 cp shadow.service /etc/systemd/system/
 
 chmod +x gencreds.sh
@@ -153,13 +156,13 @@ systemctl restart postgresql-13
 
 # Create a Shadow user
 
-useradd -m shadow
+useradd -m ${USER_SH}
 
 # Create the folder structure
 
-mkdir -p /home/shadow/shadowserver/license
-mkdir /home/shadow/shadowserver/config
-cp shadow.yml /home/shadow/shadowserver/config/
+mkdir -p ${SERVER_PATH}/license
+mkdir ${SERVER_PATH}/config
+cp shadow.yml ${SERVER_PATH}/config/
 
 # Request the server domain name
 
@@ -192,14 +195,15 @@ fi
 
 # Update config
 
-sed -i "s/password\: your_postgres_user_password/password\: ${PSQL_PASSWORD}/" /home/shadow/shadowserver/config/shadow.yml
+sed -i "s/password\: your_postgres_user_password/password\: ${PSQL_PASSWORD}/" ${SERVER_PATH}/config/shadow.yml
+sed -i "s|/home/shadow/shadowserver|${SERVER_PATH}|" ${SERVER_PATH}/config/shadow.yml
 
 printf "\n"
 
 read -p "Do you want to download the pre-compiled Shadow server jar file now [y/n]? >> " -n 1 -r
 if [[ $REPLY =~ ^[Yy]$ ]]
 then
-    cd /home/shadow/shadowserver/
+    cd ${SERVER_PATH}/
 # Download the Shadow-Server jar
     wget https://shadowupdate.sres.su:19080/server/ShadowServer-${SHADOW_SERVER_VERSION}.jar
     echo "The SHA256 checksum of the downloaded jar is: "
@@ -209,9 +213,9 @@ then
     then
     # Markup the databases
     
-    java -jar ShadowServer-${SHADOW_SERVER_VERSION}.jar accountdb migrate /home/shadow/shadowserver/config/shadow.yml
-    java -jar ShadowServer-${SHADOW_SERVER_VERSION}.jar messagedb migrate /home/shadow/shadowserver/config/shadow.yml
-    java -jar ShadowServer-${SHADOW_SERVER_VERSION}.jar abusedb migrate /home/shadow/shadowserver/config/shadow.yml
+    java -jar ShadowServer-${SHADOW_SERVER_VERSION}.jar accountdb migrate ${SERVER_PATH}/config/shadow.yml
+    java -jar ShadowServer-${SHADOW_SERVER_VERSION}.jar messagedb migrate ${SERVER_PATH}/config/shadow.yml
+    java -jar ShadowServer-${SHADOW_SERVER_VERSION}.jar abusedb migrate ${SERVER_PATH}/config/shadow.yml
     
     else
          error_quit "The jar file has been tampered with!!!"  
@@ -220,8 +224,8 @@ fi
 
 # Ensure proper access rights on Shadow folders
 
-chown -R shadow /home/shadow/shadowserver
-chown shadow /var/log/shadow.log
+chown -R ${USER_SH} ${SERVER_PATH}
+chown ${USER_SH} /var/log/shadow.log
 
 # Shadow service
 

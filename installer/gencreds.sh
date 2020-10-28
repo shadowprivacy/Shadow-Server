@@ -4,7 +4,7 @@
 
 SERVER_DOMAIN=$1
 
-cd /home/shadow/shadowserver
+cd ${SERVER_PATH}
 
 # Create private key for the root CA certificate
 
@@ -89,7 +89,7 @@ fi
 
 # Update config
 
-sed -i "s/keyStorePassword\: your_main_store_password/keyStorePassword\: ${SHADOW_STORE_PASS}/" /home/shadow/shadowserver/config/shadow.yml
+sed -i "s/keyStorePassword\: your_main_store_password/keyStorePassword\: ${SHADOW_STORE_PASS}/" ${SERVER_PATH}/config/shadow.yml
 
 # Export the Shadow server key and certificate to PKCS12
 
@@ -106,12 +106,12 @@ fi
 
 # Update config
 
-sed -i "s/keyStorePassword\: your_aux_keystore_password/keyStorePassword\: ${AUX_STORE_PASS}/" /home/shadow/shadowserver/config/shadow.yml
+sed -i "s/keyStorePassword\: your_aux_keystore_password/keyStorePassword\: ${AUX_STORE_PASS}/" ${SERVER_PATH}/config/shadow.yml
 
 # Write the Minio key and certificate to auxiliary.keystore
 
 echo "Writing the Minio server certificate to the auxiliary keystore..."
-keytool -importcert -file cloud_a.crt -alias cloud_a -keystore /home/shadow/shadowserver/auxiliary.keystore -storepass "$AUX_STORE_PASS" -noprompt
+keytool -importcert -file cloud_a.crt -alias cloud_a -keystore ${SERVER_PATH}/auxiliary.keystore -storepass "$AUX_STORE_PASS" -noprompt
 
 # Add the root CA as trusted
 
@@ -134,7 +134,7 @@ keytool -importcert -file shadow_a.crt -alias shadow_a -cacerts -storepass "$CAC
 
 # Update config
 
-sed -i "s/trustStorePassword\: changeit/trustStorePassword\: ${CACERTS_PASS}/" /home/shadow/shadowserver/config/shadow.yml
+sed -i "s/trustStorePassword\: changeit/trustStorePassword\: ${CACERTS_PASS}/" ${SERVER_PATH}/config/shadow.yml
 
 # Remove files
 

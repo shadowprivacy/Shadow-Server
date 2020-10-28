@@ -9,4 +9,3 @@ MINIO_PATH="${USER_PATH}/minio"
 
 
 
-

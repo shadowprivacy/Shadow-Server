@@ -7,13 +7,13 @@ function download_sticker_pack
     PACK_ID=$1
     PACK_MAX_ID=$2
 
-    mkdir -p /home/shadow/data/stickers/$PACK_ID/full
+    mkdir -p ${DATA_PATH}/stickers/$PACK_ID/full
 
-    cd /home/shadow/data/stickers/$PACK_ID
+    cd ${DATA_PATH}/stickers/$PACK_ID
 
     wget https://cdn.signal.org/stickers/$PACK_ID/manifest.proto --no-check-certificate
 
-    cd /home/shadow/data/stickers/$PACK_ID/full
+    cd ${DATA_PATH}/stickers/$PACK_ID/full
 
     for i in $(seq 1 $PACK_MAX_ID)
        do
@@ -26,10 +26,12 @@ function download_sticker_pack
 
 SERVER_DOMAIN=$1
 
-mkdir /home/shadow/minio
-cp shadow.json /home/shadow/minio/
+mkdir ${MINIO_PATH}
+cp shadow.json ${MINIO_PATH}
+sed -i "s|/home/shadow/data|${DATA_PATH}|" minio.service
+sed -i "s/=shadow/=${USER_SH}/" minio.service
 cp minio.service /etc/systemd/system/
-cd /home/shadow/minio
+cd ${MINIO_PATH}
 
 printf "\nDownloading Minio..."
 wget https://dl.min.io/server/minio/release/linux-amd64/minio
@@ -55,18 +57,18 @@ if [ -z "$MINIO_SERVICE_PASSWORD" ]
 
 # Update config
 
-sed -i "s/accessSecret\: your_service_password/accessSecret\: ${MINIO_SERVICE_PASSWORD}/" /home/shadow/shadowserver/config/shadow.yml
+sed -i "s/accessSecret\: your_service_password/accessSecret\: ${MINIO_SERVICE_PASSWORD}/" ${SERVER_PATH}/config/shadow.yml
 
-echo "export MINIO_ACCESS_KEY=$MINIO_ADMIN_LOGIN" >> /home/shadow/.bashrc
-echo "export MINIO_SECRET_KEY=$MINIO_ADMIN_PASSWORD" >> /home/shadow/.bashrc
-echo "export MINIO_BROWSER=off" >> /home/shadow/.bashrc
+echo "export MINIO_ACCESS_KEY=$MINIO_ADMIN_LOGIN" >> ${USER_PATH}/.bashrc
+echo "export MINIO_SECRET_KEY=$MINIO_ADMIN_PASSWORD" >> ${USER_PATH}/.bashrc
+echo "export MINIO_BROWSER=off" >> ${USER_PATH}/.bashrc
 
 echo "Copying credentials.."
 
-mkdir -p /home/shadow/.minio/certs/CAs
-cp /home/shadow/shadowserver/cloud_a.crt /home/shadow/.minio/certs/public.crt
-cp /home/shadow/shadowserver/cloud_a.key /home/shadow/.minio/certs/private.key
-cp /home/shadow/shadowserver/rootCA.crt /home/shadow/.minio/certs/CAs/
+mkdir -p ${USER_PATH}/.minio/certs/CAs
+cp ${SERVER_PATH}/cloud_a.crt ${USER_PATH}/.minio/certs/public.crt
+cp ${SERVER_PATH}/cloud_a.key ${USER_PATH}/.minio/certs/private.key
+cp ${SERVER_PATH}/rootCA.crt ${USER_PATH}/.minio/certs/CAs/
 
 echo "Opening port 9000..."
 
@@ -77,10 +79,10 @@ echo "Downloading Minio client..."
 
 wget https://dl.min.io/client/mc/release/linux-amd64/mc
 
-mkdir /home/shadow/data
-chown -R shadow /home/shadow/data
-chown -R shadow /home/shadow/minio 
-chown -R shadow /home/shadow/.minio
+mkdir ${DATA_PATH}
+chown -R ${USER_SH} ${DATA_PATH}
+chown -R ${USER_SH} ${MINIO_PATH} 
+chown -R ${USER_SH} ${USER_PATH}/.minio
 chmod +x minio
 chmod +x mc
 mv minio /usr/local/bin/minio
@@ -104,30 +106,30 @@ systemctl start minio.service
 echo "Creating Minio config file..."
 
 sleep 5
-su -c "/home/shadow/minio/mc alias set shadow https://localhost:9000 ${MINIO_ADMIN_LOGIN} ${MINIO_ADMIN_PASSWORD}" - shadow
+su -c "${MINIO_PATH}/mc alias set shadow https://localhost:9000 ${MINIO_ADMIN_LOGIN} ${MINIO_ADMIN_PASSWORD}" - ${USER_SH}
 
 echo "Creating buckets..."
 
-su -c "/home/shadow/minio/mc mb shadow/attachments" - shadow
-su -c "/home/shadow/minio/mc mb shadow/profiles" - shadow
-su -c "/home/shadow/minio/mc mb shadow/stickers" - shadow
-su -c "/home/shadow/minio/mc mb shadow/debuglogs" - shadow
+su -c "${MINIO_PATH}/mc mb shadow/attachments" - ${USER_SH}
+su -c "${MINIO_PATH}/mc mb shadow/profiles" - ${USER_SH}
+su -c "${MINIO_PATH}/mc mb shadow/stickers" - ${USER_SH}
+su -c "${MINIO_PATH}/mc mb shadow/debuglogs" - ${USER_SH}
 
 echo "Setting up policies..."
 
-su -c "/home/shadow/minio/mc policy set download shadow/attachments" - shadow
-su -c "/home/shadow/minio/mc policy set download shadow/profiles" - shadow
-su -c "/home/shadow/minio/mc policy set download shadow/stickers" - shadow
-su -c "/home/shadow/minio/mc policy set download shadow/debuglogs" - shadow
+su -c "${MINIO_PATH}/mc policy set download shadow/attachments" - ${USER_SH}
+su -c "${MINIO_PATH}/mc policy set download shadow/profiles" - ${USER_SH}
+su -c "${MINIO_PATH}/mc policy set download shadow/stickers" - ${USER_SH}
+su -c "${MINIO_PATH}/mc policy set download shadow/debuglogs" - ${USER_SH}
 
 echo "Assigning the service user..."
 
-su -c "/home/shadow/minio/mc admin user add shadow ${MINIO_SERVICE_LOGIN} ${MINIO_SERVICE_PASSWORD}" - shadow
+su -c "${MINIO_PATH}/mc admin user add shadow ${MINIO_SERVICE_LOGIN} ${MINIO_SERVICE_PASSWORD}" - ${USER_SH}
 
 echo "Setting up the access policy..."
 
-su -c "/home/shadow/minio/mc admin policy add shadow shadow_policy /home/shadow/minio/shadow.json" - shadow
-su -c "/home/shadow/minio/mc admin policy set shadow shadow_policy user=${MINIO_SERVICE_LOGIN}" - shadow
+su -c "${MINIO_PATH}/mc admin policy add shadow shadow_policy ${MINIO_PATH}/shadow.json" - ${USER_SH}
+su -c "${MINIO_PATH}/mc admin policy set shadow shadow_policy user=${MINIO_SERVICE_LOGIN}" - ${USER_SH}
 
 echo "Downloading stickers..."
 
@@ -136,13 +138,13 @@ download_sticker_pack 9acc9e8aba563d26a4994e69263e3b25 24
 download_sticker_pack e61fa0867031597467ccc036cc65d403 29
 download_sticker_pack cca32f5b905208b7d0f1e17f23fdc185 89
 
-chown -R shadow /home/shadow/data/stickers/
+chown -R ${USER_SH} ${DATA_PATH}/stickers/
 
 # Update Shadow server config
 
-if test -f /home/shadow/shadowserver/config/shadow.yml
+if test -f ${SERVER_PATH}/config/shadow.yml
     then      
-       sed -i "s/cloudUri\: https\:\/\/shadow.example.com/cloudUri\: ${SERVER_DOMAIN}/" /home/shadow/shadowserver/config/shadow.yml
+       sed -i "s/cloudUri\: https\:\/\/shadow.example.com/cloudUri\: ${SERVER_DOMAIN}/" ${SERVER_PATH}/config/shadow.yml
     fi 
 
 
