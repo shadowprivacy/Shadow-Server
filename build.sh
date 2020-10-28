@@ -4,4 +4,4 @@ cd ./service/protobuf
 make
 cd -
 
-mvn -e clean package 
+mvn -e clean package -DskipTests
