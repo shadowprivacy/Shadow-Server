@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020 Sophisticated Research
+ * Copyright (C) 2020 Anton Alipov, sole trader
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published by
@@ -48,7 +48,7 @@ import static su.sres.shadowserver.storage.DirectoryManager.INCREMENTAL_UPDATES_
 @Path("/v1/dirplain")
 public class PlainDirectoryController {
 
-  private final Logger         logger            = LoggerFactory.getLogger(DirectoryController.class);
+  private final Logger         logger            = LoggerFactory.getLogger(PlainDirectoryController.class);
 //  private final MetricRegistry metricRegistry    = SharedMetricRegistries.getOrCreate(Constants.METRICS_NAME);
 //  private final Histogram      contactsHistogram = metricRegistry.histogram(name(getClass(), "contacts"));
 
