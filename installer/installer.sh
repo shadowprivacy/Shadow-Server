@@ -217,6 +217,8 @@ then
     java -jar ShadowServer-${SHADOW_SERVER_VERSION}.jar messagedb migrate ${SERVER_PATH}/config/shadow.yml
     java -jar ShadowServer-${SHADOW_SERVER_VERSION}.jar abusedb migrate ${SERVER_PATH}/config/shadow.yml
     
+    chown ${USER_SH} /var/log/shadow.log
+    
     else
          error_quit "The jar file has been tampered with!!!"  
     fi    
@@ -225,7 +227,6 @@ fi
 # Ensure proper access rights on Shadow folders
 
 chown -R ${USER_SH} ${SERVER_PATH}
-chown ${USER_SH} /var/log/shadow.log
 
 # Shadow service
 
