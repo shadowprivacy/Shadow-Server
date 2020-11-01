@@ -144,7 +144,7 @@ chown -R ${USER_SH} ${DATA_PATH}/stickers/
 
 if test -f ${SERVER_PATH}/config/shadow.yml
     then      
-       sed -i "s/cloudUri\: https\:\/\/shadow.example.com/cloudUri\: ${SERVER_DOMAIN}/" ${SERVER_PATH}/config/shadow.yml
+       sed -i "s|cloudUri\: https\://shadow.example.com|cloudUri\: https\://${SERVER_DOMAIN}|" ${SERVER_PATH}/config/shadow.yml
     fi 
 
 
