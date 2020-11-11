@@ -33,7 +33,7 @@ function check_app
 
 check_root_and_exit
 
-SHADOW_SERVER_VERSION=1.12
+SHADOW_SERVER_VERSION=1.13
 
 sed -i "s/SHADOW_VER/${SHADOW_SERVER_VERSION}/" shadow.service
 sed -i "s|/home/shadow/shadowserver|${SERVER_PATH}|" shadow.service
