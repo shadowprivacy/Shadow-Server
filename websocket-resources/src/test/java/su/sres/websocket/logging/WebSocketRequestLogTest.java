@@ -3,7 +3,6 @@ package su.sres.websocket.logging;
 import org.glassfish.jersey.internal.MapPropertiesDelegate;
 import org.glassfish.jersey.server.ContainerRequest;
 import org.glassfish.jersey.server.ContainerResponse;
-import org.junit.Ignore;
 import org.junit.Test;
 import su.sres.websocket.WebSocketSecurityContext;
 import su.sres.websocket.session.ContextPrincipal;
@@ -42,8 +41,8 @@ public class WebSocketRequestLogTest {
     listAppender.waitForListSize(1);
     assertThat(listAppender.list.size()).isEqualTo(1);
 
-    String loggedLine = new String(listAppender.outputStream.toByteArray());
-    assertThat(loggedLine.matches("123\\.456\\.789\\.123 \\- \\- \\[[0-9]{2}\\/[a-zA-Z]{3}\\/[0-9]{4}:[0-9]{2}:[0-9]{2}:[0-9]{2} \\-[0-9]{4}\\] \"GET \\/v1\\/test WS\" 200 \\- \"\\-\" \"\\-\"\n")).isTrue();
+    String loggedLine = new String(listAppender.outputStream.toByteArray());    
+    assertThat(loggedLine.matches("123\\.456\\.789\\.123 \\- \\- \\[[0-9]{2}\\/[\\p{L}\\.}]{3,}\\/[0-9]{4}:[0-9]{2}:[0-9]{2}:[0-9]{2} [\\-\\+][0-9]{4}\\] \"GET \\/v1\\/test WS\" 200 \\- \"\\-\" \"\\-\"\r?\n")).isTrue();
   }
   
   @Test
@@ -66,7 +65,7 @@ public class WebSocketRequestLogTest {
     assertThat(listAppender.list.size()).isEqualTo(1);
 
     String loggedLine = new String(listAppender.outputStream.toByteArray());
-    assertThat(loggedLine.matches("123\\.456\\.789\\.123 \\- \\- \\[[0-9]{2}\\/[a-zA-Z]{3}\\/[0-9]{4}:[0-9]{2}:[0-9]{2}:[0-9]{2} \\-[0-9]{4}\\] \"GET \\/v1\\/test WS\" 200 \\- \"https://moxie.org\" \"SmertZeSmert\"\n")).isTrue();
+    assertThat(loggedLine.matches("123\\.456\\.789\\.123 \\- \\- \\[[0-9]{2}\\/[\\p{L}\\.]{3,}\\/[0-9]{4}:[0-9]{2}:[0-9]{2}:[0-9]{2} [\\-\\+][0-9]{4}\\] \"GET \\/v1\\/test WS\" 200 \\- \"https://moxie.org\" \"SmertZeSmert\"\r?\n")).isTrue();
 
     System.out.println(listAppender.list.get(0));
     System.out.println(new String(listAppender.outputStream.toByteArray()));

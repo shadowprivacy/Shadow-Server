@@ -300,7 +300,6 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     		// , apnSender
     		, config.getLocalParametersConfiguration(), config.getServiceConfiguration()));
     environment.jersey().register(new DeviceController(pendingDevicesManager, accountsManager, messagesManager, rateLimiters, config.getMaxDevices(), config.getLocalParametersConfiguration().getVerificationCodeLifetime()));
-//  environment.jersey().register(new DirectoryController(rateLimiters, directory));
     environment.jersey().register(new PlainDirectoryController(rateLimiters, accountsManager));
     
  // excluded federation (?), reserved for future purposes
