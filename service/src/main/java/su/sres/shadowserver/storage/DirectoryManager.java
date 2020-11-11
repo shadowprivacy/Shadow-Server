@@ -17,43 +17,31 @@
  */
 package su.sres.shadowserver.storage;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.Pipeline;
-import redis.clients.jedis.Response;
-import su.sres.shadowserver.entities.ClientContact;
 import su.sres.shadowserver.redis.ReplicatedJedisPool;
-import su.sres.shadowserver.util.IterablePair;
-import su.sres.shadowserver.util.Pair;
-import su.sres.shadowserver.util.Util;
 
 public class DirectoryManager {
 
 	private final Logger logger = LoggerFactory.getLogger(DirectoryManager.class);
 
-	private static final byte[] DIRECTORY_KEY = { 'd', 'i', 'r', 'e', 'c', 't', 'o', 'r', 'y' };
+	static final String DIRECTORY_PLAIN = "DirectoryPlain";
+	static final String DIRECTORY_VERSION = "DirectoryVersion";
+	private static final String CURRENT_UPDATE = "CurrentUpdate";
+	private static final String INCREMENTAL_UPDATE = "UpdateDiff::";
 
-	        static final String DIRECTORY_PLAIN             = "DirectoryPlain";
-	        static final String DIRECTORY_VERSION           = "DirectoryVersion";
-	private static final String CURRENT_UPDATE              = "CurrentUpdate";
-	private static final String INCREMENTAL_UPDATE          = "UpdateDiff::";
-
-	public  static final int    INCREMENTAL_UPDATES_TO_HOLD = 100;
-	private static final String DIRECTORY_ACCESS_LOCK_KEY   = "DirectoryAccessLock";
+	public static final int INCREMENTAL_UPDATES_TO_HOLD = 100;
+	private static final String DIRECTORY_ACCESS_LOCK_KEY = "DirectoryAccessLock";
 
 	private final ObjectMapper objectMapper;
 	private final ReplicatedJedisPool redisPool;
@@ -62,101 +50,6 @@ public class DirectoryManager {
 		this.redisPool = redisPool;
 		this.objectMapper = new ObjectMapper();
 		this.objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-	}
-
-	public void remove(String number) {
-		remove(Util.getContactToken(number));
-	}
-
-	public void remove(BatchOperationHandle handle, String number) {
-		remove(handle, Util.getContactToken(number));
-	}
-
-	public void remove(byte[] token) {
-		try (Jedis jedis = redisPool.getWriteResource()) {
-			jedis.hdel(DIRECTORY_KEY, token);
-		}
-	}
-
-	public void remove(BatchOperationHandle handle, byte[] token) {
-		Pipeline pipeline = handle.pipeline;
-		pipeline.hdel(DIRECTORY_KEY, token);
-	}
-
-	public void add(ClientContact contact) {
-		TokenValue tokenValue = new TokenValue(contact.getRelay(), contact.isVoice(), contact.isVideo());
-
-		try (Jedis jedis = redisPool.getWriteResource()) {
-			jedis.hset(DIRECTORY_KEY, contact.getToken(), objectMapper.writeValueAsBytes(tokenValue));
-		} catch (JsonProcessingException e) {
-			logger.warn("JSON Serialization", e);
-		}
-	}
-
-	public void add(BatchOperationHandle handle, ClientContact contact) {
-		try {
-			Pipeline pipeline = handle.pipeline;
-			TokenValue tokenValue = new TokenValue(contact.getRelay(), contact.isVoice(), contact.isVideo());
-
-			pipeline.hset(DIRECTORY_KEY, contact.getToken(), objectMapper.writeValueAsBytes(tokenValue));
-		} catch (JsonProcessingException e) {
-			logger.warn("JSON Serialization", e);
-		}
-	}
-
-	public PendingClientContact get(BatchOperationHandle handle, byte[] token) {
-		Pipeline pipeline = handle.pipeline;
-		return new PendingClientContact(objectMapper, token, pipeline.hget(DIRECTORY_KEY, token));
-	}
-
-	public Optional<ClientContact> get(byte[] token) {
-		try (Jedis jedis = redisPool.getWriteResource()) {
-			byte[] result = jedis.hget(DIRECTORY_KEY, token);
-
-			if (result == null) {
-				return Optional.empty();
-			}
-
-			TokenValue tokenValue = objectMapper.readValue(result, TokenValue.class);
-			return Optional.of(new ClientContact(token, tokenValue.relay, tokenValue.voice, tokenValue.video));
-		} catch (IOException e) {
-			logger.warn("JSON Error", e);
-			return Optional.empty();
-		}
-	}
-
-	public List<ClientContact> get(List<byte[]> tokens) {
-		try (Jedis jedis = redisPool.getWriteResource()) {
-			Pipeline pipeline = jedis.pipelined();
-			List<Response<byte[]>> futures = new LinkedList<>();
-			List<ClientContact> results = new LinkedList<>();
-
-			try {
-				for (byte[] token : tokens) {
-					futures.add(pipeline.hget(DIRECTORY_KEY, token));
-				}
-			} finally {
-				pipeline.sync();
-			}
-
-			IterablePair<byte[], Response<byte[]>> lists = new IterablePair<>(tokens, futures);
-
-			for (Pair<byte[], Response<byte[]>> pair : lists) {
-				try {
-					if (pair.second().get() != null) {
-						TokenValue tokenValue = objectMapper.readValue(pair.second().get(), TokenValue.class);
-						ClientContact clientContact = new ClientContact(pair.first(), tokenValue.relay,
-								tokenValue.voice, tokenValue.video);
-
-						results.add(clientContact);
-					}
-				} catch (IOException e) {
-					logger.warn("Deserialization Problem: ", e);
-				}
-			}
-
-			return results;
-		}
 	}
 
 	public BatchOperationHandle startBatchOperation() {
@@ -173,17 +66,20 @@ public class DirectoryManager {
 	}
 
 	void redisUpdatePlainDirectory(Account account) {
+
+		PlainDirectoryEntryValue entryValue = new PlainDirectoryEntryValue(account.getUuid());
+
 		try (Jedis jedis = redisPool.getWriteResource()) {
 
-			// TODO: empty values for now, to be expanded with future versions of directory
-			jedis.hset(DIRECTORY_PLAIN, account.getUserLogin(), "");
+			jedis.hset(DIRECTORY_PLAIN, account.getUserLogin(), objectMapper.writeValueAsString(entryValue));
+		} catch (JsonProcessingException e) {
+			logger.warn("JSON Error", e);
 		}
 	}
 
-	// TODO: needs be made more complex if the directory stores data beyond logins
-	void redisUpdatePlainDirectory(BatchOperationHandle handle, String userLogin) {
+	public void redisUpdatePlainDirectory(BatchOperationHandle handle, String userLogin, String entryValueString) {
 
-		handle.pipeline.hset(DIRECTORY_PLAIN, userLogin, "");
+		handle.pipeline.hset(DIRECTORY_PLAIN, userLogin, entryValueString);
 	}
 
 	void redisRemoveFromPlainDirectory(HashSet<Account> accountsToRemove) {
@@ -194,6 +90,10 @@ public class DirectoryManager {
 				jedis.hdel(DIRECTORY_PLAIN, account.getUserLogin());
 			}
 		}
+	}
+
+	public void redisRemoveFromPlainDirectory(BatchOperationHandle handle, String userLogin) {
+		handle.pipeline.hdel(DIRECTORY_PLAIN, userLogin);
 	}
 
 	public HashMap<String, String> retrievePlainDirectory() {
@@ -218,7 +118,6 @@ public class DirectoryManager {
 		jedis.set(DIRECTORY_VERSION, String.valueOf(version));
 
 		jedis.close();
-
 	}
 
 	public String getIncrementalUpdateKey(int backoff) {
@@ -227,20 +126,25 @@ public class DirectoryManager {
 	}
 
 	public void recordUpdateUpdate(Account account) {
-		Jedis jedis = redisPool.getWriteResource();
+		try (Jedis jedis = redisPool.getWriteResource()) {
 
-		// deleting since we need to rewrite it;
-		jedis.del(CURRENT_UPDATE);
+			// deleting since we need to rewrite it;
+			jedis.del(CURRENT_UPDATE);
 
-		boolean alreadyInDirectory = jedis.hexists(DIRECTORY_PLAIN, account.getUserLogin());
+			boolean alreadyInDirectory = jedis.hexists(DIRECTORY_PLAIN, account.getUserLogin());
 
-		// simply checking if the login is already in directory
-		// TODO: must be made more complicated if the directory stores anything except
-		// just logins
-		if (!alreadyInDirectory)
-			jedis.hset(CURRENT_UPDATE, account.getUserLogin(), "");
-
-		jedis.close();
+			// TODO: this is simply checking if the login is already in directory, since
+			// this "update" is actually limited to creation
+			// so far, and UUID does not change afterwards. Needs to be made more
+			// complicated if actual updates and, the more so,
+			// multiple accounts at a time, are implemented
+			if (!alreadyInDirectory) {
+				PlainDirectoryEntryValue entryValue = new PlainDirectoryEntryValue(account.getUuid());
+				jedis.hset(CURRENT_UPDATE, account.getUserLogin(), objectMapper.writeValueAsString(entryValue));
+			}
+		} catch (JsonProcessingException e) {
+			logger.warn("JSON Error", e);
+		}
 	}
 
 	public void recordUpdateRemoval(HashSet<Account> accounts) {
@@ -256,7 +160,6 @@ public class DirectoryManager {
 		}
 
 		jedis.close();
-
 	}
 
 	public void buildIncrementalUpdates(long directoryVersion) {
@@ -265,27 +168,15 @@ public class DirectoryManager {
 
 		// this is 1 or more, since this method is not invoked until the directory
 		// version is incremented from 0;
-		int backoff;
-
-		if (directoryVersion < INCREMENTAL_UPDATES_TO_HOLD) {
-
-			backoff = (int) directoryVersion;
-		} else {
-
-			backoff = INCREMENTAL_UPDATES_TO_HOLD;
-		}
-
+		int backoff = calculateBackoff(directoryVersion);
+		
 		// if current update is missing, we can't calculate anything; nullifying all
 		// incremental updates
 		if (!jedis.exists(CURRENT_UPDATE)) {
 
-			logger.warn("The current update key is missing in Redis. Nullifying all incremental updates...");
+			logger.warn("The current update key is missing in Redis. Flushing all incremental updates...");
 
-			for (int i = 1; i <= backoff; i++) {
-
-				jedis.del(getIncrementalUpdateKey(i));
-			}
-
+			flushIncrementalUpdates(backoff, jedis);
 			jedis.close();
 			return;
 		}
@@ -301,7 +192,6 @@ public class DirectoryManager {
 
 			// for i = 1 the incremental update is just the same as the current update
 			if (i == 1) {
-
 				jedis.hmset(targetIncrementalUpdateKey, jedis.hgetAll(CURRENT_UPDATE));
 				continue;
 			}
@@ -312,31 +202,27 @@ public class DirectoryManager {
 			// incremental update; so just nullifying it
 			if (!jedis.exists(legacyIncrementalUpdateKey)) {
 
-				logger.debug(legacyIncrementalUpdateKey
-						+ " is missing in Redis. Therefore nullifying " + targetIncrementalUpdateKey
-						+ " as it's impossible to calculate it");
+				logger.debug(legacyIncrementalUpdateKey + " is missing in Redis. Therefore nullifying "
+						+ targetIncrementalUpdateKey + " as it's impossible to calculate it");
 				continue;
 			}
 
 			HashMap<String, String> updatedIncrementalUpdate = mergeUpdates(legacyIncrementalUpdateKey, CURRENT_UPDATE);
 
 			if (!updatedIncrementalUpdate.isEmpty()) {
-				
 				jedis.hmset(targetIncrementalUpdateKey, updatedIncrementalUpdate);
 			} else {
-				
 				// just a filler for the case when the incremental update is empty
 				jedis.hset(targetIncrementalUpdateKey, "", "");
 			}
-
 		}
 
 		jedis.close();
-
 	}
 
-	// TODO: if directory stores anything beyond usernames, this needs be more
-	// complicated
+	// TODO: if directory stores anything beyond usernames and (immutable) UUIDs,
+	// and there are "true" entry updates,
+	// this needs be more complicated
 	public HashMap<String, String> mergeUpdates(String olderKey, String newerKey) {
 
 		Jedis jedis = redisPool.getWriteResource();
@@ -347,17 +233,21 @@ public class DirectoryManager {
 		HashMap<String, String> mergeFields = new HashMap<String, String>();
 
 		for (String field : olderFields) {
-			
-			// If newerFields.contains(field) and the two are different we don't want to do anything, since addition and deletion negate each other
-			// There won't be the case when two values are equal: if a login is to be added up to the previous step, it won't be added again on the current step; same for deletion
 
-			if (!newerFields.contains(field)) {											
+			// If newerFields.contains(field) and the two are different we don't want to do
+			// anything, since addition and deletion negate each other.
+			// There won't be the case when two values are equal: if a login is to be added
+			// up to the previous step, it won't be added again on the current step; same
+			// for deletion
 
-				// if the field is absent in the newer update, copy what's in the older one, neglecting the empty filler
+			if (!newerFields.contains(field)) {
+
+				// if the field is absent in the newer update, copy what's in the older one,
+				// neglecting the empty filler
 				if (!field.equals("")) {
 					mergeFields.put(field, jedis.hget(olderKey, field));
 				}
-			}			
+			}
 		}
 
 		for (String field : newerFields) {
@@ -375,8 +265,25 @@ public class DirectoryManager {
 		return mergeFields;
 	}
 
-	public ReplicatedJedisPool accessDirectoryCache() {
+	public void flushIncrementalUpdates(int backoff, Jedis jedis) {
 
+		for (int i = 1; i <= backoff; i++) {
+			jedis.del(getIncrementalUpdateKey(i));
+		}
+		
+		jedis.del(CURRENT_UPDATE);
+	}
+
+	public int calculateBackoff(long directoryVersion) {
+
+		if (directoryVersion < INCREMENTAL_UPDATES_TO_HOLD) {
+			return (int) directoryVersion;
+		} else {
+			return INCREMENTAL_UPDATES_TO_HOLD;
+		}
+	}
+
+	public ReplicatedJedisPool accessDirectoryCache() {
 		return redisPool;
 	}
 
@@ -386,7 +293,7 @@ public class DirectoryManager {
 		jedis.setex(DIRECTORY_ACCESS_LOCK_KEY, 60, "");
 		jedis.close();
 	}
-	
+
 	public void releaseDirectoryReadLock() {
 		Jedis jedis = redisPool.getWriteResource();
 
@@ -410,50 +317,5 @@ public class DirectoryManager {
 			this.pipeline = pipeline;
 			this.jedis = jedis;
 		}
-	}
-
-	private static class TokenValue {
-
-		@JsonProperty(value = "r")
-		private String relay;
-
-		@JsonProperty(value = "v")
-		private boolean voice;
-
-		@JsonProperty(value = "w")
-		private boolean video;
-
-		public TokenValue() {
-		}
-
-		public TokenValue(String relay, boolean voice, boolean video) {
-			this.relay = relay;
-			this.voice = voice;
-			this.video = video;
-		}
-	}
-
-	public static class PendingClientContact {
-		private final ObjectMapper objectMapper;
-		private final byte[] token;
-		private final Response<byte[]> response;
-
-		PendingClientContact(ObjectMapper objectMapper, byte[] token, Response<byte[]> response) {
-			this.objectMapper = objectMapper;
-			this.token = token;
-			this.response = response;
-		}
-
-		public Optional<ClientContact> get() throws IOException {
-			byte[] result = response.get();
-
-			if (result == null) {
-				return Optional.empty();
-			}
-
-			TokenValue tokenValue = objectMapper.readValue(result, TokenValue.class);
-			return Optional.of(new ClientContact(token, tokenValue.relay, tokenValue.voice, tokenValue.video));
-		}
-
 	}
 }

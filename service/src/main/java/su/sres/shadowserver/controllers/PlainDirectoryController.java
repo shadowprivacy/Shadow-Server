@@ -132,6 +132,34 @@ public class PlainDirectoryController {
 		}
 	}
 	
+	@Timed
+	@GET
+	@Path("/download/forcefull")
+	@Produces(ProtocolBufferMediaType.APPLICATION_PROTOBUF)
+	public DirectoryResponse downloadFullDirectory(@Auth Account account) throws RateLimitExceededException {
+		rateLimiters.getDirectoryLimiter().validate(account.getUserLogin());		
+				
+		long localVersion =  accountsManager.getDirectoryVersion();		
+		
+		if (
+			// if directory is write locked, return no-update, whatever the version	
+			accountsManager.getAccountCreationLock()  ||
+			accountsManager.getAccountRemovalLock()   ||			    
+			accountsManager.getDirectoryRestoreLock()) {         
+					
+			return noUpdateResponse(localVersion);
+		}				
+		
+		directoryReadLock.getAndIncrement();    
+		directory.setDirectoryReadLock();		
+		
+		try {										
+			return fullDirectoryResponse(localVersion);		 
+		} finally {			
+			if (directoryReadLock.decrementAndGet() == 0) directory.releaseDirectoryReadLock();
+		}
+	}
+	
     private DirectoryResponse fullDirectoryResponse(long version) {
 		
 		if (!accountsManager.getDirectoryRestoreLock()) {	

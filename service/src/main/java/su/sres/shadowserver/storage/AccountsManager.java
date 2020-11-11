@@ -25,8 +25,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -357,18 +355,20 @@ public class AccountsManager {
 	        List<Account> accounts = getAll(offset, CHUNK_SIZE);
 
 	        if (accounts == null || accounts.isEmpty()) break;
-	        else                                        offset += accounts.size();
+	        else offset += accounts.size();
 
 	        for (Account account : accounts) {
 	          if (account.isEnabled()) {	            
 
-	            directory.redisUpdatePlainDirectory(batchOperation, account.getUserLogin()); 
+	            directory.redisUpdatePlainDirectory(batchOperation, account.getUserLogin(), mapper.writeValueAsString(new PlainDirectoryEntryValue(account.getUuid()))); 
 	            contactsAdded++;	   
 	          }
 	        }
 
 	        logger.info("Processed " + CHUNK_SIZE + " local accounts...");
 	      }
+	    } catch (JsonProcessingException e) {
+	    	logger.error("There were errors while restoring the local directory from PostgreSQL!", e);
 	    } finally {
 	      directory.stopBatchOperation(batchOperation);
 	    }
@@ -381,8 +381,12 @@ public class AccountsManager {
 		return directory;
 	}
 	 
+	public ObjectMapper getMapper() {
+		return mapper;
+	} 
+	 
 	 private boolean isPlainDirectoryExisting() {
-		 try (Jedis jedis = directory.accessDirectoryCache().getWriteResource();) {
+		 try (Jedis jedis = directory.accessDirectoryCache().getWriteResource()) {
 			 
 			 return jedis.exists(DIRECTORY_PLAIN);
 		 }		 

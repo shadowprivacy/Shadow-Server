@@ -18,88 +18,77 @@ package su.sres.shadowserver.workers;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import net.sourceforge.argparse4j.inf.Namespace;
+import redis.clients.jedis.Jedis;
+
 import org.jdbi.v3.core.Jdbi;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.dropwizard.Application;
 import io.dropwizard.cli.EnvironmentCommand;
-import io.dropwizard.db.DataSourceFactory;
-
+import io.dropwizard.jdbi3.JdbiFactory;
 import io.dropwizard.setup.Environment;
 import su.sres.shadowserver.WhisperServerConfiguration;
-// federation excluded, reserved for future use
-// import su.sres.shadowserver.federation.FederatedClientManager;
 import su.sres.shadowserver.providers.RedisClientFactory;
 import su.sres.shadowserver.redis.ReplicatedJedisPool;
 import su.sres.shadowserver.storage.Accounts;
 import su.sres.shadowserver.storage.AccountsManager;
 import su.sres.shadowserver.storage.DirectoryManager;
 import su.sres.shadowserver.storage.FaultTolerantDatabase;
-import su.sres.shadowserver.configuration.DatabaseConfiguration;
 
 public class DirectoryCommand extends EnvironmentCommand<WhisperServerConfiguration> {
 
-  private final Logger logger = LoggerFactory.getLogger(DirectoryCommand.class);
+	private final Logger logger = LoggerFactory.getLogger(DirectoryCommand.class);
 
-  public DirectoryCommand() {
-    super(new Application<WhisperServerConfiguration>() {
-      @Override
-      public void run(WhisperServerConfiguration configuration, Environment environment)
-          throws Exception
-      {
+	public DirectoryCommand() {
+		super(new Application<WhisperServerConfiguration>() {
+			@Override
+			public void run(WhisperServerConfiguration configuration, Environment environment) throws Exception {
 
-      }
-    }, "directory", "Update directory from DB and peers.");
-  }
+			}
+		}, "directory", "Update directory from PostgreSQL. WARNING: This will flush all your incremental updates!");
+	}
 
-  @Override
-  protected void run(Environment environment, Namespace namespace,
-                     WhisperServerConfiguration configuration)
-      throws Exception
-  {
-    try {
-      environment.getObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+	@Override
+	protected void run(Environment environment, Namespace namespace, WhisperServerConfiguration configuration)
+			throws Exception {
+		try {
+			environment.getObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-      DatabaseConfiguration dbConfig = configuration.getAccountsDatabaseConfiguration();
-//      DBI               dbi      = new DBI(dbConfig.getUrl(), dbConfig.getUser(), dbConfig.getPassword());
+			JdbiFactory jdbiFactory = new JdbiFactory();
+			Jdbi accountJdbi = jdbiFactory.build(environment, configuration.getAccountsDatabaseConfiguration(),
+					"accountdb");
+			FaultTolerantDatabase accountDatabase = new FaultTolerantDatabase("account_database_directory", accountJdbi,
+					configuration.getAccountsDatabaseConfiguration().getCircuitBreakerConfiguration());
 
-// insert      
-      Jdbi accountJdbi = Jdbi.create(dbConfig.getUrl(), dbConfig.getUser(), dbConfig.getPassword());  
-         
-      FaultTolerantDatabase accountDatabase = new FaultTolerantDatabase("account_database_directory", accountJdbi, dbConfig.getCircuitBreakerConfiguration());
-      
-//      dbi.registerArgumentFactory(new OptionalArgumentFactory(dbConfig.getDriverClass()));
-//      dbi.registerContainerFactory(new ImmutableListContainerFactory());
-//      dbi.registerContainerFactory(new ImmutableSetContainerFactory());
-//      dbi.registerContainerFactory(new OptionalContainerFactory());
+			Accounts accounts = new Accounts(accountDatabase);
 
-//      Accounts            accounts        = dbi.onDemand(Accounts.class);
-      
-// insert      
-      Accounts        accounts        = new Accounts(accountDatabase);
-      
-      ReplicatedJedisPool cacheClient     = new RedisClientFactory("main_cache_directory_command", configuration.getCacheConfiguration().getUrl(), configuration.getCacheConfiguration().getReplicaUrls(), configuration.getCacheConfiguration().getCircuitBreakerConfiguration()).getRedisClientPool();
-      ReplicatedJedisPool redisClient     = new RedisClientFactory("directory_cache_directory_command", configuration.getDirectoryConfiguration().getUrl(), configuration.getDirectoryConfiguration().getReplicaUrls(), configuration.getDirectoryConfiguration().getCircuitBreakerConfiguration()).getRedisClientPool();
-      DirectoryManager    directory       = new DirectoryManager(redisClient);
-      AccountsManager     accountsManager = new AccountsManager(accounts, directory, cacheClient);
+			ReplicatedJedisPool cacheClient = new RedisClientFactory("main_cache_directory_command",
+					configuration.getCacheConfiguration().getUrl(),
+					configuration.getCacheConfiguration().getReplicaUrls(),
+					configuration.getCacheConfiguration().getCircuitBreakerConfiguration()).getRedisClientPool();
+			ReplicatedJedisPool redisClient = new RedisClientFactory("directory_cache_directory_command",
+					configuration.getDirectoryConfiguration().getUrl(),
+					configuration.getDirectoryConfiguration().getReplicaUrls(),
+					configuration.getDirectoryConfiguration().getCircuitBreakerConfiguration()).getRedisClientPool();
 
-// This was already commented, left at federation removal for future use
-//      FederatedClientManager federatedClientManager = new FederatedClientManager(environment,
-//                                                                                 configuration.getJerseyClientConfiguration(),
-//                                                                                 configuration.getFederationConfiguration());
+			DirectoryManager directory = new DirectoryManager(redisClient);
+			AccountsManager accountsManager = new AccountsManager(accounts, directory, cacheClient);
 
-      DirectoryUpdater update = new DirectoryUpdater(accountsManager, directory);
+			PlainDirectoryUpdater updater = new PlainDirectoryUpdater(accountsManager);
 
-      update.updateFromLocalDatabase();
-// This was already commented, left at federation removal for future use
-//      update.updateFromPeers();
-    } catch (Exception ex) {
-      logger.warn("Directory Exception", ex);
-      throw new RuntimeException(ex);
-    } finally {
-//      Thread.sleep(3000);
-//      System.exit(0);
-    }
-  }
+			if (accountsManager.getAccountCreationLock() || directory.getDirectoryReadLock()
+					|| accountsManager.getDirectoryRestoreLock()) {
+
+				logger.warn("There's a pending operation on directory right now, please try again a bit later");
+				return;
+			}
+			
+			updater.updateFromLocalDatabase();
+
+		} catch (Exception ex) {
+			logger.warn("Directory Exception", ex);
+			throw new RuntimeException(ex);
+		}
+	}
 }
