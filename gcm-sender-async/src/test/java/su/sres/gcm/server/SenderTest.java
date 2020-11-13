@@ -4,9 +4,9 @@ import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.squareup.okhttp.mockwebserver.MockResponse;
-import com.squareup.okhttp.mockwebserver.RecordedRequest;
-import com.squareup.okhttp.mockwebserver.rule.MockWebServerRule;
+import okhttp3.mockwebserver.MockResponse;
+import okhttp3.mockwebserver.RecordedRequest;
+import okhttp3.mockwebserver.MockWebServer;
 
 import org.junit.Ignore;
 import org.junit.Rule;
@@ -26,7 +26,7 @@ import static su.sres.gcm.server.util.JsonHelpers.jsonFixture;
 public class SenderTest {
 
   @Rule
-  public MockWebServerRule server = new MockWebServerRule();
+  public MockWebServer server = new MockWebServer();
   
   private static final ObjectMapper mapper = new ObjectMapper();
 
@@ -42,7 +42,7 @@ public class SenderTest {
                                                      .setBody(fixture("fixtures/response-success.json"));
     server.enqueue(successResponse);
 
-    Sender                    sender = new Sender("foobarbaz", mapper, 10, server.getUrl("/gcm/send").toExternalForm());
+    Sender sender = new Sender("foobarbaz", mapper, 10, server.url("/gcm/send").toString());
  
     CompletableFuture<Result> future = sender.send(Message.newBuilder().withDestination("1").build());
 
@@ -57,19 +57,18 @@ public class SenderTest {
     
     RecordedRequest request = server.takeRequest();
     assertEquals(request.getPath(), "/gcm/send");
-    assertEquals(new String(request.getBody()), jsonFixture("fixtures/message-minimal.json"));
+    assertEquals(request.getBody().readUtf8(), jsonFixture("fixtures/message-minimal.json"));
     assertEquals(request.getHeader("Authorization"), "key=foobarbaz");
     assertEquals(request.getHeader("Content-Type"), "application/json");
     assertEquals(server.getRequestCount(), 1);
   }
 
-  @Test
-  @Ignore
+  @Test  
   public void testBadApiKey() throws InterruptedException, TimeoutException {
     MockResponse unauthorizedResponse = new MockResponse().setResponseCode(401);
     server.enqueue(unauthorizedResponse);
 
-    Sender                    sender = new Sender("foobar", mapper, 10, server.getUrl("/gcm/send").toExternalForm());
+    Sender sender = new Sender("foobar", mapper, 10, server.url("/gcm/send").toString());
 
     CompletableFuture<Result> future = sender.send(Message.newBuilder().withDestination("1").build());
 
@@ -83,13 +82,12 @@ public class SenderTest {
     assertEquals(server.getRequestCount(), 1);
   }
 
-  @Test
-  @Ignore
+  @Test  
   public void testBadRequest() throws TimeoutException, InterruptedException {
     MockResponse malformed = new MockResponse().setResponseCode(400);
     server.enqueue(malformed);
 
-    Sender                    sender = new Sender("foobarbaz", mapper, 10, server.getUrl("/gcm/send").toExternalForm());
+    Sender sender = new Sender("foobarbaz", mapper, 10, server.url("/gcm/send").toString());
  
     CompletableFuture<Result> future = sender.send(Message.newBuilder().withDestination("1").build());
 
@@ -103,15 +101,14 @@ public class SenderTest {
     assertEquals(server.getRequestCount(), 1);
   }
   
-  @Test
-  @Ignore
+  @Test  
   public void testServerError() throws TimeoutException, InterruptedException {
     MockResponse error = new MockResponse().setResponseCode(503);
     server.enqueue(error);
     server.enqueue(error);
     server.enqueue(error);
 
-    Sender                    sender = new Sender("foobarbaz", mapper, 3, server.getUrl("/gcm/send").toExternalForm());
+    Sender sender = new Sender("foobarbaz", mapper, 3, server.url("/gcm/send").toString());
 
     CompletableFuture<Result> future = sender.send(Message.newBuilder().withDestination("1").build());
 
@@ -125,8 +122,7 @@ public class SenderTest {
     assertEquals(server.getRequestCount(), 3);
   }
 
-  @Test
-  @Ignore
+  @Test  
   public void testServerErrorRecovery() throws InterruptedException, ExecutionException, TimeoutException {
     MockResponse success = new MockResponse().setResponseCode(200)
                                              .setBody(fixture("fixtures/response-success.json"));
@@ -138,7 +134,7 @@ public class SenderTest {
     server.enqueue(error);
     server.enqueue(success);
 
-    Sender                    sender = new Sender("foobarbaz", mapper, 4, server.getUrl("/gcm/send").toExternalForm());
+    Sender sender = new Sender("foobarbaz", mapper, 4, server.url("/gcm/send").toString());
 
     CompletableFuture<Result> future = sender.send(Message.newBuilder().withDestination("1").build());
 
@@ -153,8 +149,7 @@ public class SenderTest {
     assertNull(result.getCanonicalRegistrationId());
   }
 
-  @Test
-  @Ignore
+  @Test  
   public void testNetworkError() throws TimeoutException, InterruptedException, IOException {
     MockResponse response = new MockResponse().setResponseCode(200)
                                               .setBody(fixture("fixtures/response-success.json"));
@@ -163,9 +158,9 @@ public class SenderTest {
     server.enqueue(response);
     server.enqueue(response);
 
-    Sender sender = new Sender("foobarbaz", mapper ,2, server.getUrl("/gcm/send").toExternalForm());
+    Sender sender = new Sender("foobarbaz", mapper ,2, server.url("/gcm/send").toString());
    
-    server.get().shutdown();
+    server.shutdown();
 
     CompletableFuture<Result> future = sender.send(Message.newBuilder().withDestination("1").build());
 
@@ -176,15 +171,14 @@ public class SenderTest {
     }
   }
 
-  @Test
-  @Ignore
+  @Test  
   public void testNotRegistered() throws InterruptedException, ExecutionException, TimeoutException {
     MockResponse response = new MockResponse().setResponseCode(200)
                                               .setBody(fixture("fixtures/response-not-registered.json"));
 
     server.enqueue(response);
 
-    Sender                    sender = new Sender("foobarbaz", mapper,2, server.getUrl("/gcm/send").toExternalForm());
+    Sender sender = new Sender("foobarbaz", mapper,2, server.url("/gcm/send").toString());
 
     CompletableFuture<Result> future = sender.send(Message.newBuilder()
                                                          .withDestination("2")
