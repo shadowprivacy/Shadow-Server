@@ -70,8 +70,7 @@ public class GCMSender implements Managed {
 
     String key;
 
-    switch (message.getType()) {
-      case RECEIPT:      key = "receipt";      break;
+    switch (message.getType()) {      
       case NOTIFICATION: key = "notification"; break;
       case CHALLENGE:    key = "challenge";    break;
       default:           throw new AssertionError();

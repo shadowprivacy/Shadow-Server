@@ -6,7 +6,7 @@ import java.util.Optional;
 public class GcmMessage {
 
 	public enum Type {
-	    RECEIPT, NOTIFICATION, CHALLENGE
+	    NOTIFICATION, CHALLENGE
 	  }
 
 	  private final String           gcmId;

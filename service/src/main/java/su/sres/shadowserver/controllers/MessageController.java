@@ -231,9 +231,7 @@ throws RateLimitExceededException
                                   // Optional.fromNullable(message.get().getRelay()));
                                   message.get().getTimestamp());
                                   
-      }
-    } catch (NotPushRegisteredException e) {
-      logger.info("User no longer push registered for delivery receipt: " + e.getMessage());
+      }    
    // excluded federation, reserved for future purposes
       //    } catch (NoSuchUserException | TransientPushFailureException e) {
     } catch (NoSuchUserException e) {
@@ -257,9 +255,7 @@ throws RateLimitExceededException
           receiptSender.sendReceipt(account, message.get().getSource(), message.get().getTimestamp());
       }
     } catch (NoSuchUserException e) {
-        logger.warn("Sending delivery receipt", e);
-      } catch (NotPushRegisteredException e) {
-        logger.info("User no longer push registered for delivery receipt: " + e.getMessage());
+        logger.warn("Sending delivery receipt", e);      
     }
   }
 

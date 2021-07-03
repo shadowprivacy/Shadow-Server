@@ -6,12 +6,12 @@ import com.codahale.metrics.SharedMetricRegistries;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
-import com.turo.pushy.apns.ApnsClient;
-import com.turo.pushy.apns.ApnsClientBuilder;
-import com.turo.pushy.apns.DeliveryPriority;
-import com.turo.pushy.apns.PushNotificationResponse;
-import com.turo.pushy.apns.metrics.dropwizard.DropwizardApnsClientMetricsListener;
-import com.turo.pushy.apns.util.SimpleApnsPushNotification;
+import com.eatthepath.pushy.apns.ApnsClient;
+import com.eatthepath.pushy.apns.ApnsClientBuilder;
+import com.eatthepath.pushy.apns.DeliveryPriority;
+import com.eatthepath.pushy.apns.PushNotificationResponse;
+import com.eatthepath.pushy.apns.metrics.dropwizard.DropwizardApnsClientMetricsListener;
+import com.eatthepath.pushy.apns.util.SimpleApnsPushNotification;
 
 import org.bouncycastle.openssl.PEMReader;
 import org.slf4j.Logger;
