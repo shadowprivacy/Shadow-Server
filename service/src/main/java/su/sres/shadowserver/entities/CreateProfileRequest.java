@@ -3,10 +3,10 @@ package su.sres.shadowserver.entities;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
-import org.hibernate.validator.constraints.NotEmpty;
 import org.signal.zkgroup.profiles.ProfileKeyCommitment;
 import su.sres.shadowserver.util.ExactlySize;
 
+import javax.validation.constraints.NotEmpty;
 import javax.validation.constraints.NotNull;
 
 public class CreateProfileRequest {

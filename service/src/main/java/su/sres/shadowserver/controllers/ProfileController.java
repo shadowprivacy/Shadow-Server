@@ -113,6 +113,8 @@ public class ProfileController {
 	@Produces(MediaType.APPLICATION_JSON)
     @Consumes(MediaType.APPLICATION_JSON)
 	public Response setProfile(@Auth Account account, @Valid CreateProfileRequest request) {
+		
+				
 		if (!isZkEnabled) throw new WebApplicationException(Response.Status.NOT_FOUND);
 		
 	    Optional<VersionedProfile>              currentProfile = profilesManager.get(account.getUuid(), request.getVersion());
