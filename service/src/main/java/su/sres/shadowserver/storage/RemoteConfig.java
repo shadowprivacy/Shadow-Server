@@ -13,37 +13,54 @@ import javax.validation.constraints.Pattern;
 
 public class RemoteConfig {
 
-	  @JsonProperty
-	  @Pattern(regexp = "[A-Za-z0-9\\.]+")
-	  private String name;
+	@JsonProperty
+	@Pattern(regexp = "[A-Za-z0-9\\.]+")
+	private String name;
 
-	  @JsonProperty
-	  @NotNull
-	  @Min(0)
-	  @Max(100)
-	  private int percentage;
+	@JsonProperty
+	@NotNull
+	@Min(0)
+	@Max(100)
+	private int percentage;
 
-	  @JsonProperty
-	  @NotNull
-	  private Set<UUID> uuids = new HashSet<>();
+	@JsonProperty
+	@NotNull
+	private Set<UUID> uuids = new HashSet<>();
 
-	  public RemoteConfig() {}
+	@JsonProperty
+	private String defaultValue;
 
-	  public RemoteConfig(String name, int percentage, Set<UUID> uuids) {
-	    this.name       = name;
-	    this.percentage = percentage;
-	    this.uuids      = uuids;
-	  }
+	@JsonProperty
+	private String value;
 
-	  public int getPercentage() {
-	    return percentage;
-	  }
-
-	  public String getName() {
-	    return name;
-	  }
-
-	  public Set<UUID> getUuids() {
-	    return uuids;
-	  }
+	public RemoteConfig() {
 	}
+
+	public RemoteConfig(String name, int percentage, Set<UUID> uuids, String defaultValue, String value) {
+		this.name = name;
+		this.percentage = percentage;
+		this.uuids = uuids;
+		this.defaultValue = defaultValue;
+		this.value = value;
+	}
+
+	public int getPercentage() {
+		return percentage;
+	}
+
+	public String getName() {
+		return name;
+	}
+
+	public Set<UUID> getUuids() {
+		return uuids;
+	}
+
+	public String getDefaultValue() {
+		return defaultValue;
+	}
+
+	public String getValue() {
+		return value;
+	}
+}

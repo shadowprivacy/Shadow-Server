@@ -319,4 +319,11 @@
         <dropColumn tableName="keys" columnName="deleted"/>
     </changeSet>
     
+    <changeSet id="18" author="ehren">
+        <addColumn tableName="remote_config">
+            <column name="default_value" type="text"/>
+            <column name="value" type="text"/>
+        </addColumn>
+    </changeSet>
+    
 </databaseChangeLog>

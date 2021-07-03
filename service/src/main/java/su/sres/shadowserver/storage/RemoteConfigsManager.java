@@ -19,7 +19,7 @@ public class RemoteConfigsManager implements Managed {
   private final RemoteConfigs remoteConfigs;
   private final long          sleepInterval;
 
-  private AtomicReference<List<RemoteConfig>> cachedConfigs = new AtomicReference<>(new LinkedList<>());
+  private final AtomicReference<List<RemoteConfig>> cachedConfigs = new AtomicReference<>(new LinkedList<>());
 
   public RemoteConfigsManager(RemoteConfigs remoteConfigs) {
     this(remoteConfigs, TimeUnit.SECONDS.toMillis(10));

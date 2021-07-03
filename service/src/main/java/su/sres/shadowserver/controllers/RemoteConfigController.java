@@ -35,75 +35,78 @@ import io.dropwizard.auth.Auth;
 @Path("/v1/config")
 public class RemoteConfigController {
 
-  private final RemoteConfigsManager remoteConfigsManager;
-  private final List<String>         configAuthTokens;
+	private final RemoteConfigsManager remoteConfigsManager;
+	private final List<String> configAuthTokens;
 
-  public RemoteConfigController(RemoteConfigsManager remoteConfigsManager, List<String> configAuthTokens) {
-    this.remoteConfigsManager = remoteConfigsManager;
-    this.configAuthTokens      = configAuthTokens;
-  }
+	public RemoteConfigController(RemoteConfigsManager remoteConfigsManager, List<String> configAuthTokens) {
+		this.remoteConfigsManager = remoteConfigsManager;
+		this.configAuthTokens = configAuthTokens;
+	}
 
-  @Timed
-  @GET
-  @Consumes(MediaType.APPLICATION_JSON)
-  @Produces(MediaType.APPLICATION_JSON)
-  public UserRemoteConfigList getAll(@Auth Account account) {
-    try {
-      MessageDigest digest = MessageDigest.getInstance("SHA1");
+	@Timed
+	@GET
+	@Consumes(MediaType.APPLICATION_JSON)
+	@Produces(MediaType.APPLICATION_JSON)
+	public UserRemoteConfigList getAll(@Auth Account account) {
+		try {
+			MessageDigest digest = MessageDigest.getInstance("SHA1");
 
-      return new UserRemoteConfigList(remoteConfigsManager.getAll().stream().map(config -> new UserRemoteConfig(config.getName(),
-                                                                                                                isInBucket(digest, account.getUuid(),
-                                                                                                                           config.getName().getBytes(),
-                                                                                                                           config.getPercentage(),
-                                                                                                                           config.getUuids())))
-                                                          .collect(Collectors.toList()));
-    } catch (NoSuchAlgorithmException e) {
-      throw new AssertionError(e);
-    }
-  }
+			return new UserRemoteConfigList(remoteConfigsManager.getAll().stream().map(config -> {
+				boolean inBucket = isInBucket(digest, account.getUuid(), config.getName().getBytes(),
+						config.getPercentage(), config.getUuids());
+				return new UserRemoteConfig(config.getName(), inBucket,
+						inBucket ? config.getValue() : config.getDefaultValue());
+			}).collect(Collectors.toList()));
+		} catch (NoSuchAlgorithmException e) {
+			throw new AssertionError(e);
+		}
+	}
 
-  @Timed
-  @PUT
-  @Consumes(MediaType.APPLICATION_JSON)
-  @Produces(MediaType.APPLICATION_JSON)
-  public void set(@HeaderParam("Config-Token") String configToken, @Valid RemoteConfig config) {
-    if (!isAuthorized(configToken)) {
-      throw new WebApplicationException(Response.Status.UNAUTHORIZED);
-    }
+	@Timed
+	@PUT
+	@Consumes(MediaType.APPLICATION_JSON)
+	@Produces(MediaType.APPLICATION_JSON)
+	public void set(@HeaderParam("Config-Token") String configToken, @Valid RemoteConfig config) {
+		if (!isAuthorized(configToken)) {
+			throw new WebApplicationException(Response.Status.UNAUTHORIZED);
+		}
 
-    remoteConfigsManager.set(config);
-  }
+		remoteConfigsManager.set(config);
+	}
 
-  @Timed
-  @DELETE
-  @Path("/{name}")
-  public void delete(@HeaderParam("Config-Token") String configToken, @PathParam("name") String name) {
-    if (!isAuthorized(configToken)) {
-      throw new WebApplicationException(Response.Status.UNAUTHORIZED);
-    }
+	@Timed
+	@DELETE
+	@Path("/{name}")
+	public void delete(@HeaderParam("Config-Token") String configToken, @PathParam("name") String name) {
+		if (!isAuthorized(configToken)) {
+			throw new WebApplicationException(Response.Status.UNAUTHORIZED);
+		}
 
-    remoteConfigsManager.delete(name);
-  }
+		remoteConfigsManager.delete(name);
+	}
 
-  @VisibleForTesting
-  public static boolean isInBucket(MessageDigest digest, UUID uid, byte[] configName, int configPercentage, Set<UUID> uuidsInBucket) {
-    if (uuidsInBucket.contains(uid)) return true;
+	@VisibleForTesting
+	public static boolean isInBucket(MessageDigest digest, UUID uid, byte[] configName, int configPercentage,
+			Set<UUID> uuidsInBucket) {
+		if (uuidsInBucket.contains(uid))
+			return true;
 
-    ByteBuffer bb = ByteBuffer.wrap(new byte[16]);
-    bb.putLong(uid.getMostSignificantBits());
-    bb.putLong(uid.getLeastSignificantBits());
+		ByteBuffer bb = ByteBuffer.wrap(new byte[16]);
+		bb.putLong(uid.getMostSignificantBits());
+		bb.putLong(uid.getLeastSignificantBits());
 
-    digest.update(bb.array());
+		digest.update(bb.array());
 
-    byte[] hash   = digest.digest(configName);
-    int    bucket = (int)(Math.abs(Conversions.byteArrayToLong(hash)) % 100);
+		byte[] hash = digest.digest(configName);
+		int bucket = (int) (Math.abs(Conversions.byteArrayToLong(hash)) % 100);
 
-    return bucket < configPercentage;
-  }
+		return bucket < configPercentage;
+	}
 
-  @SuppressWarnings("BooleanMethodIsAlwaysInverted")
-  private boolean isAuthorized(String configToken) {
-    return configToken != null && configAuthTokens.stream().anyMatch(authorized -> MessageDigest.isEqual(authorized.getBytes(), configToken.getBytes()));
-  }
+	@SuppressWarnings("BooleanMethodIsAlwaysInverted")
+	private boolean isAuthorized(String configToken) {
+		return configToken != null && configAuthTokens.stream()
+				.anyMatch(authorized -> MessageDigest.isEqual(authorized.getBytes(), configToken.getBytes()));
+	}
 
 }

@@ -4,24 +4,33 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 public class UserRemoteConfig {
 
-  @JsonProperty
-  private String name;
+	@JsonProperty
+	private String name;
 
-  @JsonProperty
-  private boolean enabled;
+	@JsonProperty
+	private boolean enabled;
 
-  public UserRemoteConfig() {}
+	@JsonProperty
+	private String value;
 
-  public UserRemoteConfig(String name, boolean enabled) {
-    this.name    = name;
-    this.enabled = enabled;
-  }
+	public UserRemoteConfig() {
+	}
 
-  public String getName() {
-    return name;
-  }
+	public UserRemoteConfig(String name, boolean enabled, String value) {
+		this.name = name;
+		this.enabled = enabled;
+		this.value = value;
+	}
 
-  public boolean isEnabled() {
-    return enabled;
-  }
+	public String getName() {
+		return name;
+	}
+
+	public boolean isEnabled() {
+		return enabled;
+	}
+
+	public String getValue() {
+		return value;
+	}
 }
