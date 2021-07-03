@@ -26,6 +26,7 @@ import javax.security.auth.Subject;
 import java.security.Principal;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -52,10 +53,10 @@ public class Account implements Principal {
 	private String avatar;
 
 	@JsonProperty
-	private String avatarDigest;
+	private String pin;
 
 	@JsonProperty
-	private String pin;
+	private List<PaymentAddress> payments;
 
 	@JsonProperty
 	private String registrationLock;
@@ -144,10 +145,11 @@ public class Account implements Principal {
 		return devices.stream().filter(Device::isEnabled)
 				.anyMatch(device -> device.getCapabilities() != null && device.getCapabilities().isGv2());
 	}
-	
+
 	public boolean isStorageSupported() {
-	    return devices.stream().anyMatch(device -> device.getCapabilities() != null && device.getCapabilities().isStorage());
-	  }
+		return devices.stream()
+				.anyMatch(device -> device.getCapabilities() != null && device.getCapabilities().isStorage());
+	}
 
 	public boolean isEnabled() {
 		return getMasterDevice().isPresent() && getMasterDevice().get().isEnabled()
@@ -223,14 +225,6 @@ public class Account implements Principal {
 		this.avatar = avatar;
 	}
 
-	public String getAvatarDigest() {
-		return avatarDigest;
-	}
-
-	public void setAvatarDigest(String avatarDigest) {
-		this.avatarDigest = avatarDigest;
-	}
-
 	public Optional<String> getPin() {
 		return Optional.ofNullable(pin);
 	}
@@ -269,6 +263,14 @@ public class Account implements Principal {
 
 	public void setUnrestrictedUnidentifiedAccess(boolean unrestrictedUnidentifiedAccess) {
 		this.unrestrictedUnidentifiedAccess = unrestrictedUnidentifiedAccess;
+	}
+
+	public List<PaymentAddress> getPayments() {
+		return payments;
+	}
+
+	public void setPayments(List<PaymentAddress> payments) {
+		this.payments = payments;
 	}
 
 	public boolean isFor(AmbiguousIdentifier identifier) {

@@ -88,6 +88,7 @@ import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.storage.AccountsManager;
 import su.sres.shadowserver.storage.Device;
 import su.sres.shadowserver.storage.MessagesManager;
+import su.sres.shadowserver.storage.PaymentAddressList;
 import su.sres.shadowserver.storage.PendingAccountsManager;
 import su.sres.shadowserver.storage.UsernamesManager;
 import su.sres.shadowserver.util.Constants;
@@ -586,6 +587,16 @@ public class AccountController {
 
 		return Response.ok().build();
 	}
+	
+	  @Timed
+	  @PUT
+	  @Path("/payments")
+	  @Produces(MediaType.APPLICATION_JSON)
+	  @Consumes(MediaType.APPLICATION_JSON)
+	  public void setPayments(@Auth Account account, @Valid PaymentAddressList payments) {
+	    account.setPayments(payments.getPayments());
+	    accounts.update(account);
+	  }
 
 	private CaptchaRequirement requiresCaptcha(String userLogin, String transport, String forwardedFor, String requester,
 			Optional<String> captchaToken, Optional<StoredVerificationCode> storedVerificationCode,
@@ -696,6 +707,7 @@ public class AccountController {
 				
 		account.setUnidentifiedAccessKey(accountAttributes.getUnidentifiedAccessKey());
 		account.setUnrestrictedUnidentifiedAccess(accountAttributes.isUnrestrictedUnidentifiedAccess());
+		account.setPayments(accountAttributes.getPayments());
 		
 		if (accounts.create(account)) {
 			newUserMeter.mark();

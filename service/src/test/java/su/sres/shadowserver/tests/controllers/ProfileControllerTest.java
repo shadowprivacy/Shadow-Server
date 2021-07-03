@@ -18,6 +18,7 @@ import javax.ws.rs.core.Response;
 import java.io.IOException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
+import java.util.List;
 import java.util.Optional;
 
 import io.dropwizard.auth.PolymorphicAuthValueFactoryProvider;
@@ -40,6 +41,7 @@ import su.sres.shadowserver.s3.PolicySigner;
 import su.sres.shadowserver.s3.PostPolicyGenerator;
 import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.storage.AccountsManager;
+import su.sres.shadowserver.storage.PaymentAddress;
 import su.sres.shadowserver.storage.ProfilesManager;
 import su.sres.shadowserver.storage.UsernamesManager;
 import su.sres.shadowserver.storage.VersionedProfile;
@@ -65,7 +67,7 @@ public class ProfileControllerTest {
 			"accessKey");
 	private static PolicySigner policySigner = new PolicySigner("accessSecret", "us-east-1");
 	private static ServerZkProfileOperations zkProfileOperations = mock(ServerZkProfileOperations.class);
-	
+
 	public static final ResourceExtension resources;
 	// static initializer for resources
 	static {
@@ -94,17 +96,17 @@ public class ProfileControllerTest {
 		when(profileAccount.getIdentityKey()).thenReturn("bar");
 		when(profileAccount.getProfileName()).thenReturn("baz");
 		when(profileAccount.getAvatar()).thenReturn("bang");
-		when(profileAccount.getAvatarDigest()).thenReturn("buh");
 		when(profileAccount.getUuid()).thenReturn(AuthHelper.VALID_UUID_TWO);
 		when(profileAccount.isEnabled()).thenReturn(true);
 		when(profileAccount.isUuidAddressingSupported()).thenReturn(false);
+		when(profileAccount.getPayments())
+				.thenReturn(List.of(new PaymentAddress("mc", "12345678901234567890123456789012")));
 
 		Account capabilitiesAccount = mock(Account.class);
 
 		when(capabilitiesAccount.getIdentityKey()).thenReturn("barz");
 		when(capabilitiesAccount.getProfileName()).thenReturn("bazz");
 		when(capabilitiesAccount.getAvatar()).thenReturn("bangz");
-		when(capabilitiesAccount.getAvatarDigest()).thenReturn("buz");
 		when(capabilitiesAccount.isEnabled()).thenReturn(true);
 		when(capabilitiesAccount.isUuidAddressingSupported()).thenReturn(true);
 
@@ -146,6 +148,7 @@ public class ProfileControllerTest {
 		assertThat(profile.getName(), equalTo("baz"));
 		assertThat(profile.getAvatar(), equalTo("bang"));
 		assertThat(profile.getUsername(), equalTo("n00bkiller"));
+		assertThat(profile.getPayments(), equalTo(List.of(new PaymentAddress("mc", "12345678901234567890123456789012"))));
 
 		verify(accountsManager, times(1))
 				.get(argThat((ArgumentMatcher<AmbiguousIdentifier>) identifier -> identifier != null
@@ -163,6 +166,7 @@ public class ProfileControllerTest {
 		assertThat(profile.getIdentityKey(), equalTo("bar"));
 		assertThat(profile.getName(), equalTo("baz"));
 		assertThat(profile.getAvatar(), equalTo("bang"));
+		assertThat(profile.getPayments(), equalTo(List.of(new PaymentAddress("mc", "12345678901234567890123456789012"))));
 		assertThat(profile.getCapabilities().isUuid(), equalTo(false));
 		assertThat(profile.getUsername(), nullValue());
 		assertThat(profile.getUuid(), nullValue());
@@ -184,6 +188,7 @@ public class ProfileControllerTest {
 		assertThat(profile.getName(), equalTo("baz"));
 		assertThat(profile.getAvatar(), equalTo("bang"));
 		assertThat(profile.getUsername(), equalTo("n00bkiller"));
+		assertThat(profile.getPayments(),equalTo(List.of(new PaymentAddress("mc", "12345678901234567890123456789012"))));
 		assertThat(profile.getUuid(), equalTo(AuthHelper.VALID_UUID_TWO));
 
 		verify(accountsManager, times(1)).get(eq(AuthHelper.VALID_UUID_TWO));
