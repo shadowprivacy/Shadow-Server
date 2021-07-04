@@ -10,6 +10,7 @@ import com.eatthepath.pushy.apns.ApnsClient;
 import com.eatthepath.pushy.apns.ApnsClientBuilder;
 import com.eatthepath.pushy.apns.DeliveryPriority;
 import com.eatthepath.pushy.apns.PushNotificationResponse;
+import com.eatthepath.pushy.apns.auth.ApnsSigningKey;
 import com.eatthepath.pushy.apns.metrics.dropwizard.DropwizardApnsClientMetricsListener;
 import com.eatthepath.pushy.apns.util.SimpleApnsPushNotification;
 
@@ -20,7 +21,9 @@ import org.slf4j.LoggerFactory;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.security.InvalidKeyException;
 import java.security.KeyPair;
+import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.cert.X509Certificate;
 import java.util.Date;
@@ -37,8 +40,8 @@ public class RetryingApnsClient {
 
   private final ApnsClient apnsClient;
 
-  RetryingApnsClient(String apnCertificate, String apnKey, boolean sandbox)
-      throws IOException
+  RetryingApnsClient(String apnSigningKey, String teamId, String keyId, boolean sandbox)
+	      throws IOException, InvalidKeyException, NoSuchAlgorithmException
   {
     MetricRegistry                      metricRegistry  = SharedMetricRegistries.getOrCreate(Constants.METRICS_NAME);
     DropwizardApnsClientMetricsListener metricsListener = new DropwizardApnsClientMetricsListener();
@@ -47,8 +50,7 @@ public class RetryingApnsClient {
       metricRegistry.register(name(getClass(), entry.getKey()), entry.getValue());
     }
 
-    this.apnsClient = new ApnsClientBuilder().setClientCredentials(initializeCertificate(apnCertificate),
-                                                                   initializePrivateKey(apnKey), null)
+    this.apnsClient = new ApnsClientBuilder().setSigningKey(ApnsSigningKey.loadFromInputStream(new ByteArrayInputStream(apnSigningKey.getBytes()), teamId, keyId))
                                              .setMetricsListener(metricsListener)
                                              .setApnsServer(sandbox ? ApnsClientBuilder.DEVELOPMENT_APNS_HOST : ApnsClientBuilder.PRODUCTION_APNS_HOST)
                                              .build();    
@@ -70,17 +72,7 @@ public class RetryingApnsClient {
 
   void disconnect() {
 	  apnsClient.close();
-  }
-
-  private static X509Certificate initializeCertificate(String pemCertificate) throws IOException {
-    PEMReader reader = new PEMReader(new InputStreamReader(new ByteArrayInputStream(pemCertificate.getBytes())));
-    return (X509Certificate) reader.readObject();
-  }
-
-  private static PrivateKey initializePrivateKey(String pemKey) throws IOException {
-    PEMReader reader = new PEMReader(new InputStreamReader(new ByteArrayInputStream(pemKey.getBytes())));
-    return ((KeyPair) reader.readObject()).getPrivate();
-  }
+  }  
 
   private static final class ResponseHandler implements GenericFutureListener<io.netty.util.concurrent.Future<PushNotificationResponse<SimpleApnsPushNotification>>> {
    

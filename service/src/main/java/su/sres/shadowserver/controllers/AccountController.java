@@ -123,15 +123,14 @@ public class AccountController {
 	private final GCMSender gcmSender;
 //	  private final APNSender              apnSender;	
 	private final LocalParametersConfiguration localParametersConfiguration;
-	private final ServiceConfiguration serviceConfiguration;		
+	private final ServiceConfiguration serviceConfiguration;
 
 	public AccountController(PendingAccountsManager pendingAccounts, AccountsManager accounts,
 			UsernamesManager usernames, AbusiveHostRules abusiveHostRules, RateLimiters rateLimiters,
 			MessagesManager messagesManager, TurnTokenGenerator turnTokenGenerator, Map<String, Integer> testDevices,
 			RecaptchaClient recaptchaClient, GCMSender gcmSender,
-			// APNSender apnSender,			
-			LocalParametersConfiguration localParametersConfiguration,
-			ServiceConfiguration serviceConfiguration) {
+			// APNSender apnSender,
+			LocalParametersConfiguration localParametersConfiguration, ServiceConfiguration serviceConfiguration) {
 		this.pendingAccounts = pendingAccounts;
 		this.accounts = accounts;
 		this.usernames = usernames;
@@ -145,7 +144,7 @@ public class AccountController {
 		this.gcmSender = gcmSender;
 //    this.apnSender          = apnSender;		
 		this.localParametersConfiguration = localParametersConfiguration;
-		this.serviceConfiguration = serviceConfiguration;				
+		this.serviceConfiguration = serviceConfiguration;
 	}
 
 	@Timed
@@ -163,7 +162,7 @@ public class AccountController {
 		}
 
 		String pushChallenge = generatePushChallenge();
-		Optional<StoredVerificationCode> presetVerificationCode = pendingAccounts.getCodeForUserLogin(userLogin);		
+		Optional<StoredVerificationCode> presetVerificationCode = pendingAccounts.getCodeForUserLogin(userLogin);
 
 		if (presetVerificationCode.isPresent()) {
 
@@ -250,9 +249,10 @@ public class AccountController {
 	@Path("/code/{verification_code}")
 	public AccountCreationResult verifyAccount(@PathParam("verification_code") String verificationCode,
 			@HeaderParam("Authorization") String authorizationHeader, @HeaderParam("X-Signal-Agent") String userAgent,
-			@Valid AccountAttributes accountAttributes) throws RateLimitExceededException {
-		try {		
-			 			
+			@QueryParam("transfer") Optional<Boolean> availableForTransfer, @Valid AccountAttributes accountAttributes)
+			throws RateLimitExceededException {
+		try {
+
 			AuthorizationHeader header = AuthorizationHeader.fromFullHeader(authorizationHeader);
 			String userLogin = header.getIdentifier().getUserLogin();
 			String password = header.getPassword();
@@ -264,7 +264,7 @@ public class AccountController {
 			rateLimiters.getVerifyLimiter().validate(userLogin);
 
 			Optional<StoredVerificationCode> storedVerificationCode = pendingAccounts.getCodeForUserLogin(userLogin);
-	
+
 			if (storedVerificationCode.isEmpty() || !storedVerificationCode.get().isValid(verificationCode)) {
 				throw new WebApplicationException(Response.status(403).build());
 			}
@@ -278,11 +278,11 @@ public class AccountController {
 				rateLimiters.getVerifyLimiter().clear(userLogin);
 
 				long timeRemaining = TimeUnit.DAYS.toMillis(7)
-						- (System.currentTimeMillis() - existingAccount.get().getLastSeen());				
+						- (System.currentTimeMillis() - existingAccount.get().getLastSeen());
 
 				if (Util.isEmpty(accountAttributes.getPin()) && Util.isEmpty(accountAttributes.getRegistrationLock())) {
-					throw new WebApplicationException(Response.status(423)
-							.entity(new RegistrationLockFailure(timeRemaining)).build());
+					throw new WebApplicationException(
+							Response.status(423).entity(new RegistrationLockFailure(timeRemaining)).build());
 				}
 
 				rateLimiters.getPinLimiter().validate(userLogin);
@@ -302,28 +302,30 @@ public class AccountController {
 				}
 
 				if (!pinMatches) {
-					throw new WebApplicationException(Response.status(423)
-							.entity(new RegistrationLockFailure(timeRemaining)).build());
+					throw new WebApplicationException(
+							Response.status(423).entity(new RegistrationLockFailure(timeRemaining)).build());
 				}
 
 				rateLimiters.getPinLimiter().clear(userLogin);
 			}
 
-			if (accounts.getAccountCreationLock()                     ||
-				accounts.getAccountRemovalLock()                      ||
-				accounts.getDirectoryManager().getDirectoryReadLock() ||
-				accounts.getDirectoryRestoreLock()) {
-				    	  
-				    	  throw new WebApplicationException(Response.status(503)
-				    			                                    .header("Retry-After", Integer.valueOf(60))
-				    			                                    .build());
-			}  
-			
+			if (availableForTransfer.orElse(false) && existingAccount.map(Account::isTransferSupported).orElse(false)) {
+				throw new WebApplicationException(Response.status(409).build());
+			}
+
+			if (accounts.getAccountCreationLock() || accounts.getAccountRemovalLock()
+					|| accounts.getDirectoryManager().getDirectoryReadLock() || accounts.getDirectoryRestoreLock()) {
+
+				throw new WebApplicationException(
+						Response.status(503).header("Retry-After", Integer.valueOf(60)).build());
+			}
+
 			Account account = createAccount(userLogin, password, userAgent, accountAttributes);
-						
+
 //			metricRegistry.meter(name(AccountController.class, "verify", Util.getCountryCode(number))).mark();
 
-			return new AccountCreationResult(account.getUuid(), existingAccount.map(Account::isStorageSupported).orElse(false));
+			return new AccountCreationResult(account.getUuid(),
+					existingAccount.map(Account::isStorageSupported).orElse(false));
 
 		} catch (InvalidAuthorizationHeaderException e) {
 			logger.info("Bad Authorization Header", e);
@@ -339,7 +341,7 @@ public class AccountController {
 		rateLimiters.getTurnLimiter().validate(account.getUserLogin());
 		return turnTokenGenerator.generate();
 	}
-	
+
 	@Timed
 	@GET
 	@Path("/config/")
@@ -348,49 +350,48 @@ public class AccountController {
 		rateLimiters.getConfigLimiter().validate(account.getUserLogin());
 		return serviceConfiguration;
 	}
-	
+
 	@Timed
 	@GET
 	@Path("/cert/")
 	@Produces(MediaType.APPLICATION_JSON)
 	public SystemCerts getCerts(@Auth Account account) throws RateLimitExceededException {
-		rateLimiters.getCertLimiter().validate(account.getUserLogin());		
-				
-		return (new CertsProvider(localParametersConfiguration, serviceConfiguration)).getCerts();					
+		rateLimiters.getCertLimiter().validate(account.getUserLogin());
+
+		return (new CertsProvider(localParametersConfiguration, serviceConfiguration)).getCerts();
 	}
-	
+
 	@Timed
 	@GET
 	@Path("/certver/")
 	@Produces(MediaType.APPLICATION_JSON)
 	public SystemCertsVersion getCertsVersion(@Auth Account account) throws RateLimitExceededException {
 		rateLimiters.getCertVerLimiter().validate(account.getUserLogin());
-						
-		return (new CertsProvider(localParametersConfiguration, serviceConfiguration)).getCertsVersion();					
+
+		return (new CertsProvider(localParametersConfiguration, serviceConfiguration)).getCertsVersion();
 	}
-	
+
 	@Timed
 	@GET
 	@Path("/license")
 	@Produces(MediaType.APPLICATION_OCTET_STREAM)
 	public Response getLicenseFile(@Auth Account account) throws RateLimitExceededException {
-		
+
 		String login = account.getUserLogin();
-		
+
 		rateLimiters.getLicenseLimiter().validate(login);
-		
+
 		String filename = login + ".bin";
-		
+
 		try {
 			InputStream is = new FileInputStream(localParametersConfiguration.getLicensePath() + "/" + filename);
-			
-			return Response.ok(is)
-	                       .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
-	                       .build();	
-		} catch(FileNotFoundException e) {
-			throw new WebApplicationException(Response.status(404).build());			
-		}        						
-	}	
+
+			return Response.ok(is).header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+					.build();
+		} catch (FileNotFoundException e) {
+			throw new WebApplicationException(Response.status(404).build());
+		}
+	}
 
 	@Timed
 	@PUT
@@ -588,19 +589,19 @@ public class AccountController {
 
 		return Response.ok().build();
 	}
-	
-	  @Timed
-	  @PUT
-	  @Path("/payments")
-	  @Produces(MediaType.APPLICATION_JSON)
-	  @Consumes(MediaType.APPLICATION_JSON)
-	  public void setPayments(@Auth Account account, @Valid PaymentAddressList payments) {
-	    account.setPayments(payments.getPayments());
-	    accounts.update(account);
-	  }
 
-	private CaptchaRequirement requiresCaptcha(String userLogin, String transport, String forwardedFor, String requester,
-			Optional<String> captchaToken, Optional<StoredVerificationCode> storedVerificationCode,
+	@Timed
+	@PUT
+	@Path("/payments")
+	@Produces(MediaType.APPLICATION_JSON)
+	@Consumes(MediaType.APPLICATION_JSON)
+	public void setPayments(@Auth Account account, @Valid PaymentAddressList payments) {
+		account.setPayments(payments.getPayments());
+		accounts.update(account);
+	}
+
+	private CaptchaRequirement requiresCaptcha(String userLogin, String transport, String forwardedFor,
+			String requester, Optional<String> captchaToken, Optional<StoredVerificationCode> storedVerificationCode,
 			Optional<String> pushChallenge) {
 		if (captchaToken.isPresent()) {
 			boolean validToken = recaptchaClient.verify(captchaToken.get(), requester);
@@ -638,23 +639,21 @@ public class AccountController {
 			}
 
 // should always be empty, since we use E.164 numbers no more			
-/*			if (!abuseRule.getRegions().isEmpty()) {
-				if (abuseRule.getRegions().stream().noneMatch(number::startsWith)) {
-					logger.info("Restricted host: " + transport + ", " + number + ", " + requester + " (" + forwardedFor
-							+ ")");
-					filteredHostMeter.mark();
-					// captcha off
-					// return new CaptchaRequirement(true, false);
-					return new CaptchaRequirement(false, false);
-				}
-			} */
+			/*
+			 * if (!abuseRule.getRegions().isEmpty()) { if
+			 * (abuseRule.getRegions().stream().noneMatch(number::startsWith)) {
+			 * logger.info("Restricted host: " + transport + ", " + number + ", " +
+			 * requester + " (" + forwardedFor + ")"); filteredHostMeter.mark(); // captcha
+			 * off // return new CaptchaRequirement(true, false); return new
+			 * CaptchaRequirement(false, false); } }
+			 */
 		}
 
 		try {
 			rateLimiters.getSmsVoiceIpLimiter().validate(requester);
 		} catch (RateLimitExceededException e) {
-			logger.info("Rate limited exceeded: " + transport + ", " + userLogin + ", " + requester + " (" + forwardedFor
-					+ ")");
+			logger.info("Rate limited exceeded: " + transport + ", " + userLogin + ", " + requester + " ("
+					+ forwardedFor + ")");
 			rateLimitedHostMeter.mark();
 			// captcha off
 			// return new CaptchaRequirement(true, true);
@@ -662,15 +661,15 @@ public class AccountController {
 		}
 
 // this is excluded since with no E.164 numbers we observe prefixes no longer		
-/*		try {
-			rateLimiters.getSmsVoicePrefixLimiter().validate(Util.getNumberPrefix(number));
-		} catch (RateLimitExceededException e) {
-			logger.info("Prefix rate limit exceeded: " + transport + ", " + number + ", (" + forwardedFor + ")");
-			rateLimitedPrefixMeter.mark();
-			// captcha off
-			// return new CaptchaRequirement(true, true);
-			return new CaptchaRequirement(false, true);
-		} */
+		/*
+		 * try {
+		 * rateLimiters.getSmsVoicePrefixLimiter().validate(Util.getNumberPrefix(number)
+		 * ); } catch (RateLimitExceededException e) {
+		 * logger.info("Prefix rate limit exceeded: " + transport + ", " + number +
+		 * ", (" + forwardedFor + ")"); rateLimitedPrefixMeter.mark(); // captcha off //
+		 * return new CaptchaRequirement(true, true); return new
+		 * CaptchaRequirement(false, true); }
+		 */
 
 		return new CaptchaRequirement(false, false);
 	}
@@ -702,21 +701,21 @@ public class AccountController {
 		Account account = new Account();
 		account.setUserLogin(userLogin);
 		account.setUuid(UUID.randomUUID());
-						
+
 		account.addDevice(device);
 		account.setPin(accountAttributes.getPin());
-				
+
 		account.setUnidentifiedAccessKey(accountAttributes.getUnidentifiedAccessKey());
 		account.setUnrestrictedUnidentifiedAccess(accountAttributes.isUnrestrictedUnidentifiedAccess());
 		account.setPayments(accountAttributes.getPayments());
-		
+
 		if (accounts.create(account)) {
 			newUserMeter.mark();
-		}	
-		
+		}
+
 		messagesManager.clear(userLogin);
-			
-		pendingAccounts.remove(userLogin);		
+
+		pendingAccounts.remove(userLogin);
 
 		return account;
 	}
@@ -727,7 +726,7 @@ public class AccountController {
 		random.nextBytes(challenge);
 
 		return Hex.toStringCondensed(challenge);
-	}	
+	}
 
 	private static class CaptchaRequirement {
 		private final boolean captchaRequired;

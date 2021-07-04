@@ -109,8 +109,10 @@ gcm:
   apiKey: GoogleFCMKey                                                  # the server key of your Firebase project     
   
 apn:                          # this is not used currently 
-  pushKey: /path/to/your/pushcertificates/xxx.pem                       # fake/unused
-  pushCertificate: /path/to/your/pushcertificates/xxx-cert.pem          # fake/unused
+  sandbox: true 
+  keyId: 12345                                                          # fake/unused
+  teamId: 12345                                                         # fake/unused
+  signingKey: 12345                                                     # fake/unused
   bundleId: 12345                                                       # fake/unused
 
 unidentifiedDelivery:         # unidentified access credentials configuration

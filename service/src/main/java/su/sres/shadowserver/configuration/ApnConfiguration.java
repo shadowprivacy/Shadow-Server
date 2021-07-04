@@ -19,37 +19,44 @@ package su.sres.shadowserver.configuration;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.hibernate.validator.constraints.NotEmpty;
 
-
 public class ApnConfiguration {
 
-  @NotEmpty
-  @JsonProperty
-  private String pushCertificate;
+    @NotEmpty
+    @JsonProperty
+    private String teamId;
 
-  @NotEmpty
-  @JsonProperty
-  private String pushKey;
+    @NotEmpty
+    @JsonProperty
+    private String keyId;
 
-  @NotEmpty
-  @JsonProperty
-  private String bundleId;
+    @NotEmpty
+    @JsonProperty
+    private String signingKey;
 
-  @JsonProperty
-  private boolean sandbox = false;
+    @NotEmpty
+    @JsonProperty
+    private String bundleId;
 
-  public String getPushCertificate() {
-    return pushCertificate;
-  }
+    @JsonProperty
+    private boolean sandbox = false;
 
-  public String getPushKey() {
-    return pushKey;
-  }
+    public String getTeamId() {
+	return teamId;
+    }
 
-  public String getBundleId() {
-    return bundleId;
-  }
+    public String getKeyId() {
+	return keyId;
+    }
 
-  public boolean isSandboxEnabled() {
-    return sandbox;
-  }
+    public String getSigningKey() {
+	return signingKey;
+    }
+
+    public String getBundleId() {
+	return bundleId;
+    }
+
+    public boolean isSandboxEnabled() {
+	return sandbox;
+    }
 }

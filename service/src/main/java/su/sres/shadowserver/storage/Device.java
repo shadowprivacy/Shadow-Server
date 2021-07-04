@@ -25,8 +25,8 @@ import su.sres.shadowserver.util.Util;
 import javax.annotation.Nullable;
 import java.util.concurrent.TimeUnit;
 
-public class Device {	
-	
+public class Device {
+
 	public static final long MASTER_ID = 1;
 
 	@JsonProperty
@@ -80,7 +80,8 @@ public class Device {
 	@JsonProperty
 	private DeviceCapabilities capabilities;
 
-	public Device() {}
+	public Device() {
+	}
 
 	public Device(long id, String name, String authToken, String salt, String signalingKey, String gcmId, String apnId,
 			String voipApnId, boolean fetchesMessages, int registrationId, SignedPreKey signedPreKey, long lastSeen,
@@ -100,7 +101,7 @@ public class Device {
 		this.created = created;
 		this.userAgent = userAgent;
 		this.uninstalledFeedback = uninstalledFeedback;
-		this.capabilities = capabilities;        
+		this.capabilities = capabilities;
 	}
 
 	public String getApnId() {
@@ -151,7 +152,7 @@ public class Device {
 		return gcmId;
 	}
 
-	public void setGcmId(String gcmId) {		
+	public void setGcmId(String gcmId) {
 		this.gcmId = gcmId;
 
 		if (gcmId != null) {
@@ -264,32 +265,40 @@ public class Device {
 	public static class DeviceCapabilities {
 		@JsonProperty
 		private boolean uuid;
-		
+
 		@JsonProperty
 		private boolean gv2;
-		
-	    @JsonProperty
-	    private boolean storage;
+
+		@JsonProperty
+		private boolean storage;
+
+		@JsonProperty
+		private boolean transfer;
 
 		public DeviceCapabilities() {
 		}
 
-		 public DeviceCapabilities(boolean uuid, boolean gv2, boolean storage) {
-		      this.uuid    = uuid;
-		      this.gv2     = gv2;
-		      this.storage = storage;
+		public DeviceCapabilities(boolean uuid, boolean gv2, boolean storage, boolean transfer) {
+			this.uuid = uuid;
+			this.gv2 = gv2;
+			this.storage = storage;
+			this.transfer = transfer;
 		}
 
 		public boolean isUuid() {
 			return uuid;
 		}
-		
+
 		public boolean isGv2() {
-		      return gv2;
+			return gv2;
 		}
-		
-		 public boolean isStorage() {
-		      return storage;
-		 }
+
+		public boolean isStorage() {
+			return storage;
+		}
+
+		public boolean isTransfer() {
+			return transfer;
+		}
 	}
 }
