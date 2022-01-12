@@ -52,6 +52,13 @@ else
     echo "wget already installed" 
 fi
 
+if [ $(check_app tar) -ne 0 ] 
+then 
+    dnf -y install tar 
+else
+    echo "tar already installed" 
+fi
+
 if [ $(check_app tmux) -ne 0 ] 
 then 
     dnf -y install tmux 
