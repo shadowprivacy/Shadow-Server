@@ -122,13 +122,13 @@ then
     
     echo "Opening ports..."
     
-    firewall-cmd --zone=public --permanent --add-port=3478/tcp
+    firewall-cmd --zone=public --permanent --add-port=3478/udp
     firewall-cmd --zone=public --permanent --add-port=$STARTING_PORT-$ENDING_PORT/udp
     firewall-cmd --reload
 else
     echo "Opening ports..."
     
-    firewall-cmd --zone=public --permanent --add-port=3478/tcp
+    firewall-cmd --zone=public --permanent --add-port=3478/udp
     firewall-cmd --zone=public --permanent --add-port=49152-65535/udp
     firewall-cmd --reload  
       

@@ -219,6 +219,7 @@ then
     if [[ $REPLY =~ ^[Yy]$ ]]
     then
     # Markup the databases
+    echo "Performing database markup..."
     
     java -jar ShadowServer-${SHADOW_SERVER_VERSION}.jar accountdb migrate ${SERVER_PATH}/config/shadow.yml
     java -jar ShadowServer-${SHADOW_SERVER_VERSION}.jar messagedb migrate ${SERVER_PATH}/config/shadow.yml
