@@ -94,7 +94,7 @@ restorecon -rv /usr/local/bin/
 echo "Creating Minio environment file..."
 
 echo "MINIO_ACCESS_KEY=$MINIO_ADMIN_LOGIN" > /etc/default/minio_env
-echo "MINIO_SECRET_KEY=$MINIO_ADMIN_PASSWORD" >> /etc/default/minio_env
+echo "MINIO_SECRET_KEY=$MINIO_ADMIN_PASSWORD_CONV" >> /etc/default/minio_env
 echo "MINIO_BROWSER=off" >> /etc/default/minio_env
 
 echo "Creating Minio service..."
