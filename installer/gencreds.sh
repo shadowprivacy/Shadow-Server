@@ -80,7 +80,7 @@ EOF
 )
 
 echo "We are going to create the main keystore for the Shadow server. Enter the main keystore password >>"
-read SHADOW_STORE_PASS
+read -r SHADOW_STORE_PASS
 
 if [ -z "$SHADOW_STORE_PASS" ]
 then 
@@ -97,7 +97,7 @@ echo "Exporting to PKCS12..."
 openssl pkcs12 -export -password pass:"$SHADOW_STORE_PASS" -in shadow_a.crt -inkey shadow_a.key -out shadow.p12 -name shadow_a -CAfile rootCA.crt
 
 echo "We are going to create the auxiliary keystore for the Shadow server. Enter the auxiliary keystore password >>"
-read AUX_STORE_PASS
+read -r AUX_STORE_PASS
 
 if [ -z "$AUX_STORE_PASS" ]
 then 
@@ -123,7 +123,7 @@ update-ca-trust extract
 # Add the Shadow cert as trusted
 
 echo "We are going to add the Shadow server certificate to cacerts. Enter the cacerts password. (In case you never ever changed it, it's 'changeit') >>"
-read CACERTS_PASS
+read -r CACERTS_PASS
 
 if [ -z "$CACERTS_PASS" ]
 then 

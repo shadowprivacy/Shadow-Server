@@ -40,7 +40,7 @@ MINIO_ADMIN_LOGIN="minio_admin"
 MINIO_SERVICE_LOGIN="minio_shadow"
 
 echo "Enter the secret key (password) which will be used for Minio admin access >>"
-read MINIO_ADMIN_PASSWORD
+read -r MINIO_ADMIN_PASSWORD
 
 if [ -z "$MINIO_ADMIN_PASSWORD" ]
     then 
@@ -48,7 +48,7 @@ if [ -z "$MINIO_ADMIN_PASSWORD" ]
     fi
 
 echo "Enter the secret key (password) which will be used by the Shadow system components to access the Minio service >>"
-read MINIO_SERVICE_PASSWORD
+read -r MINIO_SERVICE_PASSWORD
 
 if [ -z "$MINIO_SERVICE_PASSWORD" ]
     then 
@@ -59,8 +59,11 @@ if [ -z "$MINIO_SERVICE_PASSWORD" ]
 
 sed -i "s/accessSecret\: your_service_password/accessSecret\: ${MINIO_SERVICE_PASSWORD}/" ${SERVER_PATH}/config/shadow.yml
 
-echo "export MINIO_ACCESS_KEY=$MINIO_ADMIN_LOGIN" >> ${USER_PATH}/.bashrc
-echo "export MINIO_SECRET_KEY=$MINIO_ADMIN_PASSWORD" >> ${USER_PATH}/.bashrc
+MINIO_ADMIN_LOGIN_CONV=$(sed 's/./\\&/g' <<< "$MINIO_ADMIN_LOGIN")
+MINIO_ADMIN_PASSWORD_CONV=$(sed 's/./\\&/g' <<< "$MINIO_ADMIN_PASSWORD")
+
+echo "export MINIO_ACCESS_KEY=$MINIO_ADMIN_LOGIN_CONV" >> ${USER_PATH}/.bashrc
+echo "export MINIO_SECRET_KEY=$MINIO_ADMIN_PASSWORD_CONV" >> ${USER_PATH}/.bashrc
 echo "export MINIO_BROWSER=off" >> ${USER_PATH}/.bashrc
 
 echo "Copying credentials.."

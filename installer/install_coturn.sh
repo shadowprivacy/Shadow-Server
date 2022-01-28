@@ -69,7 +69,7 @@ fi
 sed -i "s/^#use-auth-secret/use-auth-secret/" /usr/local/etc/turnserver.conf
 
 printf "\nEnter the shared secret for the TURN authorization (should match that configured in the Shadow server) >>"
-    read TURN_AUTH_SECRET
+    read -r TURN_AUTH_SECRET
     
     if [ -z "$TURN_AUTH_SECRET" ]
     then 
@@ -96,7 +96,7 @@ read -p "Do you want to enable CLI access for Coturn [y/n]?" -n 1 -r
 if [[ $REPLY =~ ^[Yy]$ ]]
 then  
     printf "\nEnter the CLI password >>"
-    read CLI_PASSWORD
+    read -r CLI_PASSWORD
     
     if [ -z "$CLI_PASSWORD" ]
     then 

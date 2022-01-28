@@ -127,7 +127,7 @@ fi
 PSQL_USER=shadow 
 
 echo "A PostgreSQL user named 'shadow' will be created. Please enter password for this new PostgreSQL user >>"
-read PSQL_PASSWORD 
+read -r PSQL_PASSWORD 
 
 if [ -z "$PSQL_PASSWORD" ]
 then 
