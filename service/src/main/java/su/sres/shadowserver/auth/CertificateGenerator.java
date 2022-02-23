@@ -16,38 +16,44 @@ import java.util.concurrent.TimeUnit;
 
 public class CertificateGenerator {
 
-  private final ECPrivateKey      privateKey;
-  private final int               expiresDays;
-  private final ServerCertificate serverCertificate;
+    private final ECPrivateKey privateKey;
+    private final int expiresDays;
+    private final ServerCertificate serverCertificate;
 
-  public CertificateGenerator(byte[] serverCertificate, ECPrivateKey privateKey, int expiresDays)
-      throws InvalidProtocolBufferException
-  {
-    this.privateKey        = privateKey;
-    this.expiresDays       = expiresDays;
-    this.serverCertificate = ServerCertificate.parseFrom(serverCertificate);
-  }
+    public CertificateGenerator(byte[] serverCertificate, ECPrivateKey privateKey, int expiresDays)
+	    throws InvalidProtocolBufferException {
+	this.privateKey = privateKey;
+	this.expiresDays = expiresDays;
+	this.serverCertificate = ServerCertificate.parseFrom(serverCertificate);
+    }
 
-  public byte[] createFor(Account account, Device device, boolean includeUuid) throws IOException, InvalidKeyException {
-	    SenderCertificate.Certificate.Builder builder = SenderCertificate.Certificate.newBuilder()
-	                                                                                 .setSender(account.getUserLogin())
-	                                                                                 .setSenderDevice(Math.toIntExact(device.getId()))
-	                                                                                 .setExpires(System.currentTimeMillis() + TimeUnit.DAYS.toMillis(expiresDays))
-	                                                                                 .setIdentityKey(ByteString.copyFrom(Base64.decode(account.getIdentityKey())))
-	                                                                                 .setSigner(serverCertificate);
+    public byte[] createFor(Account account, Device device, boolean includeUserLogin, boolean includeUuid) throws IOException, InvalidKeyException {
+	SenderCertificate.Certificate.Builder builder = SenderCertificate.Certificate.newBuilder()
+		.setSenderDevice(Math.toIntExact(device.getId()))
+		.setExpires(System.currentTimeMillis() + TimeUnit.DAYS.toMillis(expiresDays))
+		.setIdentityKey(ByteString.copyFrom(Base64.decode(account.getIdentityKey())))
+		.setSigner(serverCertificate);
 
-	    if (includeUuid) {
-	      builder.setSenderUuid(account.getUuid().toString());
-	    }
+	if (!includeUserLogin && !includeUuid) {
+	    throw new IllegalArgumentException("Certificates must include one of a sender user login or UUID");
+	}
 
-	    byte[] certificate = builder.build().toByteArray();
-	    byte[] signature   = Curve.calculateSignature(privateKey, certificate);
+	if (includeUserLogin) {
+	    builder.setSender(account.getUserLogin());
+	}
 
-    return SenderCertificate.newBuilder()
-                            .setCertificate(ByteString.copyFrom(certificate))
-                            .setSignature(ByteString.copyFrom(signature))
-                            .build()
-                            .toByteArray();
-  }
+	if (includeUuid) {
+	    builder.setSenderUuid(account.getUuid().toString());
+	}
+
+	byte[] certificate = builder.build().toByteArray();
+	byte[] signature = Curve.calculateSignature(privateKey, certificate);
+
+	return SenderCertificate.newBuilder()
+		.setCertificate(ByteString.copyFrom(certificate))
+		.setSignature(ByteString.copyFrom(signature))
+		.build()
+		.toByteArray();
+    }
 
 }

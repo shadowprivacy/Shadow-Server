@@ -6,6 +6,7 @@ import su.sres.shadowserver.configuration.DatabaseConfiguration;
 import su.sres.shadowserver.storage.AbusiveHostRules;
 import su.sres.shadowserver.storage.Accounts;
 import su.sres.shadowserver.storage.FaultTolerantDatabase;
+import su.sres.shadowserver.storage.FeatureFlags;
 import su.sres.shadowserver.storage.Keys;
 import su.sres.shadowserver.storage.Messages;
 import su.sres.shadowserver.storage.PendingAccounts;
@@ -17,54 +18,56 @@ import org.slf4j.LoggerFactory;
 import io.dropwizard.cli.ConfiguredCommand;
 import io.dropwizard.setup.Bootstrap;
 
-
 public class VacuumCommand extends ConfiguredCommand<WhisperServerConfiguration> {
 
-  private final Logger logger = LoggerFactory.getLogger(VacuumCommand.class);
+    private final Logger logger = LoggerFactory.getLogger(VacuumCommand.class);
 
-  public VacuumCommand() {
-    super("vacuum", "Vacuum Postgres Tables");
-  }
+    public VacuumCommand() {
+	super("vacuum", "Vacuum Postgres Tables");
+    }
 
-  @Override
-  protected void run(Bootstrap<WhisperServerConfiguration> bootstrap,
-                     Namespace namespace,
-                     WhisperServerConfiguration config)
-      throws Exception
-  {
-	    DatabaseConfiguration accountDbConfig = config.getAccountsDatabaseConfiguration();
-	    DatabaseConfiguration abuseDbConfig =   config.getAbuseDatabaseConfiguration();
-	    DatabaseConfiguration messageDbConfig = config.getMessageStoreConfiguration();
-	    Jdbi accountJdbi = Jdbi.create(accountDbConfig.getUrl(), accountDbConfig.getUser(), accountDbConfig.getPassword());
-	    Jdbi abuseJdbi =   Jdbi.create(abuseDbConfig.getUrl(), abuseDbConfig.getUser(), abuseDbConfig.getPassword());
-	    Jdbi messageJdbi = Jdbi.create(messageDbConfig.getUrl(), messageDbConfig.getUser(), messageDbConfig.getPassword());
+    @Override
+    protected void run(Bootstrap<WhisperServerConfiguration> bootstrap,
+	    Namespace namespace,
+	    WhisperServerConfiguration config)
+	    throws Exception {
+	DatabaseConfiguration accountDbConfig = config.getAccountsDatabaseConfiguration();
+	DatabaseConfiguration abuseDbConfig = config.getAbuseDatabaseConfiguration();
+	DatabaseConfiguration messageDbConfig = config.getMessageStoreConfiguration();
+	Jdbi accountJdbi = Jdbi.create(accountDbConfig.getUrl(), accountDbConfig.getUser(), accountDbConfig.getPassword());
+	Jdbi abuseJdbi = Jdbi.create(abuseDbConfig.getUrl(), abuseDbConfig.getUser(), abuseDbConfig.getPassword());
+	Jdbi messageJdbi = Jdbi.create(messageDbConfig.getUrl(), messageDbConfig.getUser(), messageDbConfig.getPassword());
 
-	    FaultTolerantDatabase accountDatabase = new FaultTolerantDatabase("account_database_vacuum", accountJdbi, accountDbConfig.getCircuitBreakerConfiguration());
-	    FaultTolerantDatabase abuseDatabase = new FaultTolerantDatabase("abuse_database_vacuum", abuseJdbi, abuseDbConfig.getCircuitBreakerConfiguration());
-	    FaultTolerantDatabase messageDatabase = new FaultTolerantDatabase("message_database_vacuum", messageJdbi, messageDbConfig.getCircuitBreakerConfiguration());
+	FaultTolerantDatabase accountDatabase = new FaultTolerantDatabase("account_database_vacuum", accountJdbi, accountDbConfig.getCircuitBreakerConfiguration());
+	FaultTolerantDatabase abuseDatabase = new FaultTolerantDatabase("abuse_database_vacuum", abuseJdbi, abuseDbConfig.getCircuitBreakerConfiguration());
+	FaultTolerantDatabase messageDatabase = new FaultTolerantDatabase("message_database_vacuum", messageJdbi, messageDbConfig.getCircuitBreakerConfiguration());
 
-    Accounts         accounts          = new Accounts(accountDatabase);
-    Keys             keys              = new Keys(accountDatabase);
-    PendingAccounts  pendingAccounts   = new PendingAccounts(accountDatabase);
-    Messages         messages          = new Messages(messageDatabase);
-    AbusiveHostRules abusiveHostRules = new AbusiveHostRules(abuseDatabase);
+	Accounts accounts = new Accounts(accountDatabase);
+	Keys keys = new Keys(accountDatabase);
+	PendingAccounts pendingAccounts = new PendingAccounts(accountDatabase);
+	Messages messages = new Messages(messageDatabase);
+	FeatureFlags featureFlags = new FeatureFlags(accountDatabase);
+	AbusiveHostRules abusiveHostRules = new AbusiveHostRules(abuseDatabase);
 
-    logger.info("Vacuuming accounts...");
-    accounts.vacuum();
+	logger.info("Vacuuming accounts...");
+	accounts.vacuum();
 
-    logger.info("Vacuuming pending_accounts...");
-    pendingAccounts.vacuum();
+	logger.info("Vacuuming pending_accounts...");
+	pendingAccounts.vacuum();
 
-    logger.info("Vacuuming keys...");
-    keys.vacuum();
+	logger.info("Vacuuming keys...");
+	keys.vacuum();
 
-    logger.info("Vacuuming messages...");
-    messages.vacuum();
-    
-    logger.info("Vacuuming abusive host rules...");
-    abusiveHostRules.vacuum();
+	logger.info("Vacuuming messages...");
+	messages.vacuum();
 
-    Thread.sleep(3000);
-    System.exit(0);
-  }
+	logger.info("Vacuuming abusive host rules...");
+	abusiveHostRules.vacuum();
+
+	logger.info("Vacuuming feature flags...");
+	featureFlags.vacuum();
+
+	Thread.sleep(3000);
+	System.exit(0);
+    }
 }

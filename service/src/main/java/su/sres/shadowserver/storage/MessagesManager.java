@@ -1,98 +1,137 @@
 package su.sres.shadowserver.storage;
 
-
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.SharedMetricRegistries;
 
 import su.sres.shadowserver.entities.OutgoingMessageEntity;
 import su.sres.shadowserver.entities.OutgoingMessageEntityList;
+import su.sres.shadowserver.metrics.PushLatencyManager;
+import su.sres.shadowserver.redis.RedisOperation;
 import su.sres.shadowserver.entities.MessageProtos.Envelope;
 import su.sres.shadowserver.util.Constants;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.stream.Collectors;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static com.codahale.metrics.MetricRegistry.name;
 
 public class MessagesManager {
 
-  private static final MetricRegistry metricRegistry       = SharedMetricRegistries.getOrCreate(Constants.METRICS_NAME);
-  private static final Meter          cacheHitByIdMeter    = metricRegistry.meter(name(MessagesManager.class, "cacheHitById"   ));
-  private static final Meter          cacheMissByIdMeter   = metricRegistry.meter(name(MessagesManager.class, "cacheMissById"  ));
-  private static final Meter          cacheHitByNameMeter  = metricRegistry.meter(name(MessagesManager.class, "cacheHitByName" ));
-  private static final Meter          cacheMissByNameMeter = metricRegistry.meter(name(MessagesManager.class, "cacheMissByName"));
-  private static final Meter          cacheHitByGuidMeter  = metricRegistry.meter(name(MessagesManager.class, "cacheHitByGuid" ));
-  private static final Meter          cacheMissByGuidMeter = metricRegistry.meter(name(MessagesManager.class, "cacheMissByGuid"));
+    private static final MetricRegistry metricRegistry = SharedMetricRegistries.getOrCreate(Constants.METRICS_NAME);
+    private static final Meter cacheHitByIdMeter = metricRegistry.meter(name(MessagesManager.class, "cacheHitById"));
+    private static final Meter cacheMissByIdMeter = metricRegistry.meter(name(MessagesManager.class, "cacheMissById"));
+    private static final Meter cacheHitByNameMeter = metricRegistry.meter(name(MessagesManager.class, "cacheHitByName"));
+    private static final Meter cacheMissByNameMeter = metricRegistry.meter(name(MessagesManager.class, "cacheMissByName"));
+    private static final Meter cacheHitByGuidMeter = metricRegistry.meter(name(MessagesManager.class, "cacheHitByGuid"));
+    private static final Meter cacheMissByGuidMeter = metricRegistry.meter(name(MessagesManager.class, "cacheMissByGuid"));
 
-  private final Messages      messages;
-  private final MessagesCache messagesCache;
- 
-  public MessagesManager(Messages messages, MessagesCache messagesCache) {
-    this.messages      = messages;
-    this.messagesCache = messagesCache;    
-  }
+    private final Messages messages;
+    private final MessagesCache messagesCache;
+    private final PushLatencyManager pushLatencyManager;
 
-  public void insert(String destination, long destinationDevice, Envelope message) {
-	  UUID guid = UUID.randomUUID();
-	    messagesCache.insert(guid, destination, destinationDevice, message);
-  }
-
-  public OutgoingMessageEntityList getMessagesForDevice(String destination, long destinationDevice) {
-    List<OutgoingMessageEntity> messages = this.messages.load(destination, destinationDevice);
-
-    if (messages.size() <= Messages.RESULT_SET_CHUNK_SIZE) {
-      messages.addAll(this.messagesCache.get(destination, destinationDevice, Messages.RESULT_SET_CHUNK_SIZE - messages.size()));
+    public MessagesManager(Messages messages, MessagesCache messagesCache, PushLatencyManager pushLatencyManager) {
+	this.messages = messages;
+	this.messagesCache = messagesCache;
+	this.pushLatencyManager = pushLatencyManager;
     }
 
-    return new OutgoingMessageEntityList(messages, messages.size() >= Messages.RESULT_SET_CHUNK_SIZE);
-  }
-
-  public void clear(String destination) {
-    this.messagesCache.clear(destination);
-    this.messages.clear(destination);
-  }
-
-  public void clear(String destination, long deviceId) {
-    this.messagesCache.clear(destination, deviceId);
-    this.messages.clear(destination, deviceId);
-  }
-
-  public Optional<OutgoingMessageEntity> delete(String destination, long destinationDevice, String source, long timestamp)
-  {
-    Optional<OutgoingMessageEntity> removed = this.messagesCache.remove(destination, destinationDevice, source, timestamp);
-
-    if (!removed.isPresent()) {
-    	removed = this.messages.remove(destination, destinationDevice, source, timestamp);
-      cacheMissByNameMeter.mark();
-    } else {
-      cacheHitByNameMeter.mark();
+    public void insert(UUID destinationUuid, long destinationDevice, Envelope message) {
+	messagesCache.insert(UUID.randomUUID(), destinationUuid, destinationDevice, message);
     }
 
-    return removed;
-  }
-  
-  public Optional<OutgoingMessageEntity> delete(String destination, long deviceId, UUID guid) {
-	    Optional<OutgoingMessageEntity> removed = this.messagesCache.remove(destination, deviceId, guid);
-
-	    if (!removed.isPresent()) {
-	    	 removed = this.messages.remove(destination, guid);
-	      cacheMissByGuidMeter.mark();
-	    } else {
-	      cacheHitByGuidMeter.mark();
-	    }
-
-	    return removed;
-	  }
-
-  public void delete(String destination, long deviceId, long id, boolean cached) {
-    if (cached) {
-      this.messagesCache.remove(destination, deviceId, id);
-      cacheHitByIdMeter.mark();
-    } else {
-      this.messages.remove(destination, id);
-      cacheMissByIdMeter.mark();
+    public void insertEphemeral(final UUID destinationUuid, final long destinationDevice, final Envelope message) {
+	messagesCache.insertEphemeral(destinationUuid, destinationDevice, message);
     }
-  }
+
+    public Optional<Envelope> takeEphemeralMessage(final UUID destinationUuid, final long destinationDevice) {
+	return messagesCache.takeEphemeralMessage(destinationUuid, destinationDevice);
+    }
+
+    public OutgoingMessageEntityList getMessagesForDevice(String destination, UUID destinationUuid, long destinationDevice, final String userAgent, final boolean cachedMessagesOnly) {
+	RedisOperation.unchecked(() -> pushLatencyManager.recordQueueRead(destinationUuid, destinationDevice, userAgent));
+
+	List<OutgoingMessageEntity> messages = cachedMessagesOnly ? new ArrayList<>() : this.messages.load(destination, destinationDevice);
+
+	if (messages.size() < Messages.RESULT_SET_CHUNK_SIZE) {
+	    messages.addAll(messagesCache.get(destinationUuid, destinationDevice, Messages.RESULT_SET_CHUNK_SIZE - messages.size()));
+	}
+
+	return new OutgoingMessageEntityList(messages, messages.size() >= Messages.RESULT_SET_CHUNK_SIZE);
+    }
+
+    public void clear(String destination, UUID destinationUuid) {
+	// TODO Remove this null check in a fully-UUID-ified world
+	if (destinationUuid != null) {
+	    this.messagesCache.clear(destinationUuid);
+	}
+
+	this.messages.clear(destination);
+    }
+
+    public void clear(String destination, UUID destinationUuid, long deviceId) {
+	// TODO Remove this null check in a fully-UUID-ified world
+	if (destinationUuid != null) {
+	    this.messagesCache.clear(destinationUuid, deviceId);
+	}
+
+	this.messages.clear(destination, deviceId);
+    }
+
+    public Optional<OutgoingMessageEntity> delete(String destination, UUID destinationUuid, long destinationDevice, String source, long timestamp) {
+	Optional<OutgoingMessageEntity> removed = messagesCache.remove(destinationUuid, destinationDevice, source, timestamp);
+
+	if (!removed.isPresent()) {
+	    removed = this.messages.remove(destination, destinationDevice, source, timestamp);
+	    cacheMissByNameMeter.mark();
+	} else {
+	    cacheHitByNameMeter.mark();
+	}
+
+	return removed;
+    }
+
+    public Optional<OutgoingMessageEntity> delete(String destination, UUID destinationUuid, long deviceId, UUID guid) {
+	Optional<OutgoingMessageEntity> removed = messagesCache.remove(destinationUuid, deviceId, guid);
+
+	if (!removed.isPresent()) {
+	    removed = this.messages.remove(destination, guid);
+	    cacheMissByGuidMeter.mark();
+	} else {
+	    cacheHitByGuidMeter.mark();
+	}
+
+	return removed;
+    }
+
+    public void delete(String destination, UUID destinationUuid, long deviceId, long id, boolean cached) {
+	if (cached) {
+	    messagesCache.remove(destinationUuid, deviceId, id);
+	    cacheHitByIdMeter.mark();
+	} else {
+	    this.messages.remove(destination, id);
+	    cacheMissByIdMeter.mark();
+	}
+    }
+
+    public void persistMessages(final String destination, final UUID destinationUuid, final long destinationDeviceId, final List<Envelope> messages) {
+	this.messages.store(messages, destination, destinationDeviceId);
+
+	messagesCache.remove(destinationUuid, destinationDeviceId, messages.stream().map(message -> UUID.fromString(message.getServerGuid())).collect(Collectors.toList()));
+    }
+
+    public void addMessageAvailabilityListener(final UUID destinationUuid, final long deviceId, final MessageAvailabilityListener listener) {
+	messagesCache.addMessageAvailabilityListener(destinationUuid, deviceId, listener);
+    }
+
+    public void removeMessageAvailabilityListener(final MessageAvailabilityListener listener) {
+	messagesCache.removeMessageAvailabilityListener(listener);
+    }
 }

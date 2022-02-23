@@ -20,6 +20,8 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.annotations.VisibleForTesting;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Metrics;
 import su.sres.shadowserver.auth.AmbiguousIdentifier;
 
 import javax.security.auth.Subject;
@@ -32,271 +34,290 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
+import static com.codahale.metrics.MetricRegistry.name;
+
 public class Account implements Principal {
 
-	@JsonIgnore
-	private UUID uuid;
+    // TODO Remove these temporary metrics
+    private static final Counter ENABLED_ACCOUNT_COUNTER = Metrics.counter(name(Account.class, "isEnabled"), "enabled", "true");
+    private static final Counter DISABLED_ACCOUNT_COUNTER = Metrics.counter(name(Account.class, "isEnabled"), "enabled", "false");
 
-	@JsonProperty
-	private String userLogin;
+    @JsonIgnore
+    private UUID uuid;
 
-	@JsonProperty
-	private Set<Device> devices = new HashSet<>();
+    @JsonProperty
+    private String userLogin;
 
-	@JsonProperty
-	private String identityKey;
+    @JsonProperty
+    private Set<Device> devices = new HashSet<>();
 
-	@JsonProperty
-	private String name;
+    @JsonProperty
+    private String identityKey;
 
-	@JsonProperty
-	private String avatar;
+    @JsonProperty
+    private String name;
 
-	@JsonProperty
-	private String pin;
+    @JsonProperty
+    private String avatar;
 
-	@JsonProperty
-	private List<PaymentAddress> payments;
+    @JsonProperty
+    private String pin;
 
-	@JsonProperty
-	private String registrationLock;
+    @JsonProperty
+    private List<PaymentAddress> payments;
 
-	@JsonProperty
-	private String registrationLockSalt;
+    @JsonProperty
+    private String registrationLock;
 
-	@JsonProperty("uak")
-	private byte[] unidentifiedAccessKey;
+    @JsonProperty
+    private String registrationLockSalt;
 
-	@JsonProperty("uua")
-	private boolean unrestrictedUnidentifiedAccess;
+    @JsonProperty("uak")
+    private byte[] unidentifiedAccessKey;
 
-	@JsonIgnore
-	private Device authenticatedDevice;
+    @JsonProperty("uua")
+    private boolean unrestrictedUnidentifiedAccess;
 
-	public Account() {
+    @JsonProperty("inCds")
+    private boolean discoverableByUserLogin = true;
+
+    @JsonIgnore
+    private Device authenticatedDevice;
+
+    public Account() {
+    }
+
+    @VisibleForTesting
+    public Account(String userLogin, UUID uuid, Set<Device> devices, byte[] unidentifiedAccessKey) {
+	this.userLogin = userLogin;
+	this.uuid = uuid;
+	this.devices = devices;
+	this.unidentifiedAccessKey = unidentifiedAccessKey;
+    }
+
+    public Optional<Device> getAuthenticatedDevice() {
+	return Optional.ofNullable(authenticatedDevice);
+    }
+
+    public void setAuthenticatedDevice(Device device) {
+	this.authenticatedDevice = device;
+    }
+
+    public UUID getUuid() {
+	return uuid;
+    }
+
+    public void setUuid(UUID uuid) {
+	this.uuid = uuid;
+    }
+
+    public void setUserLogin(String userLogin) {
+	this.userLogin = userLogin;
+    }
+
+    public String getUserLogin() {
+	return userLogin;
+    }
+
+    public void addDevice(Device device) {
+	this.devices.remove(device);
+	this.devices.add(device);
+    }
+
+    public void removeDevice(long deviceId) {
+	this.devices.remove(
+		new Device(deviceId, null, null, null, null, null, null, null, false, 0, null, 0, 0, "NA", 0, null));
+    }
+
+    public Set<Device> getDevices() {
+	return devices;
+    }
+
+    public Optional<Device> getMasterDevice() {
+	return getDevice(Device.MASTER_ID);
+    }
+
+    public Optional<Device> getDevice(long deviceId) {
+	for (Device device : devices) {
+	    if (device.getId() == deviceId) {
+		return Optional.of(device);
+	    }
 	}
 
-	@VisibleForTesting
-	public Account(String userLogin, UUID uuid, Set<Device> devices, byte[] unidentifiedAccessKey) {
-		this.userLogin = userLogin;
-		this.uuid = uuid;
-		this.devices = devices;
-		this.unidentifiedAccessKey = unidentifiedAccessKey;
+	return Optional.empty();
+    }
+
+    public boolean isGroupsV2Supported() {
+	return devices.stream().filter(Device::isEnabled)
+		.allMatch(Device::isGroupsV2Supported);
+    }
+
+    public boolean isStorageSupported() {
+	return devices.stream()
+		.anyMatch(device -> device.getCapabilities() != null && device.getCapabilities().isStorage());
+    }
+
+    public boolean isTransferSupported() {
+	return getMasterDevice().map(Device::getCapabilities).map(Device.DeviceCapabilities::isTransfer).orElse(false);
+    }
+
+    public boolean isEnabled() {
+	final boolean enabled = getMasterDevice().map(Device::isEnabled).orElse(false);
+
+	if (enabled) {
+	    ENABLED_ACCOUNT_COUNTER.increment();
+	} else {
+	    DISABLED_ACCOUNT_COUNTER.increment();
 	}
 
-	public Optional<Device> getAuthenticatedDevice() {
-		return Optional.ofNullable(authenticatedDevice);
+	return enabled;
+    }
+
+    public long getNextDeviceId() {
+	long highestDevice = Device.MASTER_ID;
+
+	for (Device device : devices) {
+	    if (!device.isEnabled()) {
+		return device.getId();
+	    } else if (device.getId() > highestDevice) {
+		highestDevice = device.getId();
+	    }
 	}
 
-	public void setAuthenticatedDevice(Device device) {
-		this.authenticatedDevice = device;
+	return highestDevice + 1;
+    }
+
+    public int getEnabledDeviceCount() {
+	int count = 0;
+
+	for (Device device : devices) {
+	    if (device.isEnabled())
+		count++;
 	}
 
-	public UUID getUuid() {
-		return uuid;
+	return count;
+    }
+
+    public boolean isRateLimited() {
+	return true;
+    }
+
+    public Optional<String> getRelay() {
+	return Optional.empty();
+    }
+
+    public void setIdentityKey(String identityKey) {
+	this.identityKey = identityKey;
+    }
+
+    public String getIdentityKey() {
+	return identityKey;
+    }
+
+    public long getLastSeen() {
+	long lastSeen = 0;
+
+	for (Device device : devices) {
+	    if (device.getLastSeen() > lastSeen) {
+		lastSeen = device.getLastSeen();
+	    }
 	}
 
-	public void setUuid(UUID uuid) {
-		this.uuid = uuid;
-	}
+	return lastSeen;
+    }
 
-	public void setUserLogin(String userLogin) {
-		this.userLogin = userLogin;
-	}
+    public String getProfileName() {
+	return name;
+    }
 
-	public String getUserLogin() {
-		return userLogin;
-	}
+    public void setProfileName(String name) {
+	this.name = name;
+    }
 
-	public void addDevice(Device device) {
-		this.devices.remove(device);
-		this.devices.add(device);
-	}
+    public String getAvatar() {
+	return avatar;
+    }
 
-	public void removeDevice(long deviceId) {
-		this.devices.remove(
-				new Device(deviceId, null, null, null, null, null, null, null, false, 0, null, 0, 0, "NA", 0, null));
-	}
+    public void setAvatar(String avatar) {
+	this.avatar = avatar;
+    }
 
-	public Set<Device> getDevices() {
-		return devices;
-	}
+    public Optional<String> getPin() {
+	return Optional.ofNullable(pin);
+    }
 
-	public Optional<Device> getMasterDevice() {
-		return getDevice(Device.MASTER_ID);
-	}
+    public void setPin(String pin) {
+	this.pin = pin;
+    }
 
-	public Optional<Device> getDevice(long deviceId) {
-		for (Device device : devices) {
-			if (device.getId() == deviceId) {
-				return Optional.of(device);
-			}
-		}
+    public void setRegistrationLock(String registrationLock) {
+	this.registrationLock = registrationLock;
+    }
 
-		return Optional.empty();
-	}
+    public Optional<String> getRegistrationLock() {
+	return Optional.ofNullable(registrationLock);
+    }
 
-	public boolean isUuidAddressingSupported() {
-		return devices.stream().filter(Device::isEnabled)
-				.allMatch(device -> device.getCapabilities() != null && device.getCapabilities().isUuid());
-	}
+    public void setRegistrationLockSalt(String registrationLockSalt) {
+	this.registrationLockSalt = registrationLockSalt;
+    }
 
-	public boolean isGroupsV2Supported() {
-		return devices.stream().filter(Device::isEnabled)
-				.anyMatch(device -> device.getCapabilities() != null && device.getCapabilities().isGv2());
-	}
+    public Optional<String> getRegistrationLockSalt() {
+	return Optional.ofNullable(registrationLockSalt);
+    }
 
-	public boolean isStorageSupported() {
-		return devices.stream()
-				.anyMatch(device -> device.getCapabilities() != null && device.getCapabilities().isStorage());
-	}
+    public Optional<byte[]> getUnidentifiedAccessKey() {
+	return Optional.ofNullable(unidentifiedAccessKey);
+    }
 
-	public boolean isTransferSupported() {
-		return getMasterDevice().map(Device::getCapabilities).map(Device.DeviceCapabilities::isTransfer).orElse(false);
-	}
+    public void setUnidentifiedAccessKey(byte[] unidentifiedAccessKey) {
+	this.unidentifiedAccessKey = unidentifiedAccessKey;
+    }
 
-	public boolean isEnabled() {
-		return getMasterDevice().isPresent() && getMasterDevice().get().isEnabled()
-				&& getLastSeen() > (System.currentTimeMillis() - TimeUnit.DAYS.toMillis(365));
-	}
+    public boolean isUnrestrictedUnidentifiedAccess() {
+	return unrestrictedUnidentifiedAccess;
+    }
 
-	public long getNextDeviceId() {
-		long highestDevice = Device.MASTER_ID;
+    public void setUnrestrictedUnidentifiedAccess(boolean unrestrictedUnidentifiedAccess) {
+	this.unrestrictedUnidentifiedAccess = unrestrictedUnidentifiedAccess;
+    }
 
-		for (Device device : devices) {
-			if (!device.isEnabled()) {
-				return device.getId();
-			} else if (device.getId() > highestDevice) {
-				highestDevice = device.getId();
-			}
-		}
+    public List<PaymentAddress> getPayments() {
+	return payments;
+    }
 
-		return highestDevice + 1;
-	}
+    public void setPayments(List<PaymentAddress> payments) {
+	this.payments = payments;
+    }
 
-	public int getEnabledDeviceCount() {
-		int count = 0;
+    public boolean isFor(AmbiguousIdentifier identifier) {
+	if (identifier.hasUuid())
+	    return identifier.getUuid().equals(uuid);
+	else if (identifier.hasUserLogin())
+	    return identifier.getUserLogin().equals(userLogin);
+	else
+	    throw new AssertionError();
+    }
 
-		for (Device device : devices) {
-			if (device.isEnabled())
-				count++;
-		}
+    public boolean isDiscoverableByUserLogin() {
+	return this.discoverableByUserLogin;
+    }
 
-		return count;
-	}
+    public void setDiscoverableByUserLogin(final boolean discoverableByUserLogin) {
+	this.discoverableByUserLogin = discoverableByUserLogin;
+    }
 
-	public boolean isRateLimited() {
-		return true;
-	}
+    // Principal implementation
 
-	public Optional<String> getRelay() {
-		return Optional.empty();
-	}
+    @Override
+    @JsonIgnore
+    public String getName() {
+	return null;
+    }
 
-	public void setIdentityKey(String identityKey) {
-		this.identityKey = identityKey;
-	}
-
-	public String getIdentityKey() {
-		return identityKey;
-	}
-
-	public long getLastSeen() {
-		long lastSeen = 0;
-
-		for (Device device : devices) {
-			if (device.getLastSeen() > lastSeen) {
-				lastSeen = device.getLastSeen();
-			}
-		}
-
-		return lastSeen;
-	}
-
-	public String getProfileName() {
-		return name;
-	}
-
-	public void setProfileName(String name) {
-		this.name = name;
-	}
-
-	public String getAvatar() {
-		return avatar;
-	}
-
-	public void setAvatar(String avatar) {
-		this.avatar = avatar;
-	}
-
-	public Optional<String> getPin() {
-		return Optional.ofNullable(pin);
-	}
-
-	public void setPin(String pin) {
-		this.pin = pin;
-	}
-
-	public void setRegistrationLock(String registrationLock) {
-		this.registrationLock = registrationLock;
-	}
-
-	public Optional<String> getRegistrationLock() {
-		return Optional.ofNullable(registrationLock);
-	}
-
-	public void setRegistrationLockSalt(String registrationLockSalt) {
-		this.registrationLockSalt = registrationLockSalt;
-	}
-
-	public Optional<String> getRegistrationLockSalt() {
-		return Optional.ofNullable(registrationLockSalt);
-	}
-
-	public Optional<byte[]> getUnidentifiedAccessKey() {
-		return Optional.ofNullable(unidentifiedAccessKey);
-	}
-
-	public void setUnidentifiedAccessKey(byte[] unidentifiedAccessKey) {
-		this.unidentifiedAccessKey = unidentifiedAccessKey;
-	}
-
-	public boolean isUnrestrictedUnidentifiedAccess() {
-		return unrestrictedUnidentifiedAccess;
-	}
-
-	public void setUnrestrictedUnidentifiedAccess(boolean unrestrictedUnidentifiedAccess) {
-		this.unrestrictedUnidentifiedAccess = unrestrictedUnidentifiedAccess;
-	}
-
-	public List<PaymentAddress> getPayments() {
-		return payments;
-	}
-
-	public void setPayments(List<PaymentAddress> payments) {
-		this.payments = payments;
-	}
-
-	public boolean isFor(AmbiguousIdentifier identifier) {
-		if (identifier.hasUuid())
-			return identifier.getUuid().equals(uuid);
-		else if (identifier.hasUserLogin())
-			return identifier.getUserLogin().equals(userLogin);
-		else
-			throw new AssertionError();
-	}
-
-	// Principal implementation
-
-	@Override
-	@JsonIgnore
-	public String getName() {
-		return null;
-	}
-
-	@Override
-	@JsonIgnore
-	public boolean implies(Subject subject) {
-		return false;
-	}
+    @Override
+    @JsonIgnore
+    public boolean implies(Subject subject) {
+	return false;
+    }
 }

@@ -7,11 +7,14 @@ import java.lang.management.ManagementFactory;
 
 public class FreeMemoryGauge implements Gauge<Long> {
 
-  @Override
-  public Long getValue() {
-    OperatingSystemMXBean mbean = (com.sun.management.OperatingSystemMXBean)
-        ManagementFactory.getOperatingSystemMXBean();
+    private final OperatingSystemMXBean operatingSystemMXBean;
 
-    return mbean.getFreePhysicalMemorySize();
-  }
+    public FreeMemoryGauge() {
+	this.operatingSystemMXBean = (com.sun.management.OperatingSystemMXBean) ManagementFactory.getOperatingSystemMXBean();
+    }
+
+    @Override
+    public Long getValue() {
+	return operatingSystemMXBean.getFreePhysicalMemorySize();
+    }
 }

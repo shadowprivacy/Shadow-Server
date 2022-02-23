@@ -151,7 +151,7 @@ public class ProfileController {
 		}
 
 	    account.setProfileName(request.getName());
-	    if (avatar != null) account.setAvatar(avatar);
+	    account.setAvatar(avatar);
 	    accountsManager.update(account);
 
 	    if (response.isPresent()) return Response.ok(response).build();
@@ -223,7 +223,7 @@ public class ProfileController {
 	                                     accountProfile.get().getIdentityKey(),
 	                                     UnidentifiedAccessChecksum.generateFor(accountProfile.get().getUnidentifiedAccessKey()),
 	                                     accountProfile.get().isUnrestrictedUnidentifiedAccess(),
-	                                     new UserCapabilities(accountProfile.get().isUuidAddressingSupported(), accountProfile.get().isGroupsV2Supported()),
+	                                     new UserCapabilities(accountProfile.get().isGroupsV2Supported()),
 	                                     username.orElse(null),
 	                                     null,
 	                                     credential.orElse(null),
@@ -260,7 +260,7 @@ public class ProfileController {
 				accountProfile.get().getIdentityKey(),
 				UnidentifiedAccessChecksum.generateFor(accountProfile.get().getUnidentifiedAccessKey()),
 				accountProfile.get().isUnrestrictedUnidentifiedAccess(),
-			    new UserCapabilities(accountProfile.get().isUuidAddressingSupported(), accountProfile.get().isGroupsV2Supported()),
+				new UserCapabilities(accountProfile.get().isGroupsV2Supported()),
 				username,
 				accountProfile.get().getUuid(),
                 null,
@@ -334,7 +334,7 @@ public class ProfileController {
 	                       accountProfile.get().getIdentityKey(),
 	                       UnidentifiedAccessChecksum.generateFor(accountProfile.get().getUnidentifiedAccessKey()),
 	                       accountProfile.get().isUnrestrictedUnidentifiedAccess(),
-	                       new UserCapabilities(accountProfile.get().isUuidAddressingSupported(), accountProfile.get().isGroupsV2Supported()),
+	                       new UserCapabilities(accountProfile.get().isGroupsV2Supported()),
 	                       username.orElse(null),
 	                       null,
 	                       null,

@@ -24,73 +24,72 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.util.Optional;
 
-import redis.clients.jedis.Jedis;
 import su.sres.shadowserver.auth.StoredVerificationCode;
-import su.sres.shadowserver.redis.ReplicatedJedisPool;
+import su.sres.shadowserver.redis.FaultTolerantRedisCluster;
 import su.sres.shadowserver.util.SystemMapper;
 
 public class PendingAccountsManager {
 
-  private final Logger logger = LoggerFactory.getLogger(PendingAccountsManager.class);
+    private final Logger logger = LoggerFactory.getLogger(PendingAccountsManager.class);
 
-  private static final String CACHE_PREFIX = "pending_account2::";
+    private static final String CACHE_PREFIX = "pending_account2::";
 
-  private final PendingAccounts              pendingAccounts;
-  private final ReplicatedJedisPool          cacheClient;
-  private final ObjectMapper                 mapper;
-  
-  public PendingAccountsManager(PendingAccounts pendingAccounts, ReplicatedJedisPool cacheClient)
-  {
-    this.pendingAccounts = pendingAccounts;
-    this.cacheClient     = cacheClient;
-    this.mapper          = SystemMapper.getMapper();
-    
-  }
+    private final PendingAccounts pendingAccounts;
+    private final FaultTolerantRedisCluster cacheCluster;
+    private final ObjectMapper mapper;
 
-  public void store(String userLogin, StoredVerificationCode code) {
-    memcacheSet(userLogin, code);
-    pendingAccounts.insert(userLogin, code.getCode(), code.getTimestamp(), code.getPushCode());
-  }
-
-  public void remove(String userLogin) {
-    memcacheDelete(userLogin);
-    pendingAccounts.remove(userLogin);
-  }
-
-  public Optional<StoredVerificationCode> getCodeForUserLogin(String userLogin) {
-    Optional<StoredVerificationCode> code = memcacheGet(userLogin);
-
-    if (!code.isPresent()) {
-    	 code = pendingAccounts.getCodeForUserLogin(userLogin);
-         code.ifPresent(storedVerificationCode -> memcacheSet(userLogin, storedVerificationCode));
+    public PendingAccountsManager(PendingAccounts pendingAccounts, FaultTolerantRedisCluster cacheCluster) {
+	this.pendingAccounts = pendingAccounts;
+	this.cacheCluster = cacheCluster;
+	this.mapper = SystemMapper.getMapper();
     }
 
-    return code;
-  }
-
-  private void memcacheSet(String userLogin, StoredVerificationCode code) {
-    try (Jedis jedis = cacheClient.getWriteResource()) {
-      jedis.set(CACHE_PREFIX + userLogin, mapper.writeValueAsString(code));
-    } catch (JsonProcessingException e) {
-      throw new IllegalArgumentException(e);
+    public void store(String userLogin, StoredVerificationCode code) {
+	memcacheSet(userLogin, code);
+	pendingAccounts.insert(userLogin, code.getCode(), code.getTimestamp(), code.getPushCode());
     }
-  }
 
-  private Optional<StoredVerificationCode> memcacheGet(String userLogin) {
-    try (Jedis jedis = cacheClient.getReadResource()) {
-      String json = jedis.get(CACHE_PREFIX + userLogin);
-
-      if (json == null) return Optional.empty();
-      else              return Optional.of(mapper.readValue(json, StoredVerificationCode.class));
-    } catch (IOException e) {
-      logger.warn("Error deserializing value...", e);
-      return Optional.empty();
+    public void remove(String userLogin) {
+	memcacheDelete(userLogin);
+	pendingAccounts.remove(userLogin);
     }
-  }
 
-  private void memcacheDelete(String userLogin) {
-    try (Jedis jedis = cacheClient.getWriteResource()) {
-      jedis.del(CACHE_PREFIX + userLogin);
+    public Optional<StoredVerificationCode> getCodeForUserLogin(String userLogin) {
+	Optional<StoredVerificationCode> code = memcacheGet(userLogin);
+
+	if (!code.isPresent()) {
+	    code = pendingAccounts.getCodeForUserLogin(userLogin);
+	    code.ifPresent(storedVerificationCode -> memcacheSet(userLogin, storedVerificationCode));
+	}
+
+	return code;
     }
-  }
+
+    private void memcacheSet(String userLogin, StoredVerificationCode code) {
+	try {
+	    final String verificationCodeJson = mapper.writeValueAsString(code);
+
+	    cacheCluster.useCluster(connection -> connection.sync().set(CACHE_PREFIX + userLogin, verificationCodeJson));
+	} catch (JsonProcessingException e) {
+	    throw new IllegalArgumentException(e);
+	}
+    }
+
+    private Optional<StoredVerificationCode> memcacheGet(String userLogin) {
+	try {
+	    final String json = cacheCluster.withCluster(connection -> connection.sync().get(CACHE_PREFIX + userLogin));
+
+	    if (json == null)
+		return Optional.empty();
+	    else
+		return Optional.of(mapper.readValue(json, StoredVerificationCode.class));
+	} catch (IOException e) {
+	    logger.warn("Error deserializing value...", e);
+	    return Optional.empty();
+	}
+    }
+
+    private void memcacheDelete(String userLogin) {
+	cacheCluster.useCluster(connection -> connection.sync().del(CACHE_PREFIX + userLogin));
+    }
 }

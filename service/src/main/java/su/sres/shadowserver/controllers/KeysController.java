@@ -186,8 +186,7 @@ public class KeysController {
 		assert (target.isPresent());
 
 		if (account.isPresent()) {
-			rateLimiters.getPreKeysLimiter()
-					.validate(account.get().getUserLogin() + "__" + target.get().getUserLogin() + "." + deviceId);
+		    rateLimiters.getPreKeysLimiter().validate(account.get().getUserLogin() + "." + account.get().getAuthenticatedDevice().get().getId() +  "__" + target.get().getUserLogin() + "." + deviceId);
 		}
 
 		List<KeyRecord> targetKeys = getLocalKeys(target.get(), deviceId);

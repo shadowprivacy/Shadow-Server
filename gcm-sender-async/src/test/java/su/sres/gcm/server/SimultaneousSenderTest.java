@@ -24,63 +24,61 @@ import static su.sres.gcm.server.util.FixtureHelpers.fixture;
 
 public class SimultaneousSenderTest {
 
-  @Rule
-  public WireMockRule wireMock = new WireMockRule(8089);
-  
-  private static final ObjectMapper mapper = new ObjectMapper();
+    @Rule
+    public WireMockRule wireMock = new WireMockRule(8089);
 
-  static {
-    mapper.setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.NONE);
-    mapper.setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY);
-    mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-  }
+    private static final ObjectMapper mapper = new ObjectMapper();
 
-  @Test
-  @Ignore
-  public void testSimultaneousSuccess() throws TimeoutException, InterruptedException, ExecutionException, JsonProcessingException {
-    stubFor(post(urlPathEqualTo("/gcm/send"))
-                .willReturn(aResponse()
-                                .withStatus(200)
-                                .withBody(fixture("fixtures/response-success.json"))));
-
-    Sender                          sender  = new Sender("foobarbaz", mapper, 2, "http://localhost:8089/gcm/send");
-    List<CompletableFuture<Result>> results = new LinkedList<>();
-
-    for (int i=0;i<1000;i++) {
-      results.add(sender.send(Message.newBuilder().withDestination("1").build()));
+    static {
+	mapper.setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.NONE);
+	mapper.setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY);
+	mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
     }
 
-    int i=0;
-    for (CompletableFuture<Result> future : results) {
-      Result result = future.get(60, TimeUnit.SECONDS);
-      System.out.println("Got " + (i++));
+    @Test
+    @Ignore
+    public void testSimultaneousSuccess() throws TimeoutException, InterruptedException, ExecutionException, JsonProcessingException {
+	stubFor(post(urlPathEqualTo("/gcm/send"))
+		.willReturn(aResponse()
+			.withStatus(200)
+			.withBody(fixture("fixtures/response-success.json"))));
 
-      if (!result.isSuccess()) {
-        throw new AssertionError(result.getError());
-      }
+	Sender sender = new Sender("foobarbaz", mapper, 2, "http://localhost:8089/gcm/send");
+	List<CompletableFuture<Result>> results = new LinkedList<>();
+
+	for (int i = 0; i < 1000; i++) {
+	    results.add(sender.send(Message.newBuilder().withDestination("1").build()));
+	}
+
+	for (CompletableFuture<Result> future : results) {
+	    Result result = future.get(60, TimeUnit.SECONDS);
+
+	    if (!result.isSuccess()) {
+		throw new AssertionError(result.getError());
+	    }
+	}
     }
-  }
 
-  @Test
-  @Ignore
-  public void testSimultaneousFailure() throws TimeoutException, InterruptedException {
-    stubFor(post(urlPathEqualTo("/gcm/send"))
-                .willReturn(aResponse()
-                                .withStatus(503)));
+    @Test
+    @Ignore
+    public void testSimultaneousFailure() throws TimeoutException, InterruptedException {
+	stubFor(post(urlPathEqualTo("/gcm/send"))
+		.willReturn(aResponse()
+			.withStatus(503)));
 
-    Sender sender   = new Sender("foobarbaz", mapper, 2, "http://localhost:8089/gcm/send");
-    List<CompletableFuture<Result>> futures = new LinkedList<>();
+	Sender sender = new Sender("foobarbaz", mapper, 2, "http://localhost:8089/gcm/send");
+	List<CompletableFuture<Result>> futures = new LinkedList<>();
 
-    for (int i=0;i<1000;i++) {
-      futures.add(sender.send(Message.newBuilder().withDestination("1").build()));
+	for (int i = 0; i < 1000; i++) {
+	    futures.add(sender.send(Message.newBuilder().withDestination("1").build()));
+	}
+
+	for (CompletableFuture<Result> future : futures) {
+	    try {
+		Result result = future.get(60, TimeUnit.SECONDS);
+	    } catch (ExecutionException e) {
+		assertTrue(e.getCause().toString(), e.getCause() instanceof ServerFailedException);
+	    }
+	}
     }
-
-    for (CompletableFuture<Result> future : futures) {
-      try {
-        Result result = future.get(60, TimeUnit.SECONDS);
-      } catch (ExecutionException e) {
-    	  assertTrue(e.getCause().toString(), e.getCause() instanceof ServerFailedException);
-      }
-    }
-  }
 }

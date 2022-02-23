@@ -1,0 +1,17 @@
+package su.sres.shadowserver.configuration;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import javax.validation.constraints.NotNull;
+import java.util.LinkedList;
+import java.util.List;
+
+public class FeatureFlagConfiguration {
+    @JsonProperty
+    @NotNull
+    private List<String> authorizedTokens = new LinkedList<>();
+
+    public List<String> getAuthorizedTokens() {
+	return authorizedTokens;
+    }
+}

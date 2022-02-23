@@ -323,7 +323,18 @@
         <addColumn tableName="remote_config">
             <column name="default_value" type="text"/>
             <column name="value" type="text"/>
+            <column name="hash_key" type="text"/>
         </addColumn>
     </changeSet>
     
+    <changeSet id="19" author="jon">
+        <createTable tableName="feature_flags">
+            <column name="flag" type="text">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+
+            <column name="active" type="boolean"/>
+        </createTable>
+    </changeSet>
+     
 </databaseChangeLog>

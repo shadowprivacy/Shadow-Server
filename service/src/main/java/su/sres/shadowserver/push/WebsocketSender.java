@@ -21,13 +21,14 @@ import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.SharedMetricRegistries;
 import com.google.protobuf.ByteString;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Metrics;
 import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.storage.Device;
 import su.sres.shadowserver.storage.MessagesManager;
 import su.sres.shadowserver.storage.PubSubManager;
 import su.sres.shadowserver.util.Constants;
 import su.sres.shadowserver.websocket.ProvisioningAddress;
-import su.sres.shadowserver.websocket.WebsocketAddress;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,98 +39,92 @@ import static su.sres.shadowserver.storage.PubSubProtos.PubSubMessage;
 
 public class WebsocketSender {
 
-  public enum Type {
-    APN,
-    GCM,
-    WEB
-  }
-
-  @SuppressWarnings("unused")
-  private static final Logger logger = LoggerFactory.getLogger(WebsocketSender.class);
-
-  private final MetricRegistry metricRegistry = SharedMetricRegistries.getOrCreate(Constants.METRICS_NAME);
-
-  private final Meter websocketRequeueMeter = metricRegistry.meter(name(getClass(), "ws_requeue"));
-  private final Meter websocketOnlineMeter  = metricRegistry.meter(name(getClass(), "ws_online"  ));
-  private final Meter websocketOfflineMeter = metricRegistry.meter(name(getClass(), "ws_offline" ));
-
-  private final Meter apnOnlineMeter        = metricRegistry.meter(name(getClass(), "apn_online" ));
-  private final Meter apnOfflineMeter       = metricRegistry.meter(name(getClass(), "apn_offline"));
-
-  private final Meter gcmOnlineMeter        = metricRegistry.meter(name(getClass(), "gcm_online" ));
-  private final Meter gcmOfflineMeter       = metricRegistry.meter(name(getClass(), "gcm_offline"));
-
-  private final Meter provisioningOnlineMeter  = metricRegistry.meter(name(getClass(), "provisioning_online" ));
-  private final Meter provisioningOfflineMeter = metricRegistry.meter(name(getClass(), "provisioning_offline"));
-
-  private final MessagesManager messagesManager;
-  private final PubSubManager   pubSubManager;
-
-  public WebsocketSender(MessagesManager messagesManager, PubSubManager pubSubManager) {
-    this.messagesManager = messagesManager;
-    this.pubSubManager   = pubSubManager;
-  }
-
-  public DeliveryStatus sendMessage(Account account, Device device, Envelope message, Type channel, boolean online) {
-    WebsocketAddress address       = new WebsocketAddress(account.getUserLogin(), device.getId());
-    PubSubMessage    pubSubMessage = PubSubMessage.newBuilder()
-                                                  .setType(PubSubMessage.Type.DELIVER)
-                                                  .setContent(message.toByteString())
-                                                  .build();
-
-    if (pubSubManager.publish(address, pubSubMessage)) {
-      if      (channel == Type.APN) apnOnlineMeter.mark();
-      else if (channel == Type.GCM) gcmOnlineMeter.mark();
-      else                          websocketOnlineMeter.mark();
-
-      return new DeliveryStatus(true);
-    } else {
-      if      (channel == Type.APN) apnOfflineMeter.mark();
-      else if (channel == Type.GCM) gcmOfflineMeter.mark();
-      else                          websocketOfflineMeter.mark();
-
-      if (!online) queueMessage(account, device, message);
-      return new DeliveryStatus(false);
-    }
-  }
-
-  public void queueMessage(Account account, Device device, Envelope message) {
-    websocketRequeueMeter.mark();
-
-    WebsocketAddress address = new WebsocketAddress(account.getUserLogin(), device.getId());
-
-    messagesManager.insert(account.getUserLogin(), device.getId(), message);
-    pubSubManager.publish(address, PubSubMessage.newBuilder()
-                                                .setType(PubSubMessage.Type.QUERY_DB)
-                                                .build());
-  }
-
-  public boolean sendProvisioningMessage(ProvisioningAddress address, byte[] body) {
-    PubSubMessage    pubSubMessage = PubSubMessage.newBuilder()
-                                                  .setType(PubSubMessage.Type.DELIVER)
-                                                  .setContent(ByteString.copyFrom(body))
-                                                  .build();
-
-    if (pubSubManager.publish(address, pubSubMessage)) {
-      provisioningOnlineMeter.mark();
-      return true;
-    } else {
-      provisioningOfflineMeter.mark();
-      return false;
-    }
-  }
-
-  static class DeliveryStatus {
-
-    private final boolean delivered;
-
-    DeliveryStatus(boolean delivered) {
-      this.delivered = delivered;
+    public enum Type {
+	APN,
+	GCM,
+	WEB
     }
 
-    boolean isDelivered() {
-      return delivered;
+    @SuppressWarnings("unused")
+    private static final Logger logger = LoggerFactory.getLogger(WebsocketSender.class);
+
+    private final MetricRegistry metricRegistry = SharedMetricRegistries.getOrCreate(Constants.METRICS_NAME);
+
+    private final Meter websocketOnlineMeter = metricRegistry.meter(name(getClass(), "ws_online"));
+    private final Meter websocketOfflineMeter = metricRegistry.meter(name(getClass(), "ws_offline"));
+
+    private final Meter apnOnlineMeter = metricRegistry.meter(name(getClass(), "apn_online"));
+    private final Meter apnOfflineMeter = metricRegistry.meter(name(getClass(), "apn_offline"));
+
+    private final Meter gcmOnlineMeter = metricRegistry.meter(name(getClass(), "gcm_online"));
+    private final Meter gcmOfflineMeter = metricRegistry.meter(name(getClass(), "gcm_offline"));
+
+    private final Meter provisioningOnlineMeter = metricRegistry.meter(name(getClass(), "provisioning_online"));
+    private final Meter provisioningOfflineMeter = metricRegistry.meter(name(getClass(), "provisioning_offline"));
+
+    private final Counter ephemeralOnlineCounter = Metrics.counter(name(getClass(), "ephemeral"), "online", "true");
+    private final Counter ephemeralOfflineCounter = Metrics.counter(name(getClass(), "ephemeral"), "offline", "true");
+
+    private final MessagesManager messagesManager;
+    private final PubSubManager pubSubManager;
+    private final ClientPresenceManager clientPresenceManager;
+
+    public WebsocketSender(MessagesManager messagesManager, PubSubManager pubSubManager, ClientPresenceManager clientPresenceManager) {
+	this.messagesManager = messagesManager;
+	this.pubSubManager = pubSubManager;
+	this.clientPresenceManager = clientPresenceManager;
     }
 
-  }
+    public boolean sendMessage(Account account, Device device, Envelope message, Type channel, boolean online) {
+	final boolean clientPresent = clientPresenceManager.isPresent(account.getUuid(), device.getId());
+
+	if (online) {
+	    if (clientPresent) {
+		ephemeralOnlineCounter.increment();
+		messagesManager.insertEphemeral(account.getUuid(), device.getId(), message);
+		return true;
+	    } else {
+		ephemeralOfflineCounter.increment();
+
+		return false;
+	    }
+	} else {
+	    messagesManager.insert(account.getUuid(), device.getId(), message);
+
+	    if (clientPresent) {
+		if (channel == Type.APN)
+		    apnOnlineMeter.mark();
+		else if (channel == Type.GCM)
+		    gcmOnlineMeter.mark();
+		else
+		    websocketOnlineMeter.mark();
+
+		return true;
+	    } else {
+		if (channel == Type.APN)
+		    apnOfflineMeter.mark();
+		else if (channel == Type.GCM)
+		    gcmOfflineMeter.mark();
+		else
+		    websocketOfflineMeter.mark();
+
+		return false;
+	    }
+	}
+    }
+
+    public boolean sendProvisioningMessage(ProvisioningAddress address, byte[] body) {
+	PubSubMessage pubSubMessage = PubSubMessage.newBuilder()
+		.setType(PubSubMessage.Type.DELIVER)
+		.setContent(ByteString.copyFrom(body))
+		.build();
+
+	if (pubSubManager.publish(address, pubSubMessage)) {
+	    provisioningOnlineMeter.mark();
+	    return true;
+	} else {
+	    provisioningOfflineMeter.mark();
+	    return false;
+	}
+    }
 }

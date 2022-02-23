@@ -3,6 +3,8 @@ package su.sres.shadowserver.auth;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.SharedMetricRegistries;
+import com.google.common.annotations.VisibleForTesting;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import su.sres.shadowserver.storage.Account;
@@ -11,6 +13,9 @@ import su.sres.shadowserver.storage.Device;
 import su.sres.shadowserver.util.Constants;
 import su.sres.shadowserver.util.Util;
 
+import java.time.Clock;
+import java.time.Duration;
+import java.time.temporal.ChronoUnit;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -31,9 +36,16 @@ public class BaseAccountAuthenticator {
   private final Logger logger = LoggerFactory.getLogger(AccountAuthenticator.class);
 
   private final AccountsManager accountsManager;
+  private final Clock           clock;
 
   public BaseAccountAuthenticator(AccountsManager accountsManager) {
+      this(accountsManager, Clock.systemUTC());
+  }
+
+  @VisibleForTesting
+  public BaseAccountAuthenticator(AccountsManager accountsManager, Clock clock) {
     this.accountsManager = accountsManager;
+    this.clock           = clock;
   }
 
   public Optional<Account> authenticate(BasicCredentials basicCredentials, boolean enabledRequired) {
@@ -80,9 +92,13 @@ public class BaseAccountAuthenticator {
     }
   }
 
-  private void updateLastSeen(Account account, Device device) {
-    if (device.getLastSeen() != Util.todayInMillis()) {
-      device.setLastSeen(Util.todayInMillis());
+  @VisibleForTesting
+  public void updateLastSeen(Account account, Device device) {
+    final long lastSeenOffsetSeconds   = Math.abs(account.getUuid().getLeastSignificantBits()) % ChronoUnit.DAYS.getDuration().toSeconds();
+    final long todayInMillisWithOffset = Util.todayInMillisGivenOffsetFromNow(clock, Duration.ofSeconds(lastSeenOffsetSeconds).negated());
+
+    if (device.getLastSeen() < todayInMillisWithOffset) {
+      device.setLastSeen(Util.todayInMillis(clock));
       accountsManager.update(account);
     }
   }

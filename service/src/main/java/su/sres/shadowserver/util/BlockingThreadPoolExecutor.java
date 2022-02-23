@@ -5,33 +5,47 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.SharedMetricRegistries;
+import com.codahale.metrics.Timer;
+
+import static com.codahale.metrics.MetricRegistry.name;
+
 public class BlockingThreadPoolExecutor extends ThreadPoolExecutor {
 
-  private final Semaphore semaphore;
+    private final Semaphore semaphore;
+    private final Timer acquirePermitTimer;
 
-  public BlockingThreadPoolExecutor(int threads, int bound) {
-    super(threads, threads, 1, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>());
-    this.semaphore = new Semaphore(bound);
-  }
+    public BlockingThreadPoolExecutor(String name, int threads, int bound) {
+	super(threads, threads, 1, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>());
+	this.semaphore = new Semaphore(bound);
 
-  @Override
-  public void execute(Runnable task) {
-    semaphore.acquireUninterruptibly();
+	final MetricRegistry metricRegistry = SharedMetricRegistries.getOrCreate(Constants.METRICS_NAME);
 
-    try {
-      super.execute(task);
-    } catch (Throwable t) {
-      semaphore.release();
-      throw new RuntimeException(t);
+	this.acquirePermitTimer = metricRegistry.timer(name(getClass(), name, "acquirePermit"));
+	metricRegistry.gauge(name(getClass(), name, "permitsAvailable"), () -> semaphore::availablePermits);
     }
-  }
 
-  @Override
-  protected void afterExecute(Runnable r, Throwable t) {
-    semaphore.release();
-  }
+    @Override
+    public void execute(Runnable task) {
+	try (final Timer.Context ignored = acquirePermitTimer.time()) {
+	    semaphore.acquireUninterruptibly();
+	}
 
-  public int getSize() {
-    return ((LinkedBlockingQueue)getQueue()).size();
-  }
+	try {
+	    super.execute(task);
+	} catch (Throwable t) {
+	    semaphore.release();
+	    throw new RuntimeException(t);
+	}
+    }
+
+    @Override
+    protected void afterExecute(Runnable r, Throwable t) {
+	semaphore.release();
+    }
+
+    public int getSize() {
+	return ((LinkedBlockingQueue) getQueue()).size();
+    }
 }

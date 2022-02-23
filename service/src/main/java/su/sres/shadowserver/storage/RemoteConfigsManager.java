@@ -14,54 +14,69 @@ import io.dropwizard.lifecycle.Managed;
 
 public class RemoteConfigsManager implements Managed {
 
-  private final Logger logger = LoggerFactory.getLogger(RemoteConfigsManager.class);
+    private final Logger logger = LoggerFactory.getLogger(RemoteConfigsManager.class);
 
-  private final RemoteConfigs remoteConfigs;
-  private final long          sleepInterval;
+    private final RemoteConfigs remoteConfigs;
+    private final long sleepInterval;
 
-  private final AtomicReference<List<RemoteConfig>> cachedConfigs = new AtomicReference<>(new LinkedList<>());
+    private final AtomicReference<List<RemoteConfig>> cachedConfigs = new AtomicReference<>(new LinkedList<>());
 
-  public RemoteConfigsManager(RemoteConfigs remoteConfigs) {
-    this(remoteConfigs, TimeUnit.SECONDS.toMillis(10));
-  }
+    public RemoteConfigsManager(RemoteConfigs remoteConfigs) {
+	this(remoteConfigs, TimeUnit.SECONDS.toMillis(10));
+    }
 
-  @VisibleForTesting
-  public RemoteConfigsManager(RemoteConfigs remoteConfigs, long sleepInterval) {
-    this.remoteConfigs = remoteConfigs;
-    this.sleepInterval = sleepInterval;
-  }
+    @VisibleForTesting
+    public RemoteConfigsManager(RemoteConfigs remoteConfigs, long sleepInterval) {
+	this.remoteConfigs = remoteConfigs;
+	this.sleepInterval = sleepInterval;
+    }
 
-  @Override
-  public void start() {
-    this.cachedConfigs.set(remoteConfigs.getAll());
+    @Override
+    public void start() {
+	refreshCache();
 
-    new Thread(() -> {
-      while (true) {
-        try {
-          this.cachedConfigs.set(remoteConfigs.getAll());
-        } catch (Throwable t) {
-          logger.warn("Error updating remote configs cache", t);
-        }
+	new Thread(() -> {
+	    while (true) {
+		try {
+		    refreshCache();
+		} catch (Throwable t) {
+		    logger.warn("Error updating remote configs cache", t);
+		}
 
-        Util.sleep(sleepInterval);
-      }
-    }).start();
-  }
+		Util.sleep(sleepInterval);
+	    }
+	}).start();
+    }
 
-  public List<RemoteConfig> getAll() {
-    return cachedConfigs.get();
-  }
+    private void refreshCache() {
+	this.cachedConfigs.set(remoteConfigs.getAll());
 
-  public void set(RemoteConfig config) {
-    remoteConfigs.set(config);
-  }
+	synchronized (this.cachedConfigs) {
+	    this.cachedConfigs.notifyAll();
+	}
+    }
 
-  public void delete(String name) {
-    remoteConfigs.delete(name);
-  }
+    @VisibleForTesting
+    void waitForCacheRefresh() throws InterruptedException {
+	synchronized (this.cachedConfigs) {
+	    this.cachedConfigs.wait();
+	}
+    }
 
-  @Override
-  public void stop() throws Exception {
+    public List<RemoteConfig> getAll() {
+	return cachedConfigs.get();
+    }
 
-  }
+    public void set(RemoteConfig config) {
+	remoteConfigs.set(config);
+    }
+
+    public void delete(String name) {
+	remoteConfigs.delete(name);
+    }
+
+    @Override
+    public void stop() throws Exception {
+
+    }
 }

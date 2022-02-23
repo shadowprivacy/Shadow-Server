@@ -1,8 +1,10 @@
 package su.sres.shadowserver.websocket;
 
 import com.codahale.metrics.Histogram;
+import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.SharedMetricRegistries;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
 
@@ -13,14 +15,17 @@ import su.sres.shadowserver.entities.CryptoEncodingException;
 import su.sres.shadowserver.entities.EncryptedOutgoingMessage;
 import su.sres.shadowserver.entities.OutgoingMessageEntity;
 import su.sres.shadowserver.entities.OutgoingMessageEntityList;
+import su.sres.shadowserver.push.DisplacedPresenceListener;
 import su.sres.shadowserver.push.NotPushRegisteredException;
 import su.sres.shadowserver.push.PushSender;
 import su.sres.shadowserver.push.ReceiptSender;
 // import su.sres.shadowserver.push.TransientPushFailureException;
 import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.storage.Device;
+import su.sres.shadowserver.storage.MessageAvailabilityListener;
 import su.sres.shadowserver.storage.MessagesManager;
 import su.sres.shadowserver.util.Constants;
+import su.sres.shadowserver.util.TimestampHeaderUtil;
 import su.sres.shadowserver.util.Util;
 
 import org.slf4j.Logger;
@@ -31,197 +36,236 @@ import su.sres.websocket.messages.WebSocketResponseMessage;
 import javax.ws.rs.WebApplicationException;
 import java.util.Collections;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static com.codahale.metrics.MetricRegistry.name;
 import static su.sres.shadowserver.entities.MessageProtos.Envelope;
 import static su.sres.shadowserver.storage.PubSubProtos.PubSubMessage;
 
 @SuppressWarnings("OptionalUsedAsFieldOrParameterType")
-public class WebSocketConnection implements DispatchChannel {
+public class WebSocketConnection implements MessageAvailabilityListener, DisplacedPresenceListener {
 
-  private static final MetricRegistry metricRegistry = SharedMetricRegistries.getOrCreate(Constants.METRICS_NAME);
-  public  static final Histogram      messageTime    = metricRegistry.histogram(name(MessageController.class, "message_delivery_duration"));
+    private static final MetricRegistry metricRegistry = SharedMetricRegistries.getOrCreate(Constants.METRICS_NAME);
+    public static final Histogram messageTime = metricRegistry.histogram(name(MessageController.class, "message_delivery_duration"));
+    private static final Meter sendMessageMeter = metricRegistry.meter(name(WebSocketConnection.class, "send_message"));
+    private static final Meter messageAvailableMeter = metricRegistry.meter(name(WebSocketConnection.class, "messagesAvailable"));
+    private static final Meter ephemeralMessageAvailableMeter = metricRegistry.meter(name(WebSocketConnection.class, "ephemeralMessagesAvailable"));
+    private static final Meter messagesPersistedMeter = metricRegistry.meter(name(WebSocketConnection.class, "messagesPersisted"));
+    private static final Meter displacementMeter = metricRegistry.meter(name(WebSocketConnection.class, "explicitDisplacement"));
 
-  private static final Logger logger = LoggerFactory.getLogger(WebSocketConnection.class);
+    private static final Logger logger = LoggerFactory.getLogger(WebSocketConnection.class);
 
-  private final ReceiptSender    receiptSender;
-  private final PushSender       pushSender;
-  private final MessagesManager  messagesManager;
+    private final ReceiptSender receiptSender;
+    private final MessagesManager messagesManager;
 
-  private final Account          account;
-  private final Device           device;
-  private final WebSocketClient  client;
-  private final String           connectionId;
+    private final Account account;
+    private final Device device;
+    private final WebSocketClient client;
+    private final String connectionId;
 
-  public WebSocketConnection(PushSender pushSender,
-                             ReceiptSender receiptSender,
-                             MessagesManager messagesManager,
-                             Account account,
-                             Device device,
-                             WebSocketClient client,
-                             String connectionId)
-  {
-    this.pushSender      = pushSender;
-    this.receiptSender   = receiptSender;
-    this.messagesManager = messagesManager;
-    this.account         = account;
-    this.device          = device;
-    this.client          = client;
-    this.connectionId    = connectionId;
-  }
+    private final Semaphore processStoredMessagesSemaphore = new Semaphore(1);
+    private final AtomicReference<StoredMessageState> storedMessageState = new AtomicReference<>(StoredMessageState.PERSISTED_NEW_MESSAGES_AVAILABLE);
+    private final AtomicBoolean sentInitialQueueEmptyMessage = new AtomicBoolean(false);
 
-  @Override
-  public void onDispatchMessage(String channel, byte[] message) {
-    try {
-      PubSubMessage pubSubMessage = PubSubMessage.parseFrom(message);
-
-      switch (pubSubMessage.getType().getNumber()) {
-        case PubSubMessage.Type.QUERY_DB_VALUE:
-          processStoredMessages();
-          break;
-        case PubSubMessage.Type.DELIVER_VALUE:
-        	sendMessage(Envelope.parseFrom(pubSubMessage.getContent()), Optional.empty(), false);
-          break;
-        case PubSubMessage.Type.CONNECTED_VALUE:
-          if (pubSubMessage.hasContent() && !new String(pubSubMessage.getContent().toByteArray()).equals(connectionId)) {
-            client.hardDisconnectQuietly();
-          }
-          break;
-        default:
-          logger.warn("Unknown pubsub message: " + pubSubMessage.getType().getNumber());
-      }
-    } catch (InvalidProtocolBufferException e) {
-      logger.warn("Protobuf parse error", e);
+    private enum StoredMessageState {
+	EMPTY,
+	CACHED_NEW_MESSAGES_AVAILABLE,
+	PERSISTED_NEW_MESSAGES_AVAILABLE
     }
-  }
 
-  @Override
-  public void onDispatchUnsubscribed(String channel) {
-    client.close(1000, "OK");
-  }
-
-  public void onDispatchSubscribed(String channel) {
-    processStoredMessages();
-  }
-
-  private void sendMessage(final Envelope                    message,
-                           final Optional<StoredMessageInfo> storedMessageInfo,
-                           final boolean                     requery)
-  {
-    try {
-    	String           header;
-        Optional<byte[]> body;
-
-        if (Util.isEmpty(device.getSignalingKey())) {
-          header = "X-Signal-Key: false";
-          body   = Optional.ofNullable(message.toByteArray());
-        } else {
-          header = "X-Signal-Key: true";
-          body   = Optional.ofNullable(new EncryptedOutgoingMessage(message, device.getSignalingKey()).toByteArray());
-        }
-
-        client.sendRequest("PUT", "/api/v1/message", Collections.singletonList(header), body)
-        .thenAccept(response -> {
-          boolean isReceipt = message.getType() == Envelope.Type.RECEIPT;
-
-          if (isSuccessResponse(response) && !isReceipt) {
-            messageTime.update(System.currentTimeMillis() - message.getTimestamp());
-          }
-
-          if (isSuccessResponse(response)) {
-            if (storedMessageInfo.isPresent()) messagesManager.delete(account.getUserLogin(), device.getId(), storedMessageInfo.get().id, storedMessageInfo.get().cached);
-            if (!isReceipt)                    sendDeliveryReceiptFor(message);
-            if (requery)                       processStoredMessages();
-          } else if (!isSuccessResponse(response) && !storedMessageInfo.isPresent()) {
-            requeueMessage(message);
-          }
-        })
-        .exceptionally(throwable ->  {
-          if (!storedMessageInfo.isPresent()) requeueMessage(message);
-          return null;
-        });
-    } catch (CryptoEncodingException e) {
-      logger.warn("Bad signaling key", e);
+    public WebSocketConnection(ReceiptSender receiptSender,
+	    MessagesManager messagesManager,
+	    Account account,
+	    Device device,
+	    WebSocketClient client,
+	    String connectionId) {
+	this.receiptSender = receiptSender;
+	this.messagesManager = messagesManager;
+	this.account = account;
+	this.device = device;
+	this.client = client;
+	this.connectionId = connectionId;
     }
-  }
 
-  private void requeueMessage(Envelope message) {
-    pushSender.getWebSocketSender().queueMessage(account, device, message);
-
-    try {
-      pushSender.sendQueuedNotification(account, device);
-    } catch (NotPushRegisteredException e) {
-      logger.warn("requeueMessage", e);
+    public void start() {
+	processStoredMessages();
     }
-  }
 
-  private void sendDeliveryReceiptFor(Envelope message) {
-	  if (!message.hasSource()) return;
+    public void stop() {
+	client.close(1000, "OK");
+    }
 
-    try {
+    private CompletableFuture<WebSocketResponseMessage> sendMessage(final Envelope message, final Optional<StoredMessageInfo> storedMessageInfo) {
+	try {
+	    String header;
+	    Optional<byte[]> body;
+
+	    if (Util.isEmpty(device.getSignalingKey())) {
+		header = "X-Signal-Key: false";
+		body = Optional.ofNullable(message.toByteArray());
+	    } else {
+		header = "X-Signal-Key: true";
+		body = Optional.ofNullable(new EncryptedOutgoingMessage(message, device.getSignalingKey()).toByteArray());
+	    }
+
+	    sendMessageMeter.mark();
+
+	    return client.sendRequest("PUT", "/api/v1/message", List.of(header, TimestampHeaderUtil.getTimestampHeader()), body).whenComplete((response, throwable) -> {
+		if (throwable == null) {
+
+		    if (isSuccessResponse(response)) {
+			if (storedMessageInfo.isPresent()) {
+			    messagesManager.delete(account.getUserLogin(), account.getUuid(), device.getId(), storedMessageInfo.get().id, storedMessageInfo.get().cached);
+			}
+
+			if (message.getType() != Envelope.Type.RECEIPT) {
+			    messageTime.update(System.currentTimeMillis() - message.getTimestamp());
+			    sendDeliveryReceiptFor(message);
+			}
+		    }		    
+		}
+	    });
+
+	} catch (CryptoEncodingException e) {
+	    logger.warn("Bad signaling key", e);
+	    return CompletableFuture.failedFuture(e);
+	}
+    }
+
+    private void sendDeliveryReceiptFor(Envelope message) {
+	if (!message.hasSource())
+	    return;
+
+	try {
 
 // excluded federation (?), reserved for future use
 //      receiptSender.sendReceipt(account, message.getSource(), message.getTimestamp(),
 //                                message.hasRelay() ? Optional.of(message.getRelay()) :
 //                                                     Optional.absent());
-   	receiptSender.sendReceipt(account, message.getSource(), message.getTimestamp());
-    } catch (NoSuchUserException e) {
-      logger.info("No longer registered " + e.getMessage());
+	    receiptSender.sendReceipt(account, message.getSource(), message.getTimestamp());
+	} catch (NoSuchUserException e) {
+	    logger.info("No longer registered " + e.getMessage());
 //    } catch(IOException | TransientPushFailureException e) {
 //      logger.warn("Something wrong while sending receipt", e);
-    } catch (WebApplicationException e) {
-      logger.warn("Bad federated response for receipt: " + e.getResponse().getStatus());
-    }
-  }
-  
-  private boolean isSuccessResponse(WebSocketResponseMessage response) {
-	    return response != null && response.getStatus() >= 200 && response.getStatus() < 300;
-	  }
-
-  private void processStoredMessages() {
-    OutgoingMessageEntityList       messages = messagesManager.getMessagesForDevice(account.getUserLogin(), device.getId());
-    Iterator<OutgoingMessageEntity> iterator = messages.getMessages().iterator();
-
-    while (iterator.hasNext()) {
-      OutgoingMessageEntity message = iterator.next();
-      Envelope.Builder      builder = Envelope.newBuilder()
-                                              .setType(Envelope.Type.valueOf(message.getType()))
-                                              .setTimestamp(message.getTimestamp())
-                                              .setServerTimestamp(message.getServerTimestamp());
-
-      if (!Util.isEmpty(message.getSource())) {
-        builder.setSource(message.getSource())
-               .setSourceDevice(message.getSourceDevice());
-      }
-
-      if (message.getMessage() != null) {
-        builder.setLegacyMessage(ByteString.copyFrom(message.getMessage()));
-      }
-
-      if (message.getContent() != null) {
-        builder.setContent(ByteString.copyFrom(message.getContent()));
-      }
-
-      if (message.getRelay() != null && !message.getRelay().isEmpty()) {
-        builder.setRelay(message.getRelay());
-      }
-
-      sendMessage(builder.build(), Optional.of(new StoredMessageInfo(message.getId(), message.isCached())), !iterator.hasNext() && messages.hasMore());
+	} catch (WebApplicationException e) {
+	    logger.warn("Bad federated response for receipt: " + e.getResponse().getStatus());
+	}
     }
 
-    if (!messages.hasMore()) {
-    	 client.sendRequest("PUT", "/api/v1/queue/empty", null, Optional.empty());
+    private boolean isSuccessResponse(WebSocketResponseMessage response) {
+	return response != null && response.getStatus() >= 200 && response.getStatus() < 300;
     }
-  }
 
-  private static class StoredMessageInfo {
-    private final long    id;
-    private final boolean cached;
+    @VisibleForTesting
+    void processStoredMessages() {
+	if (processStoredMessagesSemaphore.tryAcquire()) {
+	    final StoredMessageState state = storedMessageState.getAndSet(StoredMessageState.EMPTY);
+	    final CompletableFuture<Void> queueClearedFuture = new CompletableFuture<>();
 
-    private StoredMessageInfo(long id, boolean cached) {
-      this.id     = id;
-      this.cached = cached;
+	    sendNextMessagePage(state != StoredMessageState.PERSISTED_NEW_MESSAGES_AVAILABLE, queueClearedFuture);
+
+	    queueClearedFuture.whenComplete((v, cause) -> {
+		if (cause == null && sentInitialQueueEmptyMessage.compareAndSet(false, true)) {
+		    client.sendRequest("PUT", "/api/v1/queue/empty", Collections.singletonList(TimestampHeaderUtil.getTimestampHeader()), Optional.empty());
+		}
+
+		processStoredMessagesSemaphore.release();
+
+		if (cause == null && storedMessageState.get() != StoredMessageState.EMPTY) {
+		    processStoredMessages();
+		}
+	    });
+	}
     }
-  }
+
+    private void sendNextMessagePage(final boolean cachedMessagesOnly, final CompletableFuture<Void> queueClearedFuture) {
+	final OutgoingMessageEntityList messages = messagesManager.getMessagesForDevice(account.getUserLogin(), account.getUuid(), device.getId(), client.getUserAgent(), cachedMessagesOnly);
+	final CompletableFuture<?>[] sendFutures = new CompletableFuture[messages.getMessages().size()];
+
+	for (int i = 0; i < messages.getMessages().size(); i++) {
+	    final OutgoingMessageEntity message = messages.getMessages().get(i);
+	    final Envelope.Builder builder = Envelope.newBuilder()
+		    .setType(Envelope.Type.valueOf(message.getType()))
+		    .setTimestamp(message.getTimestamp())
+		    .setServerTimestamp(message.getServerTimestamp());
+
+	    if (!Util.isEmpty(message.getSource())) {
+		builder.setSource(message.getSource())
+			.setSourceDevice(message.getSourceDevice());
+	    }
+
+	    if (message.getMessage() != null) {
+		builder.setLegacyMessage(ByteString.copyFrom(message.getMessage()));
+	    }
+
+	    if (message.getContent() != null) {
+		builder.setContent(ByteString.copyFrom(message.getContent()));
+	    }
+
+	    if (message.getRelay() != null && !message.getRelay().isEmpty()) {
+		builder.setRelay(message.getRelay());
+	    }
+
+	    sendFutures[i] = sendMessage(builder.build(), Optional.of(new StoredMessageInfo(message.getId(), message.isCached())));
+	}
+
+	CompletableFuture.allOf(sendFutures).whenComplete((v, cause) -> {
+	    if (cause == null) {
+		if (messages.hasMore()) {
+		    sendNextMessagePage(cachedMessagesOnly, queueClearedFuture);
+		} else {
+		    queueClearedFuture.complete(null);
+		}
+	    } else {
+		queueClearedFuture.completeExceptionally(cause);
+	    }
+	});
+    }
+
+    @Override
+    public void handleNewMessagesAvailable() {
+	messageAvailableMeter.mark();
+
+	storedMessageState.compareAndSet(StoredMessageState.EMPTY, StoredMessageState.CACHED_NEW_MESSAGES_AVAILABLE);
+	processStoredMessages();
+    }
+
+    @Override
+    public void handleNewEphemeralMessageAvailable() {
+	ephemeralMessageAvailableMeter.mark();
+
+	messagesManager.takeEphemeralMessage(account.getUuid(), device.getId())
+		.ifPresent(message -> sendMessage(message, Optional.empty()));
+    }
+
+    @Override
+    public void handleMessagesPersisted() {
+	messagesPersistedMeter.mark();
+
+	storedMessageState.set(StoredMessageState.PERSISTED_NEW_MESSAGES_AVAILABLE);
+
+	processStoredMessages();
+    }
+
+    @Override
+    public void handleDisplacement() {
+	displacementMeter.mark();
+	client.hardDisconnectQuietly();
+    }
+
+    private static class StoredMessageInfo {
+	private final long id;
+	private final boolean cached;
+
+	private StoredMessageInfo(long id, boolean cached) {
+	    this.id = id;
+	    this.cached = cached;
+	}
+    }
 }

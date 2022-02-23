@@ -13,54 +13,62 @@ import javax.validation.constraints.Pattern;
 
 public class RemoteConfig {
 
-	@JsonProperty
-	@Pattern(regexp = "[A-Za-z0-9\\.]+")
-	private String name;
+    @JsonProperty
+    @Pattern(regexp = "[A-Za-z0-9\\.]+")
+    private String name;
 
-	@JsonProperty
-	@NotNull
-	@Min(0)
-	@Max(100)
-	private int percentage;
+    @JsonProperty
+    @NotNull
+    @Min(0)
+    @Max(100)
+    private int percentage;
 
-	@JsonProperty
-	@NotNull
-	private Set<UUID> uuids = new HashSet<>();
+    @JsonProperty
+    @NotNull
+    private Set<UUID> uuids = new HashSet<>();
 
-	@JsonProperty
-	private String defaultValue;
+    @JsonProperty
+    private String defaultValue;
 
-	@JsonProperty
-	private String value;
+    @JsonProperty
+    private String value;
 
-	public RemoteConfig() {
-	}
+    @JsonProperty
+    private String hashKey;
 
-	public RemoteConfig(String name, int percentage, Set<UUID> uuids, String defaultValue, String value) {
-		this.name = name;
-		this.percentage = percentage;
-		this.uuids = uuids;
-		this.defaultValue = defaultValue;
-		this.value = value;
-	}
+    public RemoteConfig() {
+    }
 
-	public int getPercentage() {
-		return percentage;
-	}
+    public RemoteConfig(String name, int percentage, Set<UUID> uuids, String defaultValue, String value, String hashKey) {
+	this.name = name;
+	this.percentage = percentage;
+	this.uuids = uuids;
+	this.defaultValue = defaultValue;
+	this.value = value;
+	this.hashKey = hashKey;
+    }
 
-	public String getName() {
-		return name;
-	}
+    public int getPercentage() {
+	return percentage;
+    }
 
-	public Set<UUID> getUuids() {
-		return uuids;
-	}
+    public String getName() {
+	return name;
+    }
 
-	public String getDefaultValue() {
-		return defaultValue;
-	}
+    public Set<UUID> getUuids() {
+	return uuids;
+    }
 
-	public String getValue() {
-		return value;
-	}
+    public String getDefaultValue() {
+	return defaultValue;
+    }
+
+    public String getValue() {
+	return value;
+    }
+
+    public String getHashKey() {
+	return hashKey;
+    }
 }

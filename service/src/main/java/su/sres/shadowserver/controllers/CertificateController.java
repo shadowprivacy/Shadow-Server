@@ -31,57 +31,68 @@ import io.dropwizard.auth.Auth;
 @Path("/v1/certificate")
 public class CertificateController {
 
-  private final Logger logger = LoggerFactory.getLogger(CertificateController.class);
+    private final Logger logger = LoggerFactory.getLogger(CertificateController.class);
 
-  private final CertificateGenerator   certificateGenerator;
-  private final ServerZkAuthOperations serverZkAuthOperations;
-  private final boolean                isZkEnabled;
+    private final CertificateGenerator certificateGenerator;
+    private final ServerZkAuthOperations serverZkAuthOperations;
+    private final boolean isZkEnabled;
 
-  public CertificateController(CertificateGenerator certificateGenerator, ServerZkAuthOperations serverZkAuthOperations, boolean isZkEnabled) {
-	    this.certificateGenerator   = certificateGenerator;
-	    this.serverZkAuthOperations = serverZkAuthOperations;
-	    this.isZkEnabled            = isZkEnabled;
-  }
-
-  @Timed
-  @GET
-  @Produces(MediaType.APPLICATION_JSON)
-  @Path("/delivery")
-  public DeliveryCertificate getDeliveryCertificate(@Auth Account account,
-          @QueryParam("includeUuid") Optional<Boolean> includeUuid)
-throws IOException, InvalidKeyException
-{
-    if (!account.getAuthenticatedDevice().isPresent()) throw new AssertionError();
-
-    if (Util.isEmpty(account.getIdentityKey())) {      
-      throw new WebApplicationException(Response.Status.BAD_REQUEST);
+    public CertificateController(CertificateGenerator certificateGenerator, ServerZkAuthOperations serverZkAuthOperations, boolean isZkEnabled) {
+	this.certificateGenerator = certificateGenerator;
+	this.serverZkAuthOperations = serverZkAuthOperations;
+	this.isZkEnabled = isZkEnabled;
     }
 
-    return new DeliveryCertificate(certificateGenerator.createFor(account, account.getAuthenticatedDevice().get(), includeUuid.orElse(false)));
-  }
-  
-  @Timed
-  @GET
-  @Produces(MediaType.APPLICATION_JSON)
-  @Path("/group/{startRedemptionTime}/{endRedemptionTime}")
-  public GroupCredentials getAuthenticationCredentials(@Auth Account account,
-                                                       @PathParam("startRedemptionTime") int startRedemptionTime,
-                                                       @PathParam("endRedemptionTime") int endRedemptionTime)
-  {
-	if (!isZkEnabled)                                         throw new WebApplicationException(Response.Status.NOT_FOUND);
-	if (startRedemptionTime > endRedemptionTime)              throw new WebApplicationException(Response.Status.BAD_REQUEST);
-    if (endRedemptionTime > Util.currentDaysSinceEpoch() + 7) throw new WebApplicationException(Response.Status.BAD_REQUEST);
-    if (startRedemptionTime < Util.currentDaysSinceEpoch())   throw new WebApplicationException(Response.Status.BAD_REQUEST);
+    @Timed
+    @GET
+    @Produces(MediaType.APPLICATION_JSON)
+    @Path("/delivery")
+    public DeliveryCertificate getDeliveryCertificate(@Auth Account account,
+	    @QueryParam("includeUserLogin") Optional<Boolean> includeUserLogin,
+	    @QueryParam("includeUuid") Optional<Boolean> includeUuid)
+	    throws IOException, InvalidKeyException {
+	if (!account.getAuthenticatedDevice().isPresent())
+	    throw new AssertionError();
 
-    List<GroupCredentials.GroupCredential> credentials = new LinkedList<>();
+	if (Util.isEmpty(account.getIdentityKey())) {
+	    throw new WebApplicationException(Response.Status.BAD_REQUEST);
+	}
 
-    for (int i=startRedemptionTime;i<=endRedemptionTime;i++) {
-      credentials.add(new GroupCredentials.GroupCredential(serverZkAuthOperations.issueAuthCredential(account.getUuid(), i)
-                                                                                 .serialize(),
-                                                           i));
+	final boolean effectiveIncludeUserLogin = includeUserLogin.orElse(true);
+	final boolean effectiveIncludeUuid = includeUuid.orElse(false);
+
+	if (!effectiveIncludeUserLogin && !effectiveIncludeUuid) {
+	    throw new WebApplicationException(Response.Status.BAD_REQUEST);
+	}
+
+	return new DeliveryCertificate(certificateGenerator.createFor(account, account.getAuthenticatedDevice().get(), effectiveIncludeUserLogin, effectiveIncludeUuid));
     }
 
-    return new GroupCredentials(credentials);
-  }
+    @Timed
+    @GET
+    @Produces(MediaType.APPLICATION_JSON)
+    @Path("/group/{startRedemptionTime}/{endRedemptionTime}")
+    public GroupCredentials getAuthenticationCredentials(@Auth Account account,
+	    @PathParam("startRedemptionTime") int startRedemptionTime,
+	    @PathParam("endRedemptionTime") int endRedemptionTime) {
+	if (!isZkEnabled)
+	    throw new WebApplicationException(Response.Status.NOT_FOUND);
+	if (startRedemptionTime > endRedemptionTime)
+	    throw new WebApplicationException(Response.Status.BAD_REQUEST);
+	if (endRedemptionTime > Util.currentDaysSinceEpoch() + 7)
+	    throw new WebApplicationException(Response.Status.BAD_REQUEST);
+	if (startRedemptionTime < Util.currentDaysSinceEpoch())
+	    throw new WebApplicationException(Response.Status.BAD_REQUEST);
+
+	List<GroupCredentials.GroupCredential> credentials = new LinkedList<>();
+
+	for (int i = startRedemptionTime; i <= endRedemptionTime; i++) {
+	    credentials.add(new GroupCredentials.GroupCredential(serverZkAuthOperations.issueAuthCredential(account.getUuid(), i)
+		    .serialize(),
+		    i));
+	}
+
+	return new GroupCredentials(credentials);
+    }
 
 }

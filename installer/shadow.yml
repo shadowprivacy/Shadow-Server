@@ -24,21 +24,26 @@ accountDatabaseCrawler:       # account database crawler configuration
   chunkSize: 1000
   chunkIntervalMs:                                                      # can be left empty
 
+metricsCluster:               # Redis server configuration for metrics cluster 
+  urls:
+    - redis://localhost:6379/
+
+
+cacheCluster:                 # Redis server configuration for cache cluster
+  urls:
+    - redis://localhost:6379/
+
 directory:                    # Redis server configuration for directory
   url: "redis://localhost:6379"
   replicaUrls:
               - "redis://localhost:6379"                                # dummy (or actual) replication URL(s)
 
-cache:                        # Redis server configuration for general purpose caching
-  url: "redis://localhost:6379"
-  replicaUrls:
-              - "redis://localhost:6379"                                # dummy (or actual) replication URL(s)
-
 messageCache:                 # Redis server configuration for message store cache
-  redis:
-     url: "redis://localhost:6379"
-     replicaUrls:
-              - "redis://localhost:6379"                                # dummy (or actual) replication URL(s) 
+    persistDelayMinutes:                                                # persistence delay in minutes
+
+    cluster:
+      urls:
+        - redis://localhost:6379/                                       # replication URL(s) 
 
 pushScheduler:                # Redis server configuration for push scheduler
      url: "redis://localhost:6379/3"
@@ -107,6 +112,12 @@ turn:                         # NAT-T server parameters
 
 gcm:  
   apiKey: GoogleFCMKey                                                  # the server key of your Firebase project     
+
+micrometer:                                                             # Micrometer metrics config
+  - name: "example"
+  - uri: "https://metrics.example.com/"
+  - apiKey:
+  - accountId:
   
 apn:                          # this is not used currently 
   sandbox: true 
@@ -133,8 +144,16 @@ zkConfig:
    enabled: true                                                        # whether the functionality is enabled
 
 remoteConfig:
-   authorizedTokens:
-      -                                                                 # leave the list empty               
+  authorizedTokens:
+    - # leave the list empty    
+  globalConfig: # keys and values that are given to clients on GET /v1/config 
+  
+featureFlag:
+  authorizedTokens:
+    - # 1st authorized token
+    - # 2nd authorized token
+    - # ...
+    - # Nth authorized token              
 
 storageService:
   userAuthenticationTokenSharedSecret: 6730674e1bd4f3a9cfdb2645159230b1 # fake/unused

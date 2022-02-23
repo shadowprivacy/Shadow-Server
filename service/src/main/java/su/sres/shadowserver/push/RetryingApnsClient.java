@@ -10,122 +10,113 @@ import com.eatthepath.pushy.apns.ApnsClient;
 import com.eatthepath.pushy.apns.ApnsClientBuilder;
 import com.eatthepath.pushy.apns.DeliveryPriority;
 import com.eatthepath.pushy.apns.PushNotificationResponse;
+import com.eatthepath.pushy.apns.PushType;
 import com.eatthepath.pushy.apns.auth.ApnsSigningKey;
 import com.eatthepath.pushy.apns.metrics.dropwizard.DropwizardApnsClientMetricsListener;
 import com.eatthepath.pushy.apns.util.SimpleApnsPushNotification;
 
-import org.bouncycastle.openssl.PEMReader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.security.InvalidKeyException;
-import java.security.KeyPair;
 import java.security.NoSuchAlgorithmException;
-import java.security.PrivateKey;
-import java.security.cert.X509Certificate;
-import java.util.Date;
+import java.time.Instant;
 import java.util.Map;
-import java.util.concurrent.ExecutionException;
+import java.util.function.BiConsumer;
 
 import static com.codahale.metrics.MetricRegistry.name;
-import io.netty.util.concurrent.GenericFutureListener;
 import su.sres.shadowserver.util.Constants;
 
 public class RetryingApnsClient {
 
-  private static final Logger logger = LoggerFactory.getLogger(RetryingApnsClient.class);
+    private static final Logger logger = LoggerFactory.getLogger(RetryingApnsClient.class);
 
-  private final ApnsClient apnsClient;
+    private final ApnsClient apnsClient;
 
-  RetryingApnsClient(String apnSigningKey, String teamId, String keyId, boolean sandbox)
-	      throws IOException, InvalidKeyException, NoSuchAlgorithmException
-  {
-    MetricRegistry                      metricRegistry  = SharedMetricRegistries.getOrCreate(Constants.METRICS_NAME);
-    DropwizardApnsClientMetricsListener metricsListener = new DropwizardApnsClientMetricsListener();
+    RetryingApnsClient(String apnSigningKey, String teamId, String keyId, boolean sandbox)
+	    throws IOException, InvalidKeyException, NoSuchAlgorithmException {
+	MetricRegistry metricRegistry = SharedMetricRegistries.getOrCreate(Constants.METRICS_NAME);
+	DropwizardApnsClientMetricsListener metricsListener = new DropwizardApnsClientMetricsListener();
 
-    for (Map.Entry<String, Metric> entry : metricsListener.getMetrics().entrySet()) {
-      metricRegistry.register(name(getClass(), entry.getKey()), entry.getValue());
+	for (Map.Entry<String, Metric> entry : metricsListener.getMetrics().entrySet()) {
+	    metricRegistry.register(name(getClass(), entry.getKey()), entry.getValue());
+	}
+
+	this.apnsClient = new ApnsClientBuilder().setSigningKey(ApnsSigningKey.loadFromInputStream(new ByteArrayInputStream(apnSigningKey.getBytes()), teamId, keyId))
+		.setMetricsListener(metricsListener)
+		.setApnsServer(sandbox ? ApnsClientBuilder.DEVELOPMENT_APNS_HOST : ApnsClientBuilder.PRODUCTION_APNS_HOST)
+		.build();
     }
 
-    this.apnsClient = new ApnsClientBuilder().setSigningKey(ApnsSigningKey.loadFromInputStream(new ByteArrayInputStream(apnSigningKey.getBytes()), teamId, keyId))
-                                             .setMetricsListener(metricsListener)
-                                             .setApnsServer(sandbox ? ApnsClientBuilder.DEVELOPMENT_APNS_HOST : ApnsClientBuilder.PRODUCTION_APNS_HOST)
-                                             .build();    
-  }
-
-  @VisibleForTesting
-  public RetryingApnsClient(ApnsClient apnsClient) {
-	    this.apnsClient = apnsClient;
-  }
-
-  ListenableFuture<ApnResult> send(final String apnId, final String topic, final String payload, final Date expiration) {
-	  SettableFuture<ApnResult>  result       = SettableFuture.create();
-	    SimpleApnsPushNotification notification = new SimpleApnsPushNotification(apnId, topic, payload, expiration, DeliveryPriority.IMMEDIATE);
-        
-	    apnsClient.sendNotification(notification).addListener(new ResponseHandler(result));
-
-	    return result;
-  }
-
-  void disconnect() {
-	  apnsClient.close();
-  }  
-
-  private static final class ResponseHandler implements GenericFutureListener<io.netty.util.concurrent.Future<PushNotificationResponse<SimpleApnsPushNotification>>> {
-   
-    private final SettableFuture<ApnResult> future;
-
-    private ResponseHandler(SettableFuture<ApnResult> future) {
-      this.future = future;
+    @VisibleForTesting
+    public RetryingApnsClient(ApnsClient apnsClient) {
+	this.apnsClient = apnsClient;
     }
 
-    @Override
-    public void operationComplete(io.netty.util.concurrent.Future<PushNotificationResponse<SimpleApnsPushNotification>> result) {
-      try {
-        PushNotificationResponse<SimpleApnsPushNotification> response = result.get();
+    ListenableFuture<ApnResult> send(final String apnId, final String topic, final String payload, final Instant expiration, final boolean isVoip) {
+	SettableFuture<ApnResult> result = SettableFuture.create();
+	SimpleApnsPushNotification notification = new SimpleApnsPushNotification(apnId, topic, payload, expiration, DeliveryPriority.IMMEDIATE, isVoip ? PushType.VOIP : PushType.ALERT);
 
-        if (response.isAccepted()) {
-          future.set(new ApnResult(ApnResult.Status.SUCCESS, null));
-        } else if ("Unregistered".equals(response.getRejectionReason()) ||
-                "BadDeviceToken".equals(response.getRejectionReason()))
-     {
-          future.set(new ApnResult(ApnResult.Status.NO_SUCH_USER, response.getRejectionReason()));
-        } else {
-          logger.warn("Got APN failure: " + response.getRejectionReason());
-          future.set(new ApnResult(ApnResult.Status.GENERIC_FAILURE, response.getRejectionReason()));
-        }
+	apnsClient.sendNotification(notification).whenComplete(new ResponseHandler(result));
 
-      } catch (InterruptedException e) {
-        future.setException(e);
-      } catch (ExecutionException e) {
-    	  future.setException(e.getCause());
-      }
-    }    
-  }
-
-  public static class ApnResult {
-    public enum Status {
-      SUCCESS, NO_SUCH_USER, GENERIC_FAILURE
+	return result;
     }
 
-    private final Status status;
-    private final String reason;
-
-    ApnResult(Status status, String reason) {
-      this.status = status;
-      this.reason = reason;
+    void disconnect() {
+	apnsClient.close();
     }
 
-    public Status getStatus() {
-      return status;
+    private static final class ResponseHandler implements BiConsumer<PushNotificationResponse<SimpleApnsPushNotification>, Throwable> {
+
+	private final SettableFuture<ApnResult> future;
+
+	private ResponseHandler(SettableFuture<ApnResult> future) {
+	    this.future = future;
+	}
+
+	@Override
+	public void accept(final PushNotificationResponse<SimpleApnsPushNotification> response, final Throwable cause) {
+	    if (response != null) {
+
+		if (response.isAccepted()) {
+		    future.set(new ApnResult(ApnResult.Status.SUCCESS, null));
+		} else if ("Unregistered".equals(response.getRejectionReason()) ||
+			"BadDeviceToken".equals(response.getRejectionReason())) {
+		    future.set(new ApnResult(ApnResult.Status.NO_SUCH_USER, response.getRejectionReason()));
+		} else {
+		    logger.warn("Got APN failure: " + response.getRejectionReason());
+		    future.set(new ApnResult(ApnResult.Status.GENERIC_FAILURE, response.getRejectionReason()));
+		}
+
+	    } else {
+		logger.warn("Execution exception", cause);
+		future.setException(cause);
+	    }
+	}
     }
 
-    public String getReason() {
-      return reason;
+    public static class ApnResult {
+	public enum Status {
+	    SUCCESS, NO_SUCH_USER, GENERIC_FAILURE
+	}
+
+	private final Status status;
+	private final String reason;
+
+	ApnResult(Status status, String reason) {
+	    this.status = status;
+	    this.reason = reason;
+	}
+
+	public Status getStatus() {
+	    return status;
+	}
+
+	public String getReason() {
+	    return reason;
+	}
     }
-  }
 
 }

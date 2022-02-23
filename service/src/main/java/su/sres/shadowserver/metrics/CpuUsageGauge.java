@@ -1,16 +1,23 @@
 package su.sres.shadowserver.metrics;
 
+import com.codahale.metrics.CachedGauge;
 import com.codahale.metrics.Gauge;
 import com.sun.management.OperatingSystemMXBean;
 
 import java.lang.management.ManagementFactory;
+import java.util.concurrent.TimeUnit;
 
-public class CpuUsageGauge implements Gauge<Integer> {
-  @Override
-  public Integer getValue() {
-    OperatingSystemMXBean mbean = (com.sun.management.OperatingSystemMXBean)
-        ManagementFactory.getOperatingSystemMXBean();
+public class CpuUsageGauge extends CachedGauge<Integer> {
 
-    return (int) Math.ceil(mbean.getSystemCpuLoad() * 100);
-  }
+    private final OperatingSystemMXBean operatingSystemMXBean;
+
+    public CpuUsageGauge(final long timeout, final TimeUnit timeoutUnit) {
+	    super(timeout, timeoutUnit);
+	this.operatingSystemMXBean = (com.sun.management.OperatingSystemMXBean) ManagementFactory.getOperatingSystemMXBean();
+    }
+
+    @Override
+    protected Integer loadValue() {
+	return (int) Math.ceil(operatingSystemMXBean.getSystemCpuLoad() * 100);
+    }
 }

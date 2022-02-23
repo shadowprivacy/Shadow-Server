@@ -29,92 +29,102 @@ import su.sres.shadowserver.storage.PaymentAddress;
 
 public class AccountAttributes {
 
-  @JsonProperty
-  private String signalingKey;
+    @JsonProperty
+    private String signalingKey;
 
-  @JsonProperty
-  private boolean fetchesMessages;
+    @JsonProperty
+    private boolean fetchesMessages;
 
-  @JsonProperty
-  private int registrationId;
+    @JsonProperty
+    private int registrationId;
 
-  @JsonProperty
-  @Length(max = 204, message = "This field must be less than 50 characters")
-  private String name;
+    @JsonProperty
+    @Length(max = 204, message = "This field must be less than 50 characters")
+    private String name;
 
-  @JsonProperty
-  private String pin;
+    @JsonProperty
+    private String pin;
 
-  @JsonProperty
-  private String registrationLock;
-  
-  @JsonProperty
-  private byte[] unidentifiedAccessKey;
+    @JsonProperty
+    private String registrationLock;
 
-  @JsonProperty
-  private boolean unrestrictedUnidentifiedAccess;
-  
-  @JsonProperty
-  private List<PaymentAddress> payments;
-  
-  @JsonProperty
-  private DeviceCapabilities capabilities;
+    @JsonProperty
+    private byte[] unidentifiedAccessKey;
 
-  public AccountAttributes() {}
+    @JsonProperty
+    private boolean unrestrictedUnidentifiedAccess;
 
-  @VisibleForTesting
-  public AccountAttributes(String signalingKey, boolean fetchesMessages, int registrationId, String pin) {
-	  this(signalingKey, fetchesMessages, registrationId, null, pin, null, null);
-  }
+    @JsonProperty
+    private List<PaymentAddress> payments;
 
-  @VisibleForTesting
-  public AccountAttributes(String signalingKey, boolean fetchesMessages, int registrationId, String name, String pin, String registrationLock, List<PaymentAddress> payments) {
-	    this.signalingKey     = signalingKey;
-	    this.fetchesMessages  = fetchesMessages;
-	    this.registrationId   = registrationId;
-	    this.name             = name;
-	    this.pin              = pin;
-	    this.registrationLock = registrationLock;
-	    this.payments         = payments;
-  }
+    @JsonProperty
+    private DeviceCapabilities capabilities;
 
-  public String getSignalingKey() {
-    return signalingKey;
-  }
+    @JsonProperty
+    private boolean discoverableByUserLogin = true;
 
-  public boolean getFetchesMessages() {
-    return fetchesMessages;
-  }
+    public AccountAttributes() {
+    }
 
-  public int getRegistrationId() {
-    return registrationId;
-  }
+    @VisibleForTesting
+    public AccountAttributes(String signalingKey, boolean fetchesMessages, int registrationId, String pin) {
+	this(signalingKey, fetchesMessages, registrationId, null, pin, null, null, true, null);
+    }
 
-  public String getName() {
-    return name;
-  }
-  
-  public String getPin() {
-    return pin;
-  }
-  
-  public String getRegistrationLock() {
-	    return registrationLock;
-	  }  
+    @VisibleForTesting
+    public AccountAttributes(String signalingKey, boolean fetchesMessages, int registrationId, String name, String pin, String registrationLock, List<PaymentAddress> payments, boolean discoverableByUserLogin, final DeviceCapabilities capabilities) {
+	this.signalingKey = signalingKey;
+	this.fetchesMessages = fetchesMessages;
+	this.registrationId = registrationId;
+	this.name = name;
+	this.pin = pin;
+	this.registrationLock = registrationLock;
+	this.payments = payments;
+	this.discoverableByUserLogin = discoverableByUserLogin;
+	this.capabilities = capabilities;
+    }
 
-  public byte[] getUnidentifiedAccessKey() {
-    return unidentifiedAccessKey;
-  }
+    public String getSignalingKey() {
+	return signalingKey;
+    }
 
-  public boolean isUnrestrictedUnidentifiedAccess() {
-    return unrestrictedUnidentifiedAccess;
-  }  
+    public boolean getFetchesMessages() {
+	return fetchesMessages;
+    }
 
-  public DeviceCapabilities getCapabilities() {
-    return capabilities;
-  }
-  
-  public List<PaymentAddress> getPayments() {
-	    return payments;
-	  }
+    public int getRegistrationId() {
+	return registrationId;
+    }
+
+    public String getName() {
+	return name;
+    }
+
+    public String getPin() {
+	return pin;
+    }
+
+    public String getRegistrationLock() {
+	return registrationLock;
+    }
+
+    public byte[] getUnidentifiedAccessKey() {
+	return unidentifiedAccessKey;
+    }
+
+    public boolean isUnrestrictedUnidentifiedAccess() {
+	return unrestrictedUnidentifiedAccess;
+    }
+
+    public DeviceCapabilities getCapabilities() {
+	return capabilities;
+    }
+
+    public List<PaymentAddress> getPayments() {
+	return payments;
+    }
+
+    public boolean isDiscoverableByUserLogin() {
+	return discoverableByUserLogin;
+    }
 }

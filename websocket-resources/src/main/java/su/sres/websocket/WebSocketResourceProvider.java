@@ -36,6 +36,7 @@ import su.sres.websocket.session.ContextPrincipal;
 import su.sres.websocket.session.WebSocketSessionContext;
 import su.sres.websocket.setup.WebSocketConnectListener;
 
+import javax.ws.rs.core.MultivaluedMap;
 import javax.ws.rs.core.Response;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -70,6 +71,7 @@ public class WebSocketResourceProvider<T extends Principal> implements WebSocket
   private Session                 session;
   private RemoteEndpoint          remoteEndpoint;
   private WebSocketSessionContext context;
+  private String                  userAgent;
 
   public WebSocketResourceProvider(String                             remoteAddress,
                                    ApplicationHandler                 jerseyHandler,
@@ -91,6 +93,7 @@ public class WebSocketResourceProvider<T extends Principal> implements WebSocket
   @Override
   public void onWebSocketConnect(Session session) {
     this.session        = session;
+    this.userAgent      = session.getUpgradeRequest().getHeader("User-Agent");
     this.remoteEndpoint = session.getRemote();
     this.context        = new WebSocketSessionContext(new WebSocketClient(session, remoteEndpoint, messageFactory, requestMap));
     this.context.setAuthenticated(authenticated);
@@ -155,6 +158,12 @@ public class WebSocketResourceProvider<T extends Principal> implements WebSocket
 	    for (Map.Entry<String, String> entry : requestMessage.getHeaders().entrySet()) {
 	      containerRequest.header(entry.getKey(), entry.getValue());
 	    }
+	    
+	    final List<String> requestUserAgentHeader = containerRequest.getRequestHeader("User-Agent");
+
+	    if ((requestUserAgentHeader == null || requestUserAgentHeader.isEmpty()) && userAgent != null) {
+	      containerRequest.header("User-Agent", userAgent);
+	    }
 
 	    if (requestMessage.getBody().isPresent()) {
 	      containerRequest.setEntityStream(new ByteArrayInputStream(requestMessage.getBody().get()));
@@ -197,7 +206,7 @@ public class WebSocketResourceProvider<T extends Principal> implements WebSocket
 	      byte[] responseBytes = messageFactory.createResponse(requestMessage.getRequestId(),
 	                                                           response.getStatus(),
 	                                                           response.getStatusInfo().getReasonPhrase(),
-	                                                           new LinkedList<>(),
+	                                                           getHeaderList(response.getStringHeaders()),
 	                                                           Optional.ofNullable(body))
 	                                           .toByteArray();
 
@@ -206,17 +215,12 @@ public class WebSocketResourceProvider<T extends Principal> implements WebSocket
   }
 
   private void sendErrorResponse(WebSocketRequestMessage requestMessage, Response error) {
-    if (requestMessage.hasRequestId()) {
-      List<String> headers = new LinkedList<>();
-
-      for (String key : error.getStringHeaders().keySet()) {
-        headers.add(key + ":" + error.getStringHeaders().getFirst(key));
-      }
+    if (requestMessage.hasRequestId()) {      
 
       WebSocketMessage response = messageFactory.createResponse(requestMessage.getRequestId(),
                                                                 error.getStatus(),
                                                                 "Error response",
-                                                                headers,
+                                                                getHeaderList(error.getStringHeaders()),
                                                                 Optional.empty());
 
       remoteEndpoint.sendBytesByFuture(ByteBuffer.wrap(response.toByteArray()));
@@ -226,5 +230,18 @@ public class WebSocketResourceProvider<T extends Principal> implements WebSocket
   @VisibleForTesting
   WebSocketSessionContext getContext() {
     return context;
+  }
+  
+  @VisibleForTesting
+  static List<String> getHeaderList(final MultivaluedMap<String, String> headerMap) {
+    final List<String> headers = new LinkedList<>();
+
+    if (headerMap != null) {
+      for (String key : headerMap.keySet()) {
+        headers.add(key + ":" + headerMap.getFirst(key));
+      }
+    }
+
+    return headers;
   }
 }

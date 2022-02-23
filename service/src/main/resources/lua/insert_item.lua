@@ -1,7 +1,8 @@
 -- keys: queue_key [1], queue_metadata_key [2], queue_total_index [3]
--- argv: message [1], current_time [2], sender (possibly null) [3], guid [4]
+-- argv: message [1], current_time [2], sender (possibly null) [3], guid [4], messageId (possibly null) [5]
 
 local messageId = redis.call("HINCRBY", KEYS[2], "counter", 1)
+
 redis.call("ZADD", KEYS[1], "NX", messageId, ARGV[1])
 
 if ARGV[3] ~= "nil" then
