@@ -78,11 +78,14 @@ printf "\nEnter the shared secret for the TURN authorization (should match that 
     
 # Update config
     
-    sed -i "s/^#static-auth-secret=north/static-auth-secret=${TURN_AUTH_SECRET}/" /usr/local/etc/turnserver.conf
+    TURN_AUTH_SECRET_CONV=$(normalize_turn $(preproc_cfg $TURN_AUTH_SECRET))
+        
+    sed -i "s/^#static-auth-secret=north/static-auth-secret=${TURN_AUTH_SECRET_CONV}/" /usr/local/etc/turnserver.conf
     
     if test -f ${SERVER_PATH}/config/shadow.yml
-    then   
-       sed -i "s/secret: your_turn_secret/secret\: ${TURN_AUTH_SECRET}/" ${SERVER_PATH}/config/shadow.yml
+    then
+       TURN_AUTH_SECRET_CONV2=$(normalize_yaml $(preproc_cfg $TURN_AUTH_SECRET))        
+       sed -i "s/secret: your_turn_secret/secret\: '${TURN_AUTH_SECRET_CONV2}'/" ${SERVER_PATH}/config/shadow.yml
        sed -i "s/turn\:shadow.example.com/turn\:${SERVER_DOMAIN}/" ${SERVER_PATH}/config/shadow.yml
     fi
 
@@ -95,15 +98,17 @@ sed -i "s/^#pidfile=\"\/var\/run\/turnserver.pid\"/pidfile=\"\/var\/tmp\/coturn.
 read -p "Do you want to enable CLI access for Coturn [y/n]?" -n 1 -r
 if [[ $REPLY =~ ^[Yy]$ ]]
 then  
-    printf "\nEnter the CLI password >>"
+    printf "\nEnter the password to be used for CLI access >>"
     read -r CLI_PASSWORD
     
     if [ -z "$CLI_PASSWORD" ]
     then 
         error_quit "Entered password is empty"
-    fi
-        
-    sed -i "s/^#cli-password=qwerty/cli-password=${CLI_PASSWORD}/" /usr/local/etc/turnserver.conf
+    fi     
+    
+    CLI_PASSWORD_CONV=$(normalize_turn $(preproc_cfg $CLI_PASSWORD))
+    
+    sed -i "s/^#cli-password=qwerty/cli-password=${CLI_PASSWORD_CONV}/" /usr/local/etc/turnserver.conf
     
     echo "Installing telnet..."
     dnf -y install telnet  

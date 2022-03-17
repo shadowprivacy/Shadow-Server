@@ -57,13 +57,13 @@ if [ -z "$MINIO_SERVICE_PASSWORD" ]
 
 # Update config
 
-sed -i "s/accessSecret\: your_service_password/accessSecret\: ${MINIO_SERVICE_PASSWORD}/" ${SERVER_PATH}/config/shadow.yml
+MINIO_ADMIN_PASSWORD_CONV=$(normalize_bash $MINIO_ADMIN_PASSWORD)
+MINIO_SERVICE_PASSWORD_CONV=$(normalize_bash $MINIO_SERVICE_PASSWORD)
+MINIO_SERVICE_PASSWORD_CONV2=$(normalize_yaml $(preproc_cfg $MINIO_SERVICE_PASSWORD))
+sed -i "s/accessSecret\: your_service_password/accessSecret\: '${MINIO_SERVICE_PASSWORD_CONV2}'/" ${SERVER_PATH}/config/shadow.yml
 
-MINIO_ADMIN_LOGIN_CONV=$(sed 's/./\\&/g' <<< "$MINIO_ADMIN_LOGIN")
-MINIO_ADMIN_PASSWORD_CONV=$(sed 's/./\\&/g' <<< "$MINIO_ADMIN_PASSWORD")
-
-echo "export MINIO_ACCESS_KEY=$MINIO_ADMIN_LOGIN_CONV" >> ${USER_PATH}/.bashrc
-echo "export MINIO_SECRET_KEY=$MINIO_ADMIN_PASSWORD_CONV" >> ${USER_PATH}/.bashrc
+echo "export MINIO_ACCESS_KEY=$MINIO_ADMIN_LOGIN" >> ${USER_PATH}/.bashrc
+echo "export MINIO_SECRET_KEY=$(normalize_bash $MINIO_ADMIN_PASSWORD)" >> ${USER_PATH}/.bashrc
 echo "export MINIO_BROWSER=off" >> ${USER_PATH}/.bashrc
 
 echo "Copying credentials.."
@@ -109,7 +109,7 @@ systemctl start minio.service
 echo "Creating Minio config file..."
 
 sleep 5
-su -c "${MINIO_PATH}/mc alias set shadow https://localhost:9000 ${MINIO_ADMIN_LOGIN} ${MINIO_ADMIN_PASSWORD}" - ${USER_SH}
+su -c "${MINIO_PATH}/mc alias set shadow https://localhost:9000 ${MINIO_ADMIN_LOGIN} ${MINIO_ADMIN_PASSWORD_CONV}" - ${USER_SH}
 
 echo "Creating buckets..."
 
@@ -127,7 +127,7 @@ su -c "${MINIO_PATH}/mc policy set download shadow/debuglogs" - ${USER_SH}
 
 echo "Assigning the service user..."
 
-su -c "${MINIO_PATH}/mc admin user add shadow ${MINIO_SERVICE_LOGIN} ${MINIO_SERVICE_PASSWORD}" - ${USER_SH}
+su -c "${MINIO_PATH}/mc admin user add shadow ${MINIO_SERVICE_LOGIN} ${MINIO_SERVICE_PASSWORD_CONV}" - ${USER_SH}
 
 echo "Setting up the access policy..."
 
@@ -148,11 +148,5 @@ chown -R ${USER_SH} ${DATA_PATH}/stickers/
 if test -f ${SERVER_PATH}/config/shadow.yml
     then      
        sed -i "s|cloudUri\: https\://shadow.example.com|cloudUri\: https\://${SERVER_DOMAIN}|" ${SERVER_PATH}/config/shadow.yml
-    fi 
-
-
-
-
-
-
-
+    fi
+    

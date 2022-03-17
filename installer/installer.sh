@@ -35,6 +35,8 @@ check_root_and_exit
 
 SHADOW_SERVER_VERSION=1.13
 
+set +o history
+
 sed -i "s/SHADOW_VER/${SHADOW_SERVER_VERSION}/" shadow.service
 sed -i "s|/home/shadow/shadowserver|${SERVER_PATH}|" shadow.service
 sed -i "s/=shadow/=${USER_SH}/" shadow.service
@@ -132,11 +134,15 @@ read -r PSQL_PASSWORD
 if [ -z "$PSQL_PASSWORD" ]
 then 
     error_quit "Entered password is empty"
-fi 
+fi
+
+PSQL_PASSWORD_CONV=$(normalize_sql $PSQL_PASSWORD)
+echo "CREATE USER ${PSQL_USER} WITH PASSWORD '${PSQL_PASSWORD_CONV}';" > /var/lib/pgsql/sqltext
 
 # Create postgeSQL user
 # Error in case if ${PSQL_USER} already exists 
-su -c "psql -c \"CREATE USER ${PSQL_USER} WITH PASSWORD '${PSQL_PASSWORD}';\"" - postgres
+su -c "psql -f sqltext" - postgres
+rm -f /var/lib/pgsql/sqltext
 
 # Create PostgreSQL databases
 
@@ -202,7 +208,8 @@ fi
 
 # Update config
 
-sed -i "s/password\: your_postgres_user_password/password\: ${PSQL_PASSWORD}/" ${SERVER_PATH}/config/shadow.yml
+PSQL_PASSWORD_CONV2=$(normalize_yaml $(preproc_cfg $PSQL_PASSWORD))
+sed -i "s/password\: your_postgres_user_password/password\: '${PSQL_PASSWORD_CONV2}'/" ${SERVER_PATH}/config/shadow.yml
 sed -i "s|/home/shadow/shadowserver|${SERVER_PATH}|" ${SERVER_PATH}/config/shadow.yml
 
 printf "\n"
@@ -249,3 +256,5 @@ systemctl daemon-reload
 systemctl enable shadow
 
 printf "\nInstallation complete. Follow the Administration Manual to perform necessary post-installation tasks, then start the Shadow server: 'systemctl start shadow'.\n"
+
+set -o history
