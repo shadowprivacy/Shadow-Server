@@ -128,6 +128,8 @@ public class AccountController {
     private final LocalParametersConfiguration localParametersConfiguration;
     private final ServiceConfiguration serviceConfiguration;
 
+    private static final String serverLicenseFileName = "shadowserver.bin";
+
     public AccountController(PendingAccountsManager pendingAccounts, AccountsManager accounts,
 	    UsernamesManager usernames, AbusiveHostRules abusiveHostRules, RateLimiters rateLimiters,
 	    MessagesManager messagesManager, TurnTokenGenerator turnTokenGenerator, Map<String, Integer> testDevices,
@@ -392,6 +394,25 @@ public class AccountController {
 
 	    return Response.ok(is).header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
 		    .build();
+	} catch (FileNotFoundException e) {
+	    throw new WebApplicationException(Response.status(404).build());
+	}
+    }
+
+    @Timed
+    @GET
+    @Path("/serverlicense")
+    @Produces(MediaType.APPLICATION_OCTET_STREAM)
+    public Response getServerLicenseFile(@Auth Account account) throws RateLimitExceededException {
+
+	String login = account.getUserLogin();
+
+	rateLimiters.getLicenseLimiter().validate(login);
+
+	try {
+	    InputStream is = new FileInputStream(localParametersConfiguration.getLicensePath() + "/" + serverLicenseFileName);
+
+	    return Response.ok(is).header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + serverLicenseFileName + "\"").build();
 	} catch (FileNotFoundException e) {
 	    throw new WebApplicationException(Response.status(404).build());
 	}

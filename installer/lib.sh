@@ -21,13 +21,13 @@ function normalize_yaml
 
 {        
      INT=$(normalize_sql $1)
-     echo $(sed "s/\&/\\\&/" <<< "$INT")
+     echo $(sed "s/\&/\\\&/g" <<< "$INT")
 }
 
 function normalize_turn
 
 {      
-     echo $(sed "s/\&/\\\&/" <<< "$1")
+     echo $(sed "s/\&/\\\&/g" <<< "$1")
 }
 
 
