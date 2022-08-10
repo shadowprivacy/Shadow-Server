@@ -114,9 +114,7 @@ public class DirectoryManager {
 
 	public void setDirectoryVersion(long version) {
 		Jedis jedis = redisPool.getWriteResource();
-
 		jedis.set(DIRECTORY_VERSION, String.valueOf(version));
-
 		jedis.close();
 	}
 

@@ -251,7 +251,7 @@ public class AccountsManager {
 		keys.delete(account.getUserLogin());
 		messagesManager.clear(account.getUserLogin(), account.getUuid());
 		redisDelete(account);
-		databaseDelete(account);
+		databaseDelete(account, newDirectoryVersion);
 
 	    }
 
@@ -350,30 +350,40 @@ public class AccountsManager {
     private boolean databaseCreate(Account account, long directoryVersion) {
 	return accounts.create(account, directoryVersion);
     }
-
+    
     private void databaseUpdate(Account account, boolean isRemoval, long directoryVersion) {
 	if (!isRemoval) {
 	    accounts.update(account);
 
-	} else {
-	    accounts.update(account, isRemoval, directoryVersion);
 	}
+	
+	// else {
+	//    accounts.update(account, isRemoval, directoryVersion);
+	// }
     }
 
-    private void databaseDelete(final Account account) {
-	accounts.delete(account.getUuid());
+    private void databaseDelete(final Account account, long directoryVersion) {
+	accounts.delete(account.getUuid(), directoryVersion);
     }
 
     public long getDirectoryVersion() {
 	Jedis jedis = directory.accessDirectoryCache().getWriteResource();
 
 	String currentVersion = jedis.get(DIRECTORY_VERSION);
+			
 	jedis.close();
 
-	if (currentVersion == null || "nil".equals(currentVersion)) {
+	if (currentVersion == null || "nil".equals(currentVersion)) {	 
 
 	    try {
-		return accounts.restoreDirectoryVersion();
+		 
+		long tmp = accounts.restoreDirectoryVersion();		
+		
+		// restoring the recovered version to redis
+		directory.setDirectoryVersion(tmp);		
+		
+		return tmp;		
+				
 	    } catch (IllegalStateException e) {
 		logger.warn("IllegalStateException received from an SQL query for directory version, assuming 0.");
 		return 0;
@@ -410,6 +420,8 @@ public class AccountsManager {
 		    offset += accounts.size();
 
 		for (Account account : accounts) {
+		    
+		    // TODO: do we need this check now?
 		    if (account.isEnabled()) {
 
 			directory.redisUpdatePlainDirectory(batchOperation, account.getUserLogin(), mapper.writeValueAsString(new PlainDirectoryEntryValue(account.getUuid())));

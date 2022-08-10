@@ -336,5 +336,19 @@
             <column name="active" type="boolean"/>
         </createTable>
     </changeSet>
+    
+    <changeSet id="20" author="2A">
+        <createTable tableName="miscellaneous">
+            <column name="parameter" type="text">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+
+            <column name="parameter_value" type="bigint">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        
+        <sql>INSERT INTO miscellaneous (parameter, parameter_value) VALUES ('directory_version', 0);</sql>
+    </changeSet>
      
 </databaseChangeLog>
