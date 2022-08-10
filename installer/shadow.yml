@@ -26,12 +26,12 @@ accountDatabaseCrawler:       # account database crawler configuration
 
 metricsCluster:               # Redis server configuration for metrics cluster 
   urls:
-    - redis://localhost:6379/
+    - "redis://localhost:6379/"
 
 
 cacheCluster:                 # Redis server configuration for cache cluster
   urls:
-    - redis://localhost:6379/
+    - "redis://localhost:6379/"
 
 directory:                    # Redis server configuration for directory
   url: "redis://localhost:6379"
@@ -43,7 +43,7 @@ messageCache:                 # Redis server configuration for message store cac
 
     cluster:
       urls:
-        - redis://localhost:6379/                                       # replication URL(s) 
+        - "redis://localhost:6379/"                                       # replication URL(s) 
 
 pushScheduler:                # Redis server configuration for push scheduler
      url: "redis://localhost:6379/3"
@@ -113,11 +113,11 @@ turn:                         # NAT-T server parameters
 gcm:  
   apiKey: GoogleFCMKey                                                  # the server key of your Firebase project     
 
-micrometer:                                                             # Micrometer metrics config
-  - name: "example"
-  - uri: "https://metrics.example.com/"
-  - apiKey:
-  - accountId:
+micrometer:                                                             # Micrometer metrics config, not used currently
+# name: "example"
+  uri: "https://metrics.example.com/"                                 #fake/unused
+  apiKey: 12345                                                       #fake/unused
+# accountId:
   
 apn:                          # this is not used currently 
   sandbox: true 
@@ -146,11 +146,12 @@ zkConfig:
 remoteConfig:
   authorizedTokens:
     - # leave the list empty    
-  globalConfig: # keys and values that are given to clients on GET /v1/config 
+  globalConfig: # keys and values that are given to clients on GET /v1/config
+    {} # leave this empty 
   
 featureFlag:
   authorizedTokens:
-    - # 1st authorized token
+    - filler # 1st authorized token (fake/unused)
     - # 2nd authorized token
     - # ...
     - # Nth authorized token              
