@@ -44,8 +44,11 @@ import su.sres.shadowserver.storage.ProfilesManager;
 import su.sres.shadowserver.storage.ReservedUsernames;
 import su.sres.shadowserver.storage.Usernames;
 import su.sres.shadowserver.storage.UsernamesManager;
+import su.sres.shadowserver.util.Pair;
+import su.sres.shadowserver.util.ServerLicenseUtil;
 import su.sres.shadowserver.util.Util;
 import su.sres.shadowserver.util.VerificationCode;
+import su.sres.shadowserver.util.ServerLicenseUtil.LicenseStatus;
 
 public class CreatePendingAccountCommand extends EnvironmentCommand<WhisperServerConfiguration> {
 
@@ -73,11 +76,78 @@ public class CreatePendingAccountCommand extends EnvironmentCommand<WhisperServe
 	    throws Exception {
 	try {
 	    String[] users = namespace.getString("user").split(",");
+	    int amount = users.length;
 
 	    environment.getObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
 	    JdbiFactory jdbiFactory = new JdbiFactory();
 	    Jdbi accountJdbi = jdbiFactory.build(environment, configuration.getAccountsDatabaseConfiguration(), "accountdb");
+	    
+	    // start validation
+	    
+	    Pair<LicenseStatus, Pair<Integer, Integer>> validationResult = ServerLicenseUtil.validate(configuration, accountJdbi);
+
+		LicenseStatus status = validationResult.first();
+		Pair<Integer, Integer> quants = validationResult.second();
+		int volume = quants.first();
+				
+		if (volume == -1) {
+
+		    switch (status) {
+
+		    case ABSENT:
+			logger.warn("License key is absent. Exiting.");
+			break;
+		    case CORRUPTED:
+			logger.warn("License key is corrupted. Exiting.");
+			break;
+		    case TAMPERED:
+			logger.warn("License key is invalid. Exiting.");
+			break;
+		    case EXPIRED:
+			logger.warn("License key is expired. Exiting.");
+			break;
+		    case NYV:
+			logger.warn("License key is not yet valid. Exiting.");
+			break;
+		    case IRRELEVANT:
+			logger.warn("License key is irrelevant. Exiting.");
+			break;
+		    case UNSPECIFIED:
+			logger.warn("Unspecified error while checking the License key. Please contact the technical support. Exiting.");
+			break;
+		    default:
+			logger.warn("Exception while checking the License key. Please contact the technical support. Exiting.");
+			break;
+		    }
+
+		    return;
+
+		} else {
+		    if (status != LicenseStatus.OK) {
+			if (status == LicenseStatus.OVERSUBSCRIBED) {
+			    logger.warn(String.format("Oversubscription! Contact your distributor for expansion to be able to host more than %s accounts. Exiting.", volume));
+			} else {
+			    
+			    /// check for surplus
+			    
+			    logger.warn("Unknown error while checking the License key. Please contact the technical support. Exiting.");
+			}
+			
+			return;
+		    } else {
+			int current = quants.second();
+			
+			if ((current + amount) > volume) {
+			    logger.warn(String.format("Adding this many accounts will result in oversubscription. Contact your distributor for expansion to be able to host more than %s accounts. Exiting.", volume));
+			    return;
+			}			
+		    }
+		}
+	    
+	    // end validation
+	    
+	    
 	    Jdbi messageJdbi = jdbiFactory.build(environment, configuration.getMessageStoreConfiguration(), "messagedb");
 	    FaultTolerantDatabase accountDatabase = new FaultTolerantDatabase("accounts_database_add_pending_user", accountJdbi, configuration.getAccountsDatabaseConfiguration().getCircuitBreakerConfiguration());
 	    FaultTolerantDatabase messageDatabase = new FaultTolerantDatabase("message_database", messageJdbi, configuration.getMessageStoreConfiguration().getCircuitBreakerConfiguration());

@@ -68,6 +68,8 @@ public class PlainDirectoryUpdater {
         else offset += accounts.size();
 
         for (Account account : accounts) {
+          
+          // TODO: do we need this check now?  
           if (account.isEnabled()) {
             
             directory.redisUpdatePlainDirectory(batchOperation, account.getUserLogin(), objectMapper.writeValueAsString(new PlainDirectoryEntryValue(account.getUuid())));

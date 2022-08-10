@@ -30,6 +30,9 @@ import org.jdbi.v3.core.Jdbi;
 import org.signal.zkgroup.ServerSecretParams;
 import org.signal.zkgroup.auth.ServerZkAuthOperations;
 import org.signal.zkgroup.profiles.ServerZkProfileOperations;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import su.sres.websocket.WebSocketResourceProviderFactory;
 import su.sres.websocket.setup.WebSocketEnvironment;
 
@@ -48,6 +51,9 @@ import io.dropwizard.db.DataSourceFactory;
 import io.dropwizard.db.PooledDataSourceFactory;
 import io.dropwizard.jdbi3.JdbiFactory;
 import io.dropwizard.jersey.protobuf.ProtobufBundle;
+import io.dropwizard.jetty.ConnectorFactory;
+import io.dropwizard.jetty.HttpsConnectorFactory;
+import io.dropwizard.server.DefaultServerFactory;
 import io.dropwizard.setup.Bootstrap;
 import io.dropwizard.setup.Environment;
 import io.micrometer.core.instrument.Clock;
@@ -65,6 +71,7 @@ import su.sres.shadowserver.auth.ExternalServiceCredentialGenerator;
 import su.sres.shadowserver.auth.DisabledPermittedAccount;
 import su.sres.shadowserver.auth.DisabledPermittedAccountAuthenticator;
 import su.sres.shadowserver.auth.TurnTokenGenerator;
+import su.sres.shadowserver.configuration.CircuitBreakerConfiguration;
 import su.sres.shadowserver.controllers.*;
 import su.sres.shadowserver.filters.TimestampResponseFilter;
 
@@ -103,6 +110,9 @@ import su.sres.shadowserver.s3.PolicySigner;
 import su.sres.shadowserver.s3.PostPolicyGenerator;
 import su.sres.shadowserver.storage.*;
 import su.sres.shadowserver.util.Constants;
+import su.sres.shadowserver.util.Pair;
+import su.sres.shadowserver.util.ServerLicenseUtil;
+import su.sres.shadowserver.util.ServerLicenseUtil.LicenseStatus;
 import su.sres.shadowserver.websocket.AuthenticatedConnectListener;
 import su.sres.shadowserver.websocket.DeadLetterHandler;
 import su.sres.shadowserver.websocket.ProvisioningConnectListener;
@@ -112,8 +122,10 @@ import su.sres.shadowserver.workers.CreatePendingAccountCommand;
 import su.sres.shadowserver.workers.CertHashCommand;
 import su.sres.shadowserver.workers.DeleteUserCommand;
 import su.sres.shadowserver.workers.DirectoryCommand;
+import su.sres.shadowserver.workers.LicenseHashCommand;
 import su.sres.shadowserver.workers.VacuumCommand;
 import su.sres.shadowserver.workers.ZkParamsCommand;
+import su.sres.shadowserver.workers.MessagesCacheClusterCommand;
 
 import java.util.Optional;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -134,16 +146,20 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 	Security.addProvider(new BouncyCastleProvider());
     }
 
+    private final Logger logger = LoggerFactory.getLogger(WhisperServerService.class);
+
     @Override
     public void initialize(Bootstrap<WhisperServerConfiguration> bootstrap) {
 
+	bootstrap.addCommand(new CertHashCommand());
 	bootstrap.addCommand(new DirectoryCommand());
+	bootstrap.addCommand(new LicenseHashCommand());
 	bootstrap.addCommand(new VacuumCommand());
 	bootstrap.addCommand(new CreatePendingAccountCommand());
-	bootstrap.addCommand(new CertHashCommand());
 	bootstrap.addCommand(new DeleteUserCommand());
 	bootstrap.addCommand(new CertificateCommand());
 	bootstrap.addCommand(new ZkParamsCommand());
+	bootstrap.addCommand(new MessagesCacheClusterCommand());
 
 	bootstrap.addBundle(new ProtobufBundle<WhisperServerConfiguration>());
 
@@ -179,7 +195,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 
 	SharedMetricRegistries.add(Constants.METRICS_NAME, environment.metrics());
 
-	Metrics.addRegistry(new WavefrontMeterRegistry(new WavefrontConfig() {
+/*	Metrics.addRegistry(new WavefrontMeterRegistry(new WavefrontConfig() {
 	    @Override
 	    public String get(final String key) {
 		return null;
@@ -202,7 +218,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 			.build()
 			.merge(super.defaultHistogramConfig());
 	    }
-	});
+	}); */
 
 	environment.getObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 	environment.getObjectMapper().setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.NONE);
@@ -210,6 +226,60 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 
 	JdbiFactory jdbiFactory = new JdbiFactory(DefaultNameStrategy.CHECK_EMPTY);
 	Jdbi accountJdbi = jdbiFactory.build(environment, config.getAccountsDatabaseConfiguration(), "accountdb");
+
+	// start validation
+		
+	Pair<LicenseStatus, Pair<Integer,Integer>> validationResult = ServerLicenseUtil.validate(config, accountJdbi);
+
+	LicenseStatus status = validationResult.first();
+	Integer volume = validationResult.second().first();
+
+	if (volume == -1) {
+
+	    switch (status) {
+
+	    case ABSENT:
+		logger.warn("License key is absent. Exiting.");
+		break;
+	    case CORRUPTED:
+		logger.warn("License key is corrupted. Exiting.");
+		break;
+	    case TAMPERED:
+		logger.warn("License key is invalid. Exiting.");
+		break;
+	    case EXPIRED:
+		logger.warn("License key is expired. Exiting.");
+		break;
+	    case NYV:
+		logger.warn("License key is not yet valid. Exiting.");
+		break;
+	    case IRRELEVANT:
+		logger.warn("License key is irrelevant. Exiting.");
+		break;
+	    case UNSPECIFIED:
+		logger.warn("Unspecified error while checking the License key. Please contact the technical support. Exiting.");
+		break;
+	    default:
+		logger.warn("Exception while checking the License key. Please contact the technical support. Exiting.");
+		break;
+	    }
+
+	    System.exit(0);
+	    
+	} else {
+	    if (status != LicenseStatus.OK) {
+		if (status == LicenseStatus.OVERSUBSCRIBED) {
+		    logger.warn(String.format("Oversubscription! Contact your distributor for expansion to be able to host more than %s accounts. Exiting.", volume));
+		} else {
+		    logger.warn("Unknown error while checking the License key. Please contact the technical support. Exiting.");
+		}
+		
+		System.exit(0);
+	    }
+	}
+
+	// end validation
+
 	Jdbi messageJdbi = jdbiFactory.build(environment, config.getMessageStoreConfiguration(), "messagedb");
 	Jdbi abuseJdbi = jdbiFactory.build(environment, config.getAbuseDatabaseConfiguration(), "abusedb");
 
