@@ -159,8 +159,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 	bootstrap.addCommand(new DeleteUserCommand());
 	bootstrap.addCommand(new CertificateCommand());
 	bootstrap.addCommand(new ZkParamsCommand());
-	bootstrap.addCommand(new MessagesCacheClusterCommand());
-
+	
 	bootstrap.addBundle(new ProtobufBundle<WhisperServerConfiguration>());
 
 	bootstrap.addBundle(new NameableMigrationsBundle<WhisperServerConfiguration>("accountdb", "accountsdb.xml") {
