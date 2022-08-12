@@ -419,14 +419,10 @@ public class AccountsManager {
 		else
 		    offset += accounts.size();
 
-		for (Account account : accounts) {
-		    
-		    // TODO: do we need this check now?
-		    if (account.isEnabled()) {
+		for (Account account : accounts) {		        
 
 			directory.redisUpdatePlainDirectory(batchOperation, account.getUserLogin(), mapper.writeValueAsString(new PlainDirectoryEntryValue(account.getUuid())));
 			contactsAdded++;
-		    }
 		}
 
 		logger.info("Processed " + CHUNK_SIZE + " local accounts...");

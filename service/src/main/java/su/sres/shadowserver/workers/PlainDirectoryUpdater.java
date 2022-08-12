@@ -30,7 +30,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import redis.clients.jedis.Jedis;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Set;
 
 public class PlainDirectoryUpdater {
 
@@ -54,8 +56,23 @@ public class PlainDirectoryUpdater {
 	accountsManager.setDirectoryRestoreLock();  
 	  
     int                  contactsAdded   = 0;
-    int                  contactsRemoved = 0;
+    int                  contactsRemoved = 0;     
+       
     BatchOperationHandle batchOperation  = directory.startBatchOperation();
+    
+    
+    // removing all entries from Redis which are not found among existing accounts
+    logger.info("Cleaning up inexisting accounts.");
+    HashMap<String, String> accountsInDirectory = directory.retrievePlainDirectory();
+    if(!accountsInDirectory.isEmpty()) {
+	Set<String> usernamesInDirectory = accountsInDirectory.keySet();
+	for (String entry : usernamesInDirectory) {
+	    if (!accountsManager.get(entry).isPresent()) {
+		directory.redisRemoveFromPlainDirectory(batchOperation, entry);
+	            contactsRemoved++;
+	    }
+	}
+    }
 
     try {
       logger.info("Updating from local DB.");
@@ -67,17 +84,10 @@ public class PlainDirectoryUpdater {
         if (accounts == null || accounts.isEmpty()) break;
         else offset += accounts.size();
 
-        for (Account account : accounts) {
-          
-          // TODO: do we need this check now?  
-          if (account.isEnabled()) {
-            
+        for (Account account : accounts) {     
+                                
             directory.redisUpdatePlainDirectory(batchOperation, account.getUserLogin(), objectMapper.writeValueAsString(new PlainDirectoryEntryValue(account.getUuid())));
-            contactsAdded++;
-          } else {
-            directory.redisRemoveFromPlainDirectory(batchOperation, account.getUserLogin());
-            contactsRemoved++;
-          }
+            contactsAdded++;           
         }
 
         logger.info("Processed the chunk of local accounts...");
@@ -88,7 +98,7 @@ public class PlainDirectoryUpdater {
       directory.stopBatchOperation(batchOperation);
     }    
 
-    logger.info(String.format("Local directory is updated (%d added, %d removed).", contactsAdded, contactsRemoved));
+    logger.info(String.format("Local directory is updated (%d added or confirmed, %d removed).", contactsAdded, contactsRemoved));
         
 	int backoff = directory.calculateBackoff(accountsManager.getDirectoryVersion());	
 
