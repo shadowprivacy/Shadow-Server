@@ -125,7 +125,6 @@ import su.sres.shadowserver.workers.DirectoryCommand;
 import su.sres.shadowserver.workers.LicenseHashCommand;
 import su.sres.shadowserver.workers.VacuumCommand;
 import su.sres.shadowserver.workers.ZkParamsCommand;
-import su.sres.shadowserver.workers.MessagesCacheClusterCommand;
 
 import java.util.Optional;
 import java.util.concurrent.ArrayBlockingQueue;
