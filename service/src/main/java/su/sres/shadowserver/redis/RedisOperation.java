@@ -3,8 +3,6 @@ package su.sres.shadowserver.redis;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import su.sres.shadowserver.push.PushSender;
-
 public class RedisOperation {
 
   private static final Logger logger = LoggerFactory.getLogger(RedisOperation.class);

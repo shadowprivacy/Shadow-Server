@@ -1,9 +1,11 @@
+/*
+ * Copyright 2013-2020 Signal Messenger, LLC
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
 package su.sres.dispatch;
 
 import java.util.Optional;
 
-import su.sres.dispatch.DispatchChannel;
-import su.sres.dispatch.DispatchManager;
 import su.sres.dispatch.io.RedisPubSubConnectionFactory;
 import su.sres.dispatch.redis.PubSubConnection;
 import su.sres.dispatch.redis.PubSubReply;
@@ -20,8 +22,11 @@ import java.util.LinkedList;
 import java.util.List;
 
 import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 public class DispatchManagerTest {
 

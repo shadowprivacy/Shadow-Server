@@ -12,6 +12,7 @@ import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import su.sres.shadowserver.configuration.CircuitBreakerConfiguration;
+import su.sres.shadowserver.configuration.RetryConfiguration;
 import su.sres.shadowserver.util.RedisClusterUtil;
 import redis.embedded.RedisServer;
 
@@ -60,7 +61,8 @@ public abstract class AbstractRedisClusterTest {
 	redisCluster = new FaultTolerantRedisCluster("test-cluster",
 		RedisClusterClient.create(urls.stream().map(RedisURI::create).collect(Collectors.toList())),
 		Duration.ofSeconds(2),
-		new CircuitBreakerConfiguration());
+		new CircuitBreakerConfiguration(),
+		new RetryConfiguration());
 
 	redisCluster.useCluster(connection -> {
 	    boolean setAll = false;

@@ -39,6 +39,10 @@ import static com.codahale.metrics.MetricRegistry.name;
  * connected and "present" to receive messages. Only one client per
  * account/device may be present at a time; if a second client for the same
  * account/device declares its presence, the previous client is displaced.
+ * <p/>
+ * The client presence manager depends on Redis keyspace notifications and
+ * requires that the Redis instance support at least the following notification
+ * types: {@code K$z}.
  */
 public class ClientPresenceManager extends RedisClusterPubSubAdapter<String, String> implements Managed {
 
@@ -64,7 +68,7 @@ public class ClientPresenceManager extends RedisClusterPubSubAdapter<String, Str
     private final Meter remoteDisplacementMeter;
     private final Meter pubSubMessageMeter;
 
-    private static final int PRUNE_PEERS_INTERVAL_SECONDS = (int) Duration.ofMinutes(3).toSeconds();
+    private static final int PRUNE_PEERS_INTERVAL_SECONDS = (int)Duration.ofSeconds(30).toSeconds();
 
     static final String MANAGER_SET_KEY = "presence::managers";
 
@@ -113,7 +117,13 @@ public class ClientPresenceManager extends RedisClusterPubSubAdapter<String, Str
 
 	presenceCluster.useCluster(connection -> connection.sync().sadd(MANAGER_SET_KEY, managerId));
 
-	pruneMissingPeersFuture = scheduledExecutorService.scheduleAtFixedRate(this::pruneMissingPeers, new Random().nextInt(PRUNE_PEERS_INTERVAL_SECONDS), PRUNE_PEERS_INTERVAL_SECONDS, TimeUnit.SECONDS);
+	pruneMissingPeersFuture = scheduledExecutorService.scheduleWithFixedDelay(() -> {
+	    try {
+		pruneMissingPeers();
+	    } catch (final Throwable t) {
+		log.warn("Failed to prune missing peers", t);
+	    }
+	}, new Random().nextInt(PRUNE_PEERS_INTERVAL_SECONDS), PRUNE_PEERS_INTERVAL_SECONDS, TimeUnit.SECONDS);
     }
 
     @Override
@@ -147,8 +157,8 @@ public class ClientPresenceManager extends RedisClusterPubSubAdapter<String, Str
 	    presenceCluster.useCluster(connection -> {
 		final RedisAdvancedClusterCommands<String, String> commands = connection.sync();
 
-		commands.set(presenceKey, managerId);
 		commands.sadd(connectedClientSetKey, presenceKey);
+		commands.set(presenceKey, managerId);
 	    });
 
 	    subscribeForRemotePresenceChanges(presenceKey);
@@ -170,14 +180,14 @@ public class ClientPresenceManager extends RedisClusterPubSubAdapter<String, Str
 	    return presenceCluster.withCluster(connection -> connection.sync().exists(getPresenceKey(accountUuid, deviceId))) == 1;
 	}
     }
-    
+
     public boolean isLocallyPresent(final UUID accountUuid, final long deviceId) {
 	return displacementListenersByPresenceKey.containsKey(getPresenceKey(accountUuid, deviceId));
     }
 
     public boolean clearPresence(final UUID accountUuid, final long deviceId) {
 	return clearPresence(getPresenceKey(accountUuid, deviceId));
-    }    
+    }
 
     private boolean clearPresence(final String presenceKey) {
 	try (final Timer.Context ignored = clearPresenceTimer.time()) {
@@ -222,18 +232,16 @@ public class ClientPresenceManager extends RedisClusterPubSubAdapter<String, Str
 
 		    final String connectedClientsKey = getConnectedClientSetKey(peerId);
 
+		    String presenceKey;
+
+		    while ((presenceKey = presenceCluster.withCluster(connection -> connection.sync().spop(connectedClientsKey))) != null) {
+			clearPresenceScript.execute(List.of(presenceKey), List.of(peerId));
+			pruneClientMeter.mark();
+		    }
+
 		    presenceCluster.useCluster(connection -> {
-			final RedisAdvancedClusterCommands<String, String> commands = connection.sync();
-
-			String presenceKey;
-
-			while ((presenceKey = commands.spop(connectedClientsKey)) != null) {
-			    clearPresenceScript.execute(List.of(presenceKey), List.of(peerId));
-			    pruneClientMeter.mark();
-			}
-
-			commands.del(connectedClientsKey);
-			commands.srem(MANAGER_SET_KEY, peerId);
+			connection.sync().del(connectedClientsKey);
+			connection.sync().srem(MANAGER_SET_KEY, peerId);
 		    });
 		}
 	    }

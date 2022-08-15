@@ -46,9 +46,9 @@ messageCache:                 # Redis server configuration for message store cac
         - "redis://localhost:6379/"                                       # replication URL(s) 
 
 pushScheduler:                # Redis server configuration for push scheduler
-     url: "redis://localhost:6379/3"
+     url: "redis://localhost:6379/3"                                    # fake/unused for now
      replicaUrls:
-              - "redis://localhost:6379"                                # dummy (or actual) replication URL(s)
+              - "redis://localhost:6379"                                # fake/unused for now
 
 pubsub:                       # Redis server configuration for publisher/subscriber
      url: "redis://localhost:6379"
@@ -155,6 +155,9 @@ featureFlag:
     - # 2nd authorized token
     - # ...
     - # Nth authorized token              
+
+paymentService:
+  userAuthenticationTokenSharedSecret: 6730674e1bd4f3a9cfdb2645159230b1 # fake/unused
 
 storageService:
   userAuthenticationTokenSharedSecret: 6730674e1bd4f3a9cfdb2645159230b1 # fake/unused

@@ -10,29 +10,37 @@ import io.github.resilience4j.retry.RetryConfig;
 
 public class RetryConfiguration {
 
-  @JsonProperty
-  @Min(1)
-  private int maxAttempts = 3;
+    @JsonProperty
+    @Min(1)
+    private int maxAttempts = 3;
 
-  @JsonProperty
-  @Min(1)
-  private long waitDuration = RetryConfig.DEFAULT_WAIT_DURATION;
+    @JsonProperty
+    @Min(1)
+    private long waitDuration = RetryConfig.DEFAULT_WAIT_DURATION;
 
-  public int getMaxAttempts() {
-    return maxAttempts;
-  }
+    public int getMaxAttempts() {
+	return maxAttempts;
+    }
 
-  public long getWaitDuration() {
-    return waitDuration;
-  }
+    public void setMaxAttempts(final int maxAttempts) {
+	this.maxAttempts = maxAttempts;
+    }
 
-  public RetryConfig toRetryConfig() {
-    return toRetryConfigBuilder().build();
-  }
+    public long getWaitDuration() {
+	return waitDuration;
+    }
 
-  public <T> RetryConfig.Builder<T> toRetryConfigBuilder() {
-    return RetryConfig.<T>custom()
-                      .maxAttempts(getMaxAttempts())
-                      .waitDuration(Duration.ofMillis(getWaitDuration()));
-  }
+    public void setWaitDuration(final long waitDuration) {
+	this.waitDuration = waitDuration;
+    }
+
+    public RetryConfig toRetryConfig() {
+	return toRetryConfigBuilder().build();
+    }
+
+    public <T> RetryConfig.Builder<T> toRetryConfigBuilder() {
+	return RetryConfig.<T>custom()
+		.maxAttempts(getMaxAttempts())
+		.waitDuration(Duration.ofMillis(getWaitDuration()));
+    }
 }

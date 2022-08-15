@@ -6,9 +6,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.SharedMetricRegistries;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.ByteString;
-import com.google.protobuf.InvalidProtocolBufferException;
 
-import su.sres.dispatch.DispatchChannel;
 import su.sres.shadowserver.controllers.MessageController;
 import su.sres.shadowserver.controllers.NoSuchUserException;
 import su.sres.shadowserver.entities.CryptoEncodingException;
@@ -16,8 +14,6 @@ import su.sres.shadowserver.entities.EncryptedOutgoingMessage;
 import su.sres.shadowserver.entities.OutgoingMessageEntity;
 import su.sres.shadowserver.entities.OutgoingMessageEntityList;
 import su.sres.shadowserver.push.DisplacedPresenceListener;
-import su.sres.shadowserver.push.NotPushRegisteredException;
-import su.sres.shadowserver.push.PushSender;
 import su.sres.shadowserver.push.ReceiptSender;
 // import su.sres.shadowserver.push.TransientPushFailureException;
 import su.sres.shadowserver.storage.Account;
@@ -35,10 +31,8 @@ import su.sres.websocket.messages.WebSocketResponseMessage;
 
 import javax.ws.rs.WebApplicationException;
 import java.util.Collections;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -46,7 +40,6 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static com.codahale.metrics.MetricRegistry.name;
 import static su.sres.shadowserver.entities.MessageProtos.Envelope;
-import static su.sres.shadowserver.storage.PubSubProtos.PubSubMessage;
 
 @SuppressWarnings("OptionalUsedAsFieldOrParameterType")
 public class WebSocketConnection implements MessageAvailabilityListener, DisplacedPresenceListener {
@@ -58,6 +51,8 @@ public class WebSocketConnection implements MessageAvailabilityListener, Displac
     private static final Meter ephemeralMessageAvailableMeter = metricRegistry.meter(name(WebSocketConnection.class, "ephemeralMessagesAvailable"));
     private static final Meter messagesPersistedMeter = metricRegistry.meter(name(WebSocketConnection.class, "messagesPersisted"));
     private static final Meter displacementMeter = metricRegistry.meter(name(WebSocketConnection.class, "explicitDisplacement"));
+    private static final Meter bytesSentMeter = metricRegistry.meter(name(WebSocketConnection.class, "bytes_sent"));
+    private static final Meter sendFailuresMeter = metricRegistry.meter(name(WebSocketConnection.class, "send_failures"));
 
     private static final Logger logger = LoggerFactory.getLogger(WebSocketConnection.class);
 
@@ -67,7 +62,6 @@ public class WebSocketConnection implements MessageAvailabilityListener, Displac
     private final Account account;
     private final Device device;
     private final WebSocketClient client;
-    private final String connectionId;
 
     private final Semaphore processStoredMessagesSemaphore = new Semaphore(1);
     private final AtomicReference<StoredMessageState> storedMessageState = new AtomicReference<>(StoredMessageState.PERSISTED_NEW_MESSAGES_AVAILABLE);
@@ -83,14 +77,12 @@ public class WebSocketConnection implements MessageAvailabilityListener, Displac
 	    MessagesManager messagesManager,
 	    Account account,
 	    Device device,
-	    WebSocketClient client,
-	    String connectionId) {
+	    WebSocketClient client) {
 	this.receiptSender = receiptSender;
 	this.messagesManager = messagesManager;
 	this.account = account;
 	this.device = device;
 	this.client = client;
-	this.connectionId = connectionId;
     }
 
     public void start() {
@@ -115,6 +107,7 @@ public class WebSocketConnection implements MessageAvailabilityListener, Displac
 	    }
 
 	    sendMessageMeter.mark();
+	    bytesSentMeter.mark(body.map(bytes -> bytes.length).orElse(0));
 
 	    return client.sendRequest("PUT", "/api/v1/message", List.of(header, TimestampHeaderUtil.getTimestampHeader()), body).whenComplete((response, throwable) -> {
 		if (throwable == null) {
@@ -128,7 +121,9 @@ public class WebSocketConnection implements MessageAvailabilityListener, Displac
 			    messageTime.update(System.currentTimeMillis() - message.getTimestamp());
 			    sendDeliveryReceiptFor(message);
 			}
-		    }		    
+		    }
+		} else {
+		    sendFailuresMeter.mark();
 		}
 	    });
 
@@ -198,6 +193,9 @@ public class WebSocketConnection implements MessageAvailabilityListener, Displac
 	    if (!Util.isEmpty(message.getSource())) {
 		builder.setSource(message.getSource())
 			.setSourceDevice(message.getSourceDevice());
+		if (message.getSourceUuid() != null) {
+		    builder.setSourceUuid(message.getSourceUuid().toString());
+		}
 	    }
 
 	    if (message.getMessage() != null) {

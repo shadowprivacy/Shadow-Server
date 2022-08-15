@@ -31,7 +31,7 @@ import su.sres.shadowserver.federation.FederatedClientManager;
 import su.sres.shadowserver.limits.RateLimiter;
 import su.sres.shadowserver.limits.RateLimiters;
 import su.sres.shadowserver.push.ApnFallbackManager;
-import su.sres.shadowserver.push.PushSender;
+import su.sres.shadowserver.push.MessageSender;
 import su.sres.shadowserver.push.ReceiptSender;
 import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.storage.AccountsManager;
@@ -52,7 +52,7 @@ public class FederatedControllerTest {
   private static final String SINGLE_DEVICE_RECIPIENT = "+14151111111";
   private static final String MULTI_DEVICE_RECIPIENT  = "+14152222222";
 
-  private PushSender             pushSender             = mock(PushSender.class            );
+  private MessageSender             pushSender             = mock(MessageSender.class            );
   private ReceiptSender          receiptSender          = mock(ReceiptSender.class);
   private FederatedClientManager federatedClientManager = mock(FederatedClientManager.class);
   private AccountsManager        accountsManager        = mock(AccountsManager.class       );

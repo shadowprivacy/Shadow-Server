@@ -964,7 +964,7 @@ public class AccountControllerTest {
                        .delete();
 
       assertThat(response.getStatus()).isEqualTo(204);
-      verify(accountsManager).delete(Stream.of(AuthHelper.VALID_ACCOUNT).collect(Collectors.toCollection(HashSet::new)));
+      verify(accountsManager).delete(Stream.of(AuthHelper.VALID_ACCOUNT).collect(Collectors.toCollection(HashSet::new)), AccountsManager.DeletionReason.USER_REQUEST);
     }
 
 }

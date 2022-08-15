@@ -219,7 +219,7 @@ public class AccountsTest {
 	assertThat(accounts.get(deletedAccount.getUuid())).isPresent();
 	assertThat(accounts.get(retainedAccount.getUuid())).isPresent();
 
-	accounts.delete(deletedAccount.getUuid());
+	accounts.delete(deletedAccount.getUuid(), directoryVersion);
 
 	assertThat(accounts.get(deletedAccount.getUuid())).isNotPresent();
 
@@ -310,8 +310,7 @@ public class AccountsTest {
     private Device generateDevice(long id) {
 	Random random = new Random(System.currentTimeMillis());
 	SignedPreKey signedPreKey = new SignedPreKey(random.nextInt(), "testPublicKey-" + random.nextInt(), "testSignature-" + random.nextInt());
-	return new Device(id, "testName-" + random.nextInt(), "testAuthToken-" + random.nextInt(), "testSalt-" + random.nextInt(), null, "testGcmId-" + random.nextInt(), "testApnId-" + random.nextInt(), "testVoipApnId-" + random.nextInt(), random.nextBoolean(), random.nextInt(), signedPreKey,
-		random.nextInt(), random.nextInt(), "testUserAgent-" + random.nextInt(), 0, new Device.DeviceCapabilities(random.nextBoolean(), random.nextBoolean(), random.nextBoolean(), random.nextBoolean(), random.nextBoolean()));
+	return new Device(id, "testName-" + random.nextInt(), "testAuthToken-" + random.nextInt(), "testSalt-" + random.nextInt(), null, "testGcmId-" + random.nextInt(), "testApnId-" + random.nextInt(), "testVoipApnId-" + random.nextInt(), random.nextBoolean(), random.nextInt(), signedPreKey, random.nextInt(), random.nextInt(), "testUserAgent-" + random.nextInt() , 0, new Device.DeviceCapabilities(random.nextBoolean(), random.nextBoolean(), random.nextBoolean(), random.nextBoolean(), random.nextBoolean(), random.nextBoolean()));
 
     }
 

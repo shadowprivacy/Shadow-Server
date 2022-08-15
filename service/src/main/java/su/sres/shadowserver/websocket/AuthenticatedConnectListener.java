@@ -7,7 +7,7 @@ import com.codahale.metrics.Timer;
 
 import su.sres.shadowserver.push.ApnFallbackManager;
 import su.sres.shadowserver.push.ClientPresenceManager;
-import su.sres.shadowserver.push.PushSender;
+import su.sres.shadowserver.push.MessageSender;
 import su.sres.shadowserver.push.ReceiptSender;
 import su.sres.shadowserver.redis.RedisOperation;
 import su.sres.shadowserver.storage.Account;
@@ -17,8 +17,6 @@ import su.sres.shadowserver.util.Constants;
 
 import su.sres.websocket.session.WebSocketSessionContext;
 import su.sres.websocket.setup.WebSocketConnectListener;
-
-import java.security.SecureRandom;
 
 import static com.codahale.metrics.MetricRegistry.name;
 
@@ -31,15 +29,17 @@ public class AuthenticatedConnectListener implements WebSocketConnectListener {
 
     private final ReceiptSender receiptSender;
     private final MessagesManager messagesManager;
+    private final MessageSender messageSender;
     private final ApnFallbackManager apnFallbackManager;
     private final ClientPresenceManager clientPresenceManager;
 
     public AuthenticatedConnectListener(ReceiptSender receiptSender,
 	    MessagesManager messagesManager,
-	    ApnFallbackManager apnFallbackManager,
+	    final MessageSender messageSender, ApnFallbackManager apnFallbackManager,
 	    ClientPresenceManager clientPresenceManager) {
 	this.receiptSender = receiptSender;
 	this.messagesManager = messagesManager;
+	this.messageSender = messageSender;
 	this.apnFallbackManager = apnFallbackManager;
 	this.clientPresenceManager = clientPresenceManager;
     }
@@ -49,11 +49,10 @@ public class AuthenticatedConnectListener implements WebSocketConnectListener {
 	if (context.getAuthenticated() != null) {
 	    final Account account = context.getAuthenticated(Account.class);
 	    final Device device = account.getAuthenticatedDevice().get();
-	    final String connectionId = String.valueOf(new SecureRandom().nextLong());
 	    final Timer.Context timer = durationTimer.time();
 	    final WebSocketConnection connection = new WebSocketConnection(receiptSender,
 		    messagesManager, account, device,
-		    context.getClient(), connectionId);
+		    context.getClient());
 
 	    openWebsocketCounter.inc();
 	    try {
@@ -75,6 +74,10 @@ public class AuthenticatedConnectListener implements WebSocketConnectListener {
 
 		    openWebsocketCounter.dec();
 		    timer.stop();
+
+		    if (messagesManager.hasCachedMessages(account.getUuid(), device.getId())) {
+			messageSender.sendNewMessageNotification(account, device);
+		    }
 		}
 	    });
 	} else {

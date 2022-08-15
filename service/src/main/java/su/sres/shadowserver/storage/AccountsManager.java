@@ -25,6 +25,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.lettuce.core.RedisException;
 import io.lettuce.core.cluster.api.async.RedisAdvancedClusterAsyncCommands;
 import io.lettuce.core.cluster.api.sync.RedisAdvancedClusterCommands;
+import io.micrometer.core.instrument.Metrics;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -70,6 +71,9 @@ public class AccountsManager {
     private static final Timer redisUuidGetTimer = metricRegistry.timer(name(AccountsManager.class, "redisUuidGet"));
     private static final Timer redisDeleteTimer = metricRegistry.timer(name(AccountsManager.class, "redisDelete"));
 
+    private static final String DELETE_COUNTER_NAME = name(AccountsManager.class, "deleteCounter");
+    private static final String DELETION_REASON_TAG_NAME = "reason";
+
     private final Logger logger = LoggerFactory.getLogger(AccountsManager.class);
 
     private final Accounts accounts;
@@ -80,6 +84,18 @@ public class AccountsManager {
     private final UsernamesManager usernamesManager;
     private final ProfilesManager profilesManager;
     private final ObjectMapper mapper;
+
+    public enum DeletionReason {
+	ADMIN_DELETED("admin"),
+	EXPIRED("expired"),
+	USER_REQUEST("userRequest");
+
+	private final String tagValue;
+
+	DeletionReason(final String tagValue) {
+	    this.tagValue = tagValue;
+	}
+    }
 
     private static final String ACCOUNT_CREATION_LOCK_KEY = "AccountCreationLock";
     private static final String ACCOUNT_REMOVAL_LOCK_KEY = "AccountRemovalLock";
@@ -236,7 +252,7 @@ public class AccountsManager {
 	return accounts.getAllFrom(uuid, length);
     }
 
-    public void delete(final HashSet<Account> accountsToDelete) {
+    public void delete(final HashSet<Account> accountsToDelete, final DeletionReason deletionReason) {
 
 	long newDirectoryVersion = getDirectoryVersion() + 1L;
 
@@ -252,6 +268,8 @@ public class AccountsManager {
 		messagesManager.clear(account.getUserLogin(), account.getUuid());
 		redisDelete(account);
 		databaseDelete(account, newDirectoryVersion);
+
+		Metrics.counter(DELETE_COUNTER_NAME, DELETION_REASON_TAG_NAME, deletionReason.tagValue).increment();
 
 	    }
 
@@ -350,15 +368,15 @@ public class AccountsManager {
     private boolean databaseCreate(Account account, long directoryVersion) {
 	return accounts.create(account, directoryVersion);
     }
-    
+
     private void databaseUpdate(Account account, boolean isRemoval, long directoryVersion) {
 	if (!isRemoval) {
 	    accounts.update(account);
 
 	}
-	
+
 	// else {
-	//    accounts.update(account, isRemoval, directoryVersion);
+	// accounts.update(account, isRemoval, directoryVersion);
 	// }
     }
 
@@ -370,20 +388,20 @@ public class AccountsManager {
 	Jedis jedis = directory.accessDirectoryCache().getWriteResource();
 
 	String currentVersion = jedis.get(DIRECTORY_VERSION);
-			
+
 	jedis.close();
 
-	if (currentVersion == null || "nil".equals(currentVersion)) {	 
+	if (currentVersion == null || "nil".equals(currentVersion)) {
 
 	    try {
-		 
-		long tmp = accounts.restoreDirectoryVersion();		
-		
+
+		long tmp = accounts.restoreDirectoryVersion();
+
 		// restoring the recovered version to redis
-		directory.setDirectoryVersion(tmp);		
-		
-		return tmp;		
-				
+		directory.setDirectoryVersion(tmp);
+
+		return tmp;
+
 	    } catch (IllegalStateException e) {
 		logger.warn("IllegalStateException received from an SQL query for directory version, assuming 0.");
 		return 0;
@@ -419,10 +437,10 @@ public class AccountsManager {
 		else
 		    offset += accounts.size();
 
-		for (Account account : accounts) {		        
+		for (Account account : accounts) {
 
-			directory.redisUpdatePlainDirectory(batchOperation, account.getUserLogin(), mapper.writeValueAsString(new PlainDirectoryEntryValue(account.getUuid())));
-			contactsAdded++;
+		    directory.redisUpdatePlainDirectory(batchOperation, account.getUserLogin(), mapper.writeValueAsString(new PlainDirectoryEntryValue(account.getUuid())));
+		    contactsAdded++;
 		}
 
 		logger.info("Processed " + CHUNK_SIZE + " local accounts...");

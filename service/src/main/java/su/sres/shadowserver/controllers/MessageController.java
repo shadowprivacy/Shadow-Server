@@ -67,7 +67,7 @@ import su.sres.shadowserver.limits.RateLimiters;
 import su.sres.shadowserver.metrics.UserAgentTagUtil;
 import su.sres.shadowserver.push.ApnFallbackManager;
 import su.sres.shadowserver.push.NotPushRegisteredException;
-import su.sres.shadowserver.push.PushSender;
+import su.sres.shadowserver.push.MessageSender;
 import su.sres.shadowserver.push.ReceiptSender;
 // import su.sres.shadowserver.push.TransientPushFailureException;
 import su.sres.shadowserver.redis.RedisOperation;
@@ -78,6 +78,8 @@ import su.sres.shadowserver.storage.MessagesManager;
 import su.sres.shadowserver.util.Base64;
 import su.sres.shadowserver.util.Constants;
 import su.sres.shadowserver.util.Util;
+import su.sres.shadowserver.util.ua.UnrecognizedUserAgentException;
+import su.sres.shadowserver.util.ua.UserAgentUtil;
 import su.sres.shadowserver.websocket.WebSocketConnection;
 
 import static com.codahale.metrics.MetricRegistry.name;
@@ -95,7 +97,7 @@ public class MessageController {
     private final Histogram outgoingMessageListSizeHistogram = metricRegistry.histogram(name(getClass(), "outgoingMessageListSize"));
 
     private final RateLimiters rateLimiters;
-    private final PushSender pushSender;
+    private final MessageSender messageSender;
     private final ReceiptSender receiptSender;
 //excluded federation, reserved for future use
     // private final FederatedClientManager federatedClientManager;
@@ -104,11 +106,12 @@ public class MessageController {
     private final ApnFallbackManager apnFallbackManager;
 
     private static final String CONTENT_SIZE_DISTRIBUTION_NAME = name(MessageController.class, "messageContentSize");
+    private static final String OUTGOING_MESSAGE_LIST_SIZE_BYTES_DISTRIBUTION_NAME = name(MessageController.class, "outgoingMessageListSizeBytes");
 
-    private static final int MAX_MESSAGE_SIZE = 64 * 1024;
+    private static final int MAX_MESSAGE_SIZE = 1024 * 1024;
 
     public MessageController(RateLimiters rateLimiters,
-	    PushSender pushSender,
+	    MessageSender messageSender,
 	    ReceiptSender receiptSender,
 	    AccountsManager accountsManager,
 	    MessagesManager messagesManager,
@@ -116,7 +119,7 @@ public class MessageController {
 	    // FederatedClientManager federatedClientManager,
 	    ApnFallbackManager apnFallbackManager) {
 	this.rateLimiters = rateLimiters;
-	this.pushSender = pushSender;
+	this.messageSender = messageSender;
 	this.receiptSender = receiptSender;
 	this.accountsManager = accountsManager;
 	this.messagesManager = messagesManager;
@@ -244,7 +247,32 @@ public class MessageController {
 
 	outgoingMessageListSizeHistogram.update(outgoingMessages.getMessages().size());
 
+	{
+	    String platform;
+
+	    try {
+		platform = UserAgentUtil.parseUserAgentString(userAgent).getPlatform().name().toLowerCase();
+	    } catch (final UnrecognizedUserAgentException ignored) {
+		platform = "unrecognized";
+	    }
+
+	    Metrics.summary(OUTGOING_MESSAGE_LIST_SIZE_BYTES_DISTRIBUTION_NAME, "platform", platform).record(estimateMessageListSizeBytes(outgoingMessages));
+	}
+
 	return outgoingMessages;
+    }
+
+    private static long estimateMessageListSizeBytes(final OutgoingMessageEntityList messageList) {
+	long size = 0;
+
+	for (final OutgoingMessageEntity message : messageList.getMessages()) {
+	    size += message.getContent() == null ? 0 : message.getContent().length;
+	    size += message.getMessage() == null ? 0 : message.getMessage().length;
+	    size += Util.isEmpty(message.getSource()) ? 0 : message.getSource().length();
+	    size += Util.isEmpty(message.getRelay()) ? 0 : message.getRelay().length();
+	}
+
+	return size;
     }
 
     @Timed
@@ -334,7 +362,7 @@ public class MessageController {
 	     * messageBuilder.setRelay(source.getRelay().get()); }
 	     */
 
-	    pushSender.sendMessage(destinationAccount, destinationDevice, messageBuilder.build(), online);
+	    messageSender.sendMessage(destinationAccount, destinationDevice, messageBuilder.build(), online);
 	} catch (NotPushRegisteredException e) {
 	    if (destinationDevice.isMaster())
 		throw new NoSuchUserException(e);

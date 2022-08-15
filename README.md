@@ -21,9 +21,9 @@ See <http://www.wassenaar.org/> for more information.
 License
 ---------------------
 Original software:
-Copyright 2013-2016 Open Whisper Systems
+Copyright 2013-2020 Signal Messenger, LLC
 
 Modified software:
-Copyright 2019-2020 Anton Alipov, sole trader
+Copyright 2019-2022 Anton Alipov, sole trader
 
 Licensed under the AGPLv3: https://www.gnu.org/licenses/agpl-3.0.html

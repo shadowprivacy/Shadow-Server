@@ -39,6 +39,7 @@ import su.sres.websocket.setup.WebSocketEnvironment;
 import javax.servlet.DispatcherType;
 import javax.servlet.FilterRegistration;
 import javax.servlet.ServletRegistration;
+
 import java.security.Security;
 import java.time.Duration;
 import java.util.Collections;
@@ -51,16 +52,10 @@ import io.dropwizard.db.DataSourceFactory;
 import io.dropwizard.db.PooledDataSourceFactory;
 import io.dropwizard.jdbi3.JdbiFactory;
 import io.dropwizard.jersey.protobuf.ProtobufBundle;
-import io.dropwizard.jetty.ConnectorFactory;
-import io.dropwizard.jetty.HttpsConnectorFactory;
-import io.dropwizard.server.DefaultServerFactory;
 import io.dropwizard.setup.Bootstrap;
 import io.dropwizard.setup.Environment;
-import io.micrometer.core.instrument.Clock;
+import io.lettuce.core.resource.ClientResources;
 import io.micrometer.core.instrument.Metrics;
-import io.micrometer.core.instrument.distribution.DistributionStatisticConfig;
-import io.micrometer.wavefront.WavefrontConfig;
-import io.micrometer.wavefront.WavefrontMeterRegistry;
 import io.minio.MinioClient;
 import su.sres.dispatch.DispatchManager;
 import su.sres.shadowserver.auth.AccountAuthenticator;
@@ -71,7 +66,6 @@ import su.sres.shadowserver.auth.ExternalServiceCredentialGenerator;
 import su.sres.shadowserver.auth.DisabledPermittedAccount;
 import su.sres.shadowserver.auth.DisabledPermittedAccountAuthenticator;
 import su.sres.shadowserver.auth.TurnTokenGenerator;
-import su.sres.shadowserver.configuration.CircuitBreakerConfiguration;
 import su.sres.shadowserver.controllers.*;
 import su.sres.shadowserver.filters.TimestampResponseFilter;
 
@@ -85,12 +79,16 @@ import su.sres.shadowserver.mappers.DeviceLimitExceededExceptionMapper;
 import su.sres.shadowserver.mappers.IOExceptionMapper;
 import su.sres.shadowserver.mappers.InvalidWebsocketAddressExceptionMapper;
 import su.sres.shadowserver.mappers.RateLimitExceededExceptionMapper;
+import su.sres.shadowserver.metrics.BufferPoolGauges;
 import su.sres.shadowserver.metrics.CpuUsageGauge;
 import su.sres.shadowserver.metrics.FileDescriptorGauge;
 import su.sres.shadowserver.metrics.FreeMemoryGauge;
+import su.sres.shadowserver.metrics.GarbageCollectionGauges;
+import su.sres.shadowserver.metrics.MaxFileDescriptorGauge;
 import su.sres.shadowserver.metrics.MetricsApplicationEventListener;
 import su.sres.shadowserver.metrics.NetworkReceivedGauge;
 import su.sres.shadowserver.metrics.NetworkSentGauge;
+import su.sres.shadowserver.metrics.OperatingSystemMemoryGauge;
 import su.sres.shadowserver.metrics.PushLatencyManager;
 import su.sres.shadowserver.metrics.TrafficSource;
 import su.sres.shadowserver.providers.RedisClientFactory;
@@ -100,10 +98,11 @@ import su.sres.shadowserver.push.ClientPresenceManager;
 // import su.sres.shadowserver.push.APNSender;
 // import su.sres.shadowserver.push.ApnFallbackManager;
 import su.sres.shadowserver.push.GCMSender;
-import su.sres.shadowserver.push.PushSender;
+import su.sres.shadowserver.push.ProvisioningManager;
+import su.sres.shadowserver.push.MessageSender;
 import su.sres.shadowserver.push.ReceiptSender;
-import su.sres.shadowserver.push.WebsocketSender;
 import su.sres.shadowserver.recaptcha.RecaptchaClient;
+import su.sres.shadowserver.redis.ConnectionEventLogger;
 import su.sres.shadowserver.redis.FaultTolerantRedisCluster;
 import su.sres.shadowserver.redis.ReplicatedJedisPool;
 import su.sres.shadowserver.s3.PolicySigner;
@@ -122,6 +121,10 @@ import su.sres.shadowserver.workers.CreatePendingAccountCommand;
 import su.sres.shadowserver.workers.CertHashCommand;
 import su.sres.shadowserver.workers.DeleteUserCommand;
 import su.sres.shadowserver.workers.DirectoryCommand;
+import su.sres.shadowserver.workers.DisableRequestLoggingTask;
+import su.sres.shadowserver.workers.EnableRequestLoggingTask;
+import su.sres.shadowserver.workers.GetRedisCommandStatsCommand;
+import su.sres.shadowserver.workers.GetRedisSlowlogCommand;
 import su.sres.shadowserver.workers.LicenseHashCommand;
 import su.sres.shadowserver.workers.VacuumCommand;
 import su.sres.shadowserver.workers.ZkParamsCommand;
@@ -158,7 +161,9 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 	bootstrap.addCommand(new DeleteUserCommand());
 	bootstrap.addCommand(new CertificateCommand());
 	bootstrap.addCommand(new ZkParamsCommand());
-	
+	bootstrap.addCommand(new GetRedisSlowlogCommand());
+	bootstrap.addCommand(new GetRedisCommandStatsCommand());
+
 	bootstrap.addBundle(new ProtobufBundle<WhisperServerConfiguration>());
 
 	bootstrap.addBundle(new NameableMigrationsBundle<WhisperServerConfiguration>("accountdb", "accountsdb.xml") {
@@ -193,30 +198,21 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 
 	SharedMetricRegistries.add(Constants.METRICS_NAME, environment.metrics());
 
-/*	Metrics.addRegistry(new WavefrontMeterRegistry(new WavefrontConfig() {
-	    @Override
-	    public String get(final String key) {
-		return null;
-	    }
-
-	    @Override
-	    public String uri() {
-		return config.getMicrometerConfiguration().getUri();
-	    }
-
-	    @Override
-	    public String apiToken() {
-		return config.getMicrometerConfiguration().getApiKey();
-	    }
-	}, Clock.SYSTEM) {
-	    @Override
-	    protected DistributionStatisticConfig defaultHistogramConfig() {
-		return DistributionStatisticConfig.builder()
-			.percentiles(.75, .95, .99, .999)
-			.build()
-			.merge(super.defaultHistogramConfig());
-	    }
-	}); */
+	/*
+	 * Metrics.addRegistry(new WavefrontMeterRegistry(new WavefrontConfig() {
+	 * 
+	 * @Override public String get(final String key) { return null; }
+	 * 
+	 * @Override public String uri() { return
+	 * config.getMicrometerConfiguration().getUri(); }
+	 * 
+	 * @Override public String apiToken() { return
+	 * config.getMicrometerConfiguration().getApiKey(); } }, Clock.SYSTEM) {
+	 * 
+	 * @Override protected DistributionStatisticConfig defaultHistogramConfig() {
+	 * return DistributionStatisticConfig.builder() .percentiles(.75, .95, .99,
+	 * .999) .build() .merge(super.defaultHistogramConfig()); } });
+	 */
 
 	environment.getObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 	environment.getObjectMapper().setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.NONE);
@@ -226,8 +222,8 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 	Jdbi accountJdbi = jdbiFactory.build(environment, config.getAccountsDatabaseConfiguration(), "accountdb");
 
 	// start validation
-		
-	Pair<LicenseStatus, Pair<Integer,Integer>> validationResult = ServerLicenseUtil.validate(config, accountJdbi);
+
+	Pair<LicenseStatus, Pair<Integer, Integer>> validationResult = ServerLicenseUtil.validate(config, accountJdbi);
 
 	LicenseStatus status = validationResult.first();
 	Integer volume = validationResult.second().first();
@@ -263,7 +259,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 	    }
 
 	    System.exit(0);
-	    
+
 	} else {
 	    if (status != LicenseStatus.OK) {
 		if (status == LicenseStatus.OVERSUBSCRIBED) {
@@ -271,7 +267,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 		} else {
 		    logger.warn("Unknown error while checking the License key. Please contact the technical support. Exiting.");
 		}
-		
+
 		System.exit(0);
 	    }
 	}
@@ -305,15 +301,20 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 	ReplicatedJedisPool directoryClient = directoryClientFactory.getRedisClientPool();
 //	ReplicatedJedisPool pushSchedulerClient = pushSchedulerClientFactory.getRedisClientPool();	
 
-	FaultTolerantRedisCluster cacheCluster = new FaultTolerantRedisCluster("main_cache_cluster", config.getCacheClusterConfiguration());
-	FaultTolerantRedisCluster messagesCacheCluster = new FaultTolerantRedisCluster("messages_cluster", config.getMessageCacheConfiguration().getRedisClusterConfiguration());
-	FaultTolerantRedisCluster metricsCluster = new FaultTolerantRedisCluster("metrics_cluster", config.getMetricsClusterConfiguration());
+	ClientResources redisClusterClientResources = ClientResources.builder().build();
+	ConnectionEventLogger.logConnectionEvents(redisClusterClientResources);
+
+	FaultTolerantRedisCluster cacheCluster = new FaultTolerantRedisCluster("main_cache_cluster", config.getCacheClusterConfiguration(), redisClusterClientResources);
+	FaultTolerantRedisCluster messagesCacheCluster = new FaultTolerantRedisCluster("messages_cluster", config.getMessageCacheConfiguration().getRedisClusterConfiguration(), redisClusterClientResources);
+	FaultTolerantRedisCluster metricsCluster = new FaultTolerantRedisCluster("metrics_cluster", config.getMetricsClusterConfiguration(), redisClusterClientResources);
 
 	BlockingQueue<Runnable> keyspaceNotificationDispatchQueue = new ArrayBlockingQueue<>(10_000);
 	Metrics.gaugeCollectionSize(name(getClass(), "keyspaceNotificationDispatchQueueSize"), Collections.emptyList(), keyspaceNotificationDispatchQueue);
 
 	ScheduledExecutorService recurringJobExecutor = environment.lifecycle().scheduledExecutorService(name(getClass(), "recurringJob-%d")).threads(2).build();
 	ExecutorService keyspaceNotificationDispatchExecutor = environment.lifecycle().executorService(name(getClass(), "keyspaceNotification-%d")).maxThreads(16).workQueue(keyspaceNotificationDispatchQueue).build();
+	ExecutorService apnSenderExecutor = environment.lifecycle().executorService(name(getClass(), "apnSender-%d")).maxThreads(1).minThreads(1).build();
+	ExecutorService gcmSenderExecutor = environment.lifecycle().executorService(name(getClass(), "gcmSender-%d")).maxThreads(1).minThreads(1).build();
 
 	ClientPresenceManager clientPresenceManager = new ClientPresenceManager(messagesCacheCluster, recurringJobExecutor, keyspaceNotificationDispatchExecutor);
 
@@ -335,32 +336,34 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 	DeadLetterHandler deadLetterHandler = new DeadLetterHandler(accountsManager, messagesManager);
 	DispatchManager dispatchManager = new DispatchManager(pubSubClientFactory, Optional.of(deadLetterHandler));
 	PubSubManager pubSubManager = new PubSubManager(pubsubClient, dispatchManager);
-//    APNSender                  apnSender                  = new APNSender(accountsManager, config.getApnConfiguration());
-	GCMSender gcmSender = new GCMSender(accountsManager, config.getGcmConfiguration().getApiKey());
-	WebsocketSender websocketSender = new WebsocketSender(messagesManager, pubSubManager, clientPresenceManager);
+	// APNSender apnSender = new APNSender(apnSenderExecutor, accountsManager,
+	// config.getApnConfiguration());
+	GCMSender gcmSender = new GCMSender(gcmSenderExecutor, accountsManager, config.getGcmConfiguration().getApiKey());
 
 // excluded federation, reserved for future purposes
 	// FederatedPeerAuthenticator federatedPeerAuthenticator = new
 	// FederatedPeerAuthenticator(config.getFederationConfiguration());
 
 	RateLimiters rateLimiters = new RateLimiters(config.getLimitsConfiguration(), cacheCluster);
+	ProvisioningManager provisioningManager = new ProvisioningManager(pubSubManager);
 
 	AccountAuthenticator accountAuthenticator = new AccountAuthenticator(accountsManager);
 	DisabledPermittedAccountAuthenticator disabledPermittedAccountAuthenticator = new DisabledPermittedAccountAuthenticator(accountsManager);
 
 	ExternalServiceCredentialGenerator storageCredentialsGenerator = new ExternalServiceCredentialGenerator(config.getSecureStorageServiceConfiguration().getUserAuthenticationTokenSharedSecret(), new byte[0], false);
+	ExternalServiceCredentialGenerator paymentsCredentialsGenerator = new ExternalServiceCredentialGenerator(config.getPaymentsServiceConfiguration().getUserAuthenticationTokenSharedSecret(), new byte[0], false);
 
 //    ApnFallbackManager       apnFallbackManager  = new ApnFallbackManager(pushSchedulerClient, apnSender, accountsManager);
 
-	PushSender pushSender = new PushSender(null, gcmSender, null, websocketSender, config.getPushConfiguration().getQueueSize(), pushLatencyManager);
+	MessageSender messageSender = new MessageSender(null, clientPresenceManager, messagesManager, gcmSender, null, config.getPushConfiguration().getQueueSize(), pushLatencyManager);
 // excluded federation, reserved for future purposes
 	// ReceiptSender receiptSender = new ReceiptSender(accountsManager, pushSender,
 	// federatedClientManager);
-	ReceiptSender receiptSender = new ReceiptSender(accountsManager, pushSender);
+	ReceiptSender receiptSender = new ReceiptSender(accountsManager, messageSender);
 	TurnTokenGenerator turnTokenGenerator = new TurnTokenGenerator(config.getTurnConfiguration());
 	RecaptchaClient recaptchaClient = new RecaptchaClient(config.getRecaptchaConfiguration().getSecret());
 
-	MessagePersister clusterMessagePersister = new MessagePersister(messagesCache, messagesManager, accountsManager, recurringJobExecutor, Duration.ofMinutes(config.getMessageCacheConfiguration().getPersistDelayMinutes()));
+	MessagePersister messagePersister = new MessagePersister(messagesCache, messagesManager, accountsManager, Duration.ofMinutes(config.getMessageCacheConfiguration().getPersistDelayMinutes()));
 
 	ActiveUserCounter activeUserCounter = new ActiveUserCounter(config.getMetricsFactory(), cacheCluster);
 	AccountCleaner accountCleaner = new AccountCleaner(accountsManager);
@@ -373,11 +376,11 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 	// apnSender.setApnFallbackManager(apnFallbackManager);
 	// environment.lifecycle().manage(apnFallbackManager);
 	environment.lifecycle().manage(pubSubManager);
-	environment.lifecycle().manage(pushSender);
+	environment.lifecycle().manage(messageSender);
 	environment.lifecycle().manage(accountDatabaseCrawler);
 	environment.lifecycle().manage(remoteConfigsManager);
 	environment.lifecycle().manage(messagesCache);
-	environment.lifecycle().manage(clusterMessagePersister);
+	environment.lifecycle().manage(messagePersister);
 	environment.lifecycle().manage(clientPresenceManager);
 	environment.lifecycle().manage(featureFlagsManager);
 
@@ -405,7 +408,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 		config.getAwsAttachmentsConfiguration().getBucket());
 	DebugLogController debugLogController = new DebugLogController(rateLimiters, config.getDebugLogsConfiguration().getAccessKey(), config.getDebugLogsConfiguration().getAccessSecret(), config.getDebugLogsConfiguration().getRegion(), config.getDebugLogsConfiguration().getBucket());
 	KeysController keysController = new KeysController(rateLimiters, keys, accountsManager);
-	MessageController messageController = new MessageController(rateLimiters, pushSender, receiptSender, accountsManager, messagesManager, null);
+	MessageController messageController = new MessageController(rateLimiters, messageSender, receiptSender, accountsManager, messagesManager, null);
 	ProfileController profileController = new ProfileController(rateLimiters, accountsManager, profilesManager, usernamesManager, minioClient, profileCdnPolicyGenerator, profileCdnPolicySigner, config.getCdnConfiguration().getBucket(), zkProfileOperations, isZkEnabled);
 	StickerController stickerController = new StickerController(rateLimiters, config.getCdnConfiguration().getAccessKey(), config.getCdnConfiguration().getAccessSecret(), config.getCdnConfiguration().getRegion(), config.getCdnConfiguration().getBucket());
 	RemoteConfigController remoteConfigController = new RemoteConfigController(remoteConfigsManager, config.getRemoteConfigConfiguration().getAuthorizedTokens(), config.getRemoteConfigConfiguration().getGlobalConfig());
@@ -448,10 +451,11 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 	// environment.jersey().register(new FederationControllerV2(accountsManager,
 	// attachmentController, messageController, keysController));
 
-	environment.jersey().register(new ProvisioningController(rateLimiters, pushSender));
+	environment.jersey().register(new ProvisioningController(rateLimiters, provisioningManager));
 	environment.jersey().register(new CertificateController(new CertificateGenerator(config.getDeliveryCertificate().getCertificate(), config.getDeliveryCertificate().getPrivateKey(), config.getDeliveryCertificate().getExpiresDays()), zkAuthOperations, isZkEnabled));
 
 	environment.jersey().register(new SecureStorageController(storageCredentialsGenerator));
+	environment.jersey().register(new PaymentsController(paymentsCredentialsGenerator));
 	environment.jersey().register(attachmentControllerV1);
 	environment.jersey().register(attachmentControllerV2);
 	environment.jersey().register(debugLogController);
@@ -465,7 +469,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 	///
 	WebSocketEnvironment<Account> webSocketEnvironment = new WebSocketEnvironment<>(environment, config.getWebSocketConfiguration(), 90000);
 	webSocketEnvironment.setAuthenticator(new WebSocketAccountAuthenticator(accountAuthenticator));
-	webSocketEnvironment.setConnectListener(new AuthenticatedConnectListener(receiptSender, messagesManager, null, clientPresenceManager));
+	webSocketEnvironment.setConnectListener(new AuthenticatedConnectListener(receiptSender, messagesManager, messageSender, null, clientPresenceManager));
 	webSocketEnvironment.jersey().register(new MetricsApplicationEventListener(TrafficSource.WEBSOCKET));
 	webSocketEnvironment.jersey().register(new KeepAliveController(clientPresenceManager));
 	webSocketEnvironment.jersey().register(messageController);
@@ -494,6 +498,9 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 	provisioning.addMapping("/v1/websocket/provisioning/");
 	provisioning.setAsyncSupported(true);
 
+	environment.admin().addTask(new EnableRequestLoggingTask());
+	environment.admin().addTask(new DisableRequestLoggingTask());
+
 ///
 
 	environment.healthChecks().register("directory", new RedisHealthCheck(directoryClient));
@@ -504,6 +511,12 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 	environment.metrics().register(name(NetworkSentGauge.class, "bytes_sent"), new NetworkSentGauge());
 	environment.metrics().register(name(NetworkReceivedGauge.class, "bytes_received"), new NetworkReceivedGauge());
 	environment.metrics().register(name(FileDescriptorGauge.class, "fd_count"), new FileDescriptorGauge());
+	environment.metrics().register(name(MaxFileDescriptorGauge.class, "max_fd_count"), new MaxFileDescriptorGauge());
+	environment.metrics().register(name(OperatingSystemMemoryGauge.class, "buffers"), new OperatingSystemMemoryGauge("Buffers"));
+	environment.metrics().register(name(OperatingSystemMemoryGauge.class, "cached"), new OperatingSystemMemoryGauge("Cached"));
+
+	BufferPoolGauges.registerMetrics();
+	GarbageCollectionGauges.registerMetrics();
     }
 
     private void registerExceptionMappers(Environment environment, WebSocketEnvironment<Account> webSocketEnvironment, WebSocketEnvironment<Account> provisioningEnvironment) {

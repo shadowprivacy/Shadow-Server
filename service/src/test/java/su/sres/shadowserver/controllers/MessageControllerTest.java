@@ -27,7 +27,6 @@ import java.util.concurrent.TimeUnit;
 import io.dropwizard.auth.PolymorphicAuthValueFactoryProvider;
 import io.dropwizard.testing.junit.ResourceTestRule;
 
-import su.sres.shadowserver.controllers.MessageController;
 import su.sres.shadowserver.entities.IncomingMessageList;
 import su.sres.shadowserver.entities.MismatchedDevices;
 import su.sres.shadowserver.entities.OutgoingMessageEntity;
@@ -40,7 +39,7 @@ import su.sres.shadowserver.entities.MessageProtos.Envelope;
 import su.sres.shadowserver.limits.RateLimiter;
 import su.sres.shadowserver.limits.RateLimiters;
 import su.sres.shadowserver.push.ApnFallbackManager;
-import su.sres.shadowserver.push.PushSender;
+import su.sres.shadowserver.push.MessageSender;
 import su.sres.shadowserver.push.ReceiptSender;
 import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.storage.AccountsManager;
@@ -52,10 +51,20 @@ import su.sres.shadowserver.util.Base64;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.anyBoolean;
+import static org.mockito.Mockito.anyString;
+import static org.mockito.Mockito.argThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 import static su.sres.shadowserver.util.JsonHelpers.asJson;
 import static su.sres.shadowserver.util.JsonHelpers.jsonFixture;
 
@@ -67,7 +76,7 @@ public class MessageControllerTest {
     private static final String MULTI_DEVICE_RECIPIENT = "+14152222222";
     private static final UUID MULTI_DEVICE_UUID = UUID.randomUUID();
 
-    private final PushSender pushSender = mock(PushSender.class);
+    private final MessageSender messageSender = mock(MessageSender.class);
     private final ReceiptSender receiptSender = mock(ReceiptSender.class);
     // federation excluded, reserved for future use
     // private final FederatedClientManager federatedClientManager =
@@ -85,7 +94,7 @@ public class MessageControllerTest {
 	    .addProvider(new PolymorphicAuthValueFactoryProvider.Binder<>(
 		    ImmutableSet.of(Account.class, DisabledPermittedAccount.class)))
 	    .setTestContainerFactory(new GrizzlyWebTestContainerFactory())
-	    .addResource(new MessageController(rateLimiters, pushSender, receiptSender, accountsManager,
+	    .addResource(new MessageController(rateLimiters, messageSender, receiptSender, accountsManager,
 		    // federation excluded, reserved for future use
 		    // messagesManager, federatedClientManager,
 		    // apnFallbackManager))
@@ -96,15 +105,15 @@ public class MessageControllerTest {
     public void setup() throws Exception {
 	Set<Device> singleDeviceList = new HashSet<Device>() {
 	    {
-		add(new Device(1, null, "foo", "bar", "baz", "isgcm", null, null, false, 111, new SignedPreKey(333, "baz", "boop"), System.currentTimeMillis(), System.currentTimeMillis(), "Test", 0, new Device.DeviceCapabilities(true, false, false, true, true)));
+		add(new Device(1, null, "foo", "bar", "baz", "isgcm", null, null, false, 111, new SignedPreKey(333, "baz", "boop"), System.currentTimeMillis(), System.currentTimeMillis(), "Test", 0, new Device.DeviceCapabilities(true, false, false, true, true, false)));
 	    }
 	};
 
 	Set<Device> multiDeviceList = new HashSet<Device>() {
 	    {
-		add(new Device(1, null, "foo", "bar", "baz", "isgcm", null, null, false, 222, new SignedPreKey(111, "foo", "bar"), System.currentTimeMillis(), System.currentTimeMillis(), "Test", 0, new Device.DeviceCapabilities(true, false, false, true, false)));
-		add(new Device(2, null, "foo", "bar", "baz", "isgcm", null, null, false, 333, new SignedPreKey(222, "oof", "rab"), System.currentTimeMillis(), System.currentTimeMillis(), "Test", 0, new Device.DeviceCapabilities(true, false, false, true, false)));
-		add(new Device(3, null, "foo", "bar", "baz", "isgcm", null, null, false, 444, null, System.currentTimeMillis() - TimeUnit.DAYS.toMillis(31), System.currentTimeMillis(), "Test", 0, new Device.DeviceCapabilities(false, false, false, false, false)));
+		      add(new Device(1, null, "foo", "bar", "baz", "isgcm", null, null, false, 222, new SignedPreKey(111, "foo", "bar"), System.currentTimeMillis(), System.currentTimeMillis(), "Test", 0, new Device.DeviceCapabilities(true, false, false, true, false, false)));
+		      add(new Device(2, null, "foo", "bar", "baz", "isgcm", null, null, false, 333, new SignedPreKey(222, "oof", "rab"), System.currentTimeMillis(), System.currentTimeMillis(), "Test", 0, new Device.DeviceCapabilities(true, false, false, true, false, false)));
+		      add(new Device(3, null, "foo", "bar", "baz", "isgcm", null, null, false, 444, null, System.currentTimeMillis() - TimeUnit.DAYS.toMillis(31), System.currentTimeMillis(), "Test", 0, new Device.DeviceCapabilities(false, false, false, false, false, false)));
 	    }
 	};
 
@@ -148,7 +157,7 @@ public class MessageControllerTest {
 	assertThat("Good Response", response.getStatus(), is(equalTo(200)));
 
 	ArgumentCaptor<Envelope> captor = ArgumentCaptor.forClass(Envelope.class);
-	verify(pushSender, times(1)).sendMessage(any(Account.class), any(Device.class), captor.capture(), eq(false));
+	verify(messageSender, times(1)).sendMessage(any(Account.class), any(Device.class), captor.capture(), eq(false));
 
 	assertTrue(captor.getValue().hasSource());
 	assertTrue(captor.getValue().hasSourceDevice());
@@ -164,7 +173,7 @@ public class MessageControllerTest {
 	assertThat("Good Response", response.getStatus(), is(equalTo(200)));
 
 	ArgumentCaptor<Envelope> captor = ArgumentCaptor.forClass(Envelope.class);
-	verify(pushSender, times(1)).sendMessage(any(Account.class), any(Device.class), captor.capture(), eq(false));
+	verify(messageSender, times(1)).sendMessage(any(Account.class), any(Device.class), captor.capture(), eq(false));
 
 	assertFalse(captor.getValue().hasSource());
 	assertFalse(captor.getValue().hasSourceDevice());
@@ -193,7 +202,7 @@ public class MessageControllerTest {
 	assertThat("Good Response Body", asJson(response.readEntity(MismatchedDevices.class)),
 		is(equalTo(jsonFixture("fixtures/missing_device_response.json"))));
 
-	verifyNoMoreInteractions(pushSender);
+	verifyNoMoreInteractions(messageSender);
     }
 
     @Test
@@ -209,7 +218,7 @@ public class MessageControllerTest {
 	assertThat("Good Response Body", asJson(response.readEntity(MismatchedDevices.class)),
 		is(equalTo(jsonFixture("fixtures/missing_device_response2.json"))));
 
-	verifyNoMoreInteractions(pushSender);
+	verifyNoMoreInteractions(messageSender);
     }
 
     @Test
@@ -222,7 +231,7 @@ public class MessageControllerTest {
 
 	assertThat("Good Response Code", response.getStatus(), is(equalTo(200)));
 
-	verify(pushSender, times(2)).sendMessage(any(Account.class), any(Device.class), any(Envelope.class), eq(false));
+	verify(messageSender, times(2)).sendMessage(any(Account.class), any(Device.class), any(Envelope.class), eq(false));
     }
 
     @Test
@@ -238,7 +247,7 @@ public class MessageControllerTest {
 	assertThat("Good Response Body", asJson(response.readEntity(StaleDevices.class)),
 		is(equalTo(jsonFixture("fixtures/mismatched_registration_id.json"))));
 
-	verifyNoMoreInteractions(pushSender);
+	verifyNoMoreInteractions(messageSender);
 
     }
 

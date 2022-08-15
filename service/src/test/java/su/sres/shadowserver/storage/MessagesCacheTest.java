@@ -7,6 +7,7 @@ import su.sres.shadowserver.redis.AbstractRedisClusterTest;
 
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
@@ -32,6 +33,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 @RunWith(JUnitParamsRunner.class)
@@ -74,6 +76,17 @@ public class MessagesCacheTest extends AbstractRedisClusterTest {
     public void testInsert(final boolean sealedSender) {
 	final UUID messageGuid = UUID.randomUUID();
 	assertTrue(messagesCache.insert(messageGuid, DESTINATION_UUID, DESTINATION_DEVICE_ID, generateRandomMessage(messageGuid, sealedSender)) > 0);
+    }
+
+    @Test
+    public void testDoubleInsertGuid() {
+	final UUID duplicateGuid = UUID.randomUUID();
+	final MessageProtos.Envelope duplicateMessage = generateRandomMessage(duplicateGuid, false);
+
+	final long firstId = messagesCache.insert(duplicateGuid, DESTINATION_UUID, DESTINATION_DEVICE_ID, duplicateMessage);
+	final long secondId = messagesCache.insert(duplicateGuid, DESTINATION_UUID, DESTINATION_DEVICE_ID, duplicateMessage);
+
+	assertEquals(firstId, secondId);
     }
 
     @Test
@@ -150,6 +163,17 @@ public class MessagesCacheTest extends AbstractRedisClusterTest {
 		removedMessages);
 
 	assertEquals(messagesToPreserve, messagesCache.getMessagesToPersist(DESTINATION_UUID, DESTINATION_DEVICE_ID, messageCount));
+    }
+
+    @Test
+    public void testHasMessages() {
+	assertFalse(messagesCache.hasMessages(DESTINATION_UUID, DESTINATION_DEVICE_ID));
+
+	final UUID messageGuid = UUID.randomUUID();
+	final MessageProtos.Envelope message = generateRandomMessage(messageGuid, true);
+	messagesCache.insert(messageGuid, DESTINATION_UUID, DESTINATION_DEVICE_ID, message);
+
+	assertTrue(messagesCache.hasMessages(DESTINATION_UUID, DESTINATION_DEVICE_ID));
     }
 
     @Test
@@ -331,7 +355,7 @@ public class MessagesCacheTest extends AbstractRedisClusterTest {
 	messagesCache.addMessageAvailabilityListener(DESTINATION_UUID, DESTINATION_DEVICE_ID, listener);
 
 	messagesCache.lockQueueForPersistence(DESTINATION_UUID, DESTINATION_DEVICE_ID);
-        messagesCache.unlockQueueForPersistence(DESTINATION_UUID, DESTINATION_DEVICE_ID);
+	messagesCache.unlockQueueForPersistence(DESTINATION_UUID, DESTINATION_DEVICE_ID);
 
 	synchronized (notified) {
 	    while (!notified.get()) {

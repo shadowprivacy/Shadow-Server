@@ -696,7 +696,7 @@ public class AccountController {
     @DELETE
     @Path("/me")
     public void deleteAccount(@Auth Account account) {
-	accounts.delete(Stream.of(account).collect(Collectors.toCollection(HashSet::new)));
+	accounts.delete(Stream.of(account).collect(Collectors.toCollection(HashSet::new)), AccountsManager.DeletionReason.USER_REQUEST);
     }
 
     private boolean shouldAutoBlock(String requester) {

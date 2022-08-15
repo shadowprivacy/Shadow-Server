@@ -1,7 +1,10 @@
 package su.sres.shadowserver.websocket;
 
 import com.google.protobuf.ByteString;
+import com.google.protobuf.InvalidProtocolBufferException;
+
 import org.eclipse.jetty.websocket.api.UpgradeRequest;
+import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.mockito.ArgumentMatchers;
@@ -32,8 +35,8 @@ import su.sres.shadowserver.entities.OutgoingMessageEntity;
 import su.sres.shadowserver.entities.OutgoingMessageEntityList;
 import su.sres.shadowserver.push.ApnFallbackManager;
 import su.sres.shadowserver.push.ClientPresenceManager;
+import su.sres.shadowserver.push.MessageSender;
 import su.sres.shadowserver.push.ReceiptSender;
-import su.sres.shadowserver.push.WebsocketSender;
 import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.storage.AccountsManager;
 import su.sres.shadowserver.storage.Device;
@@ -43,18 +46,16 @@ import su.sres.shadowserver.util.Base64;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyInt;
 import static org.mockito.Mockito.anyLong;
 import static org.mockito.Mockito.anyString;
-import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 import static su.sres.shadowserver.entities.MessageProtos.Envelope;
 
@@ -66,20 +67,31 @@ public class WebSocketConnectionTest {
     private static final String VALID_PASSWORD = "secure";
     private static final String INVALID_PASSWORD = "insecure";
 
-    private static final AccountAuthenticator accountAuthenticator = mock(AccountAuthenticator.class);
-    private static final AccountsManager accountsManager = mock(AccountsManager.class);
-    private static final Account account = mock(Account.class);
-    private static final Device device = mock(Device.class);
-    private static final UpgradeRequest upgradeRequest = mock(UpgradeRequest.class);
-    private static final ReceiptSender receiptSender = mock(ReceiptSender.class);
-    private static final ApnFallbackManager apnFallbackManager = mock(ApnFallbackManager.class);
+    private AccountAuthenticator accountAuthenticator;
+    private AccountsManager accountsManager;
+    private Account account;
+    private Device device;
+    private UpgradeRequest upgradeRequest;
+    private ReceiptSender receiptSender;
+    private ApnFallbackManager apnFallbackManager;
+
+    @Before
+    public void setup() {
+	accountAuthenticator = mock(AccountAuthenticator.class);
+	accountsManager = mock(AccountsManager.class);
+	account = mock(Account.class);
+	device = mock(Device.class);
+	upgradeRequest = mock(UpgradeRequest.class);
+	receiptSender = mock(ReceiptSender.class);
+	apnFallbackManager = mock(ApnFallbackManager.class);
+    }
 
     @Test
     @Ignore
     public void testCredentials() throws Exception {
 	MessagesManager storedMessages = mock(MessagesManager.class);
 	WebSocketAccountAuthenticator webSocketAuthenticator = new WebSocketAccountAuthenticator(accountAuthenticator);
-	AuthenticatedConnectListener connectListener = new AuthenticatedConnectListener(receiptSender, storedMessages, apnFallbackManager, mock(ClientPresenceManager.class));
+	AuthenticatedConnectListener connectListener = new AuthenticatedConnectListener(receiptSender, storedMessages, mock(MessageSender.class), apnFallbackManager, mock(ClientPresenceManager.class));
 	WebSocketSessionContext sessionContext = mock(WebSocketSessionContext.class);
 
 	when(accountAuthenticator.authenticate(eq(new BasicCredentials(VALID_USER, VALID_PASSWORD))))
@@ -190,7 +202,7 @@ public class WebSocketConnectionTest {
 		});
 
 	WebSocketConnection connection = new WebSocketConnection(receiptSender, storedMessages,
-		account, device, client, "someid");
+		account, device, client);
 
 	connection.start();
 	verify(client, times(3)).sendRequest(eq("PUT"), eq("/api/v1/message"), ArgumentMatchers.nullable(List.class), ArgumentMatchers.<Optional<byte[]>>any());
@@ -215,7 +227,7 @@ public class WebSocketConnectionTest {
     public void testOnlineSend() throws Exception {
 	final MessagesManager messagesManager = mock(MessagesManager.class);
 	final WebSocketClient client = mock(WebSocketClient.class);
-	final WebSocketConnection connection = new WebSocketConnection(receiptSender, messagesManager, account, device, client, "concurrency");
+	final WebSocketConnection connection = new WebSocketConnection(receiptSender, messagesManager, account, device, client);
 
 	final UUID accountUuid = UUID.randomUUID();
 
@@ -275,7 +287,6 @@ public class WebSocketConnectionTest {
     @Test
     public void testPendingSend() throws Exception {
 	MessagesManager storedMessages = mock(MessagesManager.class);
-	WebsocketSender websocketSender = mock(WebsocketSender.class);
 
 	final Envelope firstMessage = Envelope.newBuilder()
 		.setLegacyMessage(ByteString.copyFrom("first".getBytes()))
@@ -351,7 +362,7 @@ public class WebSocketConnectionTest {
 		});
 
 	WebSocketConnection connection = new WebSocketConnection(receiptSender, storedMessages,
-		account, device, client, "onemoreid");
+		account, device, client);
 
 	connection.start();
 
@@ -365,7 +376,6 @@ public class WebSocketConnectionTest {
 	futures.get(0).completeExceptionally(new IOException());
 
 	verify(receiptSender, times(1)).sendReceipt(eq(account), eq("sender2"), eq(secondMessage.getTimestamp()));
-	verifyNoMoreInteractions(websocketSender);
 	connection.stop();
 	verify(client).close(anyInt(), anyString());
     }
@@ -374,7 +384,7 @@ public class WebSocketConnectionTest {
     public void testProcessStoredMessageConcurrency() throws InterruptedException {
 	final MessagesManager messagesManager = mock(MessagesManager.class);
 	final WebSocketClient client = mock(WebSocketClient.class);
-	final WebSocketConnection connection = new WebSocketConnection(receiptSender, messagesManager, account, device, client, "concurrency");
+	final WebSocketConnection connection = new WebSocketConnection(receiptSender, messagesManager, account, device, client);
 
 	when(account.getUserLogin()).thenReturn("+18005551234");
 	when(account.getUuid()).thenReturn(UUID.randomUUID());
@@ -435,7 +445,7 @@ public class WebSocketConnectionTest {
     public void testProcessStoredMessagesMultiplePages() throws InterruptedException {
 	final MessagesManager messagesManager = mock(MessagesManager.class);
 	final WebSocketClient client = mock(WebSocketClient.class);
-	final WebSocketConnection connection = new WebSocketConnection(receiptSender, messagesManager, account, device, client, "concurrency");
+	final WebSocketConnection connection = new WebSocketConnection(receiptSender, messagesManager, account, device, client);
 
 	when(account.getUserLogin()).thenReturn("+18005551234");
 	when(account.getUuid()).thenReturn(UUID.randomUUID());
@@ -472,11 +482,61 @@ public class WebSocketConnectionTest {
 	verify(client).sendRequest(eq("PUT"), eq("/api/v1/queue/empty"), any(List.class), eq(Optional.empty()));
     }
 
+    @Test(timeout = 5000L)
+    public void testProcessStoredMessagesContainsSenderUuid() throws InterruptedException {
+	final MessagesManager messagesManager = mock(MessagesManager.class);
+	final WebSocketClient client = mock(WebSocketClient.class);
+	final WebSocketConnection connection = new WebSocketConnection(receiptSender, messagesManager, account, device, client);
+
+	when(account.getUserLogin()).thenReturn("+18005551234");
+	when(account.getUuid()).thenReturn(UUID.randomUUID());
+	when(device.getId()).thenReturn(1L);
+	when(client.getUserAgent()).thenReturn("Test-UA");
+
+	final UUID senderUuid = UUID.randomUUID();
+	final List<OutgoingMessageEntity> messages = List.of(createMessage(1L, false, "senderE164", senderUuid, 1111L, false, "message the first"));
+	final OutgoingMessageEntityList firstPage = new OutgoingMessageEntityList(messages, false);
+
+	when(messagesManager.getMessagesForDevice(account.getUserLogin(), account.getUuid(), 1L, client.getUserAgent(), false)).thenReturn(firstPage);
+
+	final WebSocketResponseMessage successResponse = mock(WebSocketResponseMessage.class);
+	when(successResponse.getStatus()).thenReturn(200);
+
+	final CountDownLatch sendLatch = new CountDownLatch(messages.size());
+
+	when(client.sendRequest(eq("PUT"), eq("/api/v1/message"), any(List.class), any(Optional.class))).thenAnswer(invocation -> {
+	    sendLatch.countDown();
+	    return CompletableFuture.completedFuture(successResponse);
+	});
+
+	connection.processStoredMessages();
+
+	sendLatch.await();
+
+	verify(client, times(messages.size())).sendRequest(eq("PUT"), eq("/api/v1/message"), any(List.class), argThat(argument -> {
+	    if (argument.isEmpty()) {
+		return false;
+	    }
+
+	    final byte[] body = argument.get();
+	    try {
+		final Envelope envelope = Envelope.parseFrom(body);
+		if (!envelope.hasSourceUuid() || envelope.getSourceUuid().length() == 0) {
+		    return false;
+		}
+		return envelope.getSourceUuid().equals(senderUuid.toString());
+	    } catch (InvalidProtocolBufferException e) {
+		return false;
+	    }
+	}));
+	verify(client).sendRequest(eq("PUT"), eq("/api/v1/queue/empty"), any(List.class), eq(Optional.empty()));
+    }
+
     @Test
     public void testProcessStoredMessagesSingleEmptyCall() {
 	final MessagesManager messagesManager = mock(MessagesManager.class);
 	final WebSocketClient client = mock(WebSocketClient.class);
-	final WebSocketConnection connection = new WebSocketConnection(receiptSender, messagesManager, account, device, client, "concurrency");
+	final WebSocketConnection connection = new WebSocketConnection(receiptSender, messagesManager, account, device, client);
 	final UUID accountUuid = UUID.randomUUID();
 
 	when(account.getUserLogin()).thenReturn("+18005551234");
@@ -507,7 +567,7 @@ public class WebSocketConnectionTest {
     public void testRequeryOnStateMismatch() throws InterruptedException {
 	final MessagesManager messagesManager = mock(MessagesManager.class);
 	final WebSocketClient client = mock(WebSocketClient.class);
-	final WebSocketConnection connection = new WebSocketConnection(receiptSender, messagesManager, account, device, client, "concurrency");
+	final WebSocketConnection connection = new WebSocketConnection(receiptSender, messagesManager, account, device, client);
 	final UUID accountUuid = UUID.randomUUID();
 
 	when(account.getUserLogin()).thenReturn("+18005551234");
@@ -552,7 +612,7 @@ public class WebSocketConnectionTest {
     public void testProcessCachedMessagesOnly() {
 	final MessagesManager messagesManager = mock(MessagesManager.class);
 	final WebSocketClient client = mock(WebSocketClient.class);
-	final WebSocketConnection connection = new WebSocketConnection(receiptSender, messagesManager, account, device, client, "concurrency");
+	final WebSocketConnection connection = new WebSocketConnection(receiptSender, messagesManager, account, device, client);
 
 	final UUID accountUuid = UUID.randomUUID();
 
@@ -587,7 +647,7 @@ public class WebSocketConnectionTest {
     public void testProcessDatabaseMessagesAfterPersist() {
 	final MessagesManager messagesManager = mock(MessagesManager.class);
 	final WebSocketClient client = mock(WebSocketClient.class);
-	final WebSocketConnection connection = new WebSocketConnection(receiptSender, messagesManager, account, device, client, "concurrency");
+	final WebSocketConnection connection = new WebSocketConnection(receiptSender, messagesManager, account, device, client);
 
 	final UUID accountUuid = UUID.randomUUID();
 

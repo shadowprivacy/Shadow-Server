@@ -252,15 +252,9 @@ public class Device {
 	final boolean groupsV2Supported;
 
 	if (this.capabilities != null) {
-	    boolean ios = this.apnId != null || this.voipApnId != null;
-	    boolean android = isMaster() && !ios;
+	    final boolean ios = this.apnId != null || this.voipApnId != null;
 
-	    if (android)
-		groupsV2Supported = this.capabilities.isGv2() || this.capabilities.isGv2_2() || this.capabilities.isGv2_3();
-	    else if (ios)
-		groupsV2Supported = this.capabilities.isGv2_2() || this.capabilities.isGv2_3();
-	    else
-		groupsV2Supported = this.capabilities.isGv2_3();
+	    groupsV2Supported = this.capabilities.isGv2_3() || (ios && this.capabilities.isGv2_2());
 
 	} else {
 	    groupsV2Supported = false;
@@ -299,15 +293,19 @@ public class Device {
 	@JsonProperty
 	private boolean transfer;
 
+	@JsonProperty("gv1-migration")
+	private boolean gv1Migration;
+
 	public DeviceCapabilities() {
 	}
 
-	public DeviceCapabilities(boolean gv2, final boolean gv2_2, final boolean gv2_3, boolean storage, boolean transfer) {
+	public DeviceCapabilities(boolean gv2, final boolean gv2_2, final boolean gv2_3, boolean storage, boolean transfer, boolean gv1Migration) {
 	    this.gv2 = gv2;
 	    this.gv2_2 = gv2_2;
 	    this.gv2_3 = gv2_3;
 	    this.storage = storage;
 	    this.transfer = transfer;
+	    this.gv1Migration = gv1Migration;
 	}
 
 	public boolean isGv2() {
@@ -328,6 +326,10 @@ public class Device {
 
 	public boolean isTransfer() {
 	    return transfer;
+	}
+
+	public boolean isGv1Migration() {
+	    return gv1Migration;
 	}
     }
 }

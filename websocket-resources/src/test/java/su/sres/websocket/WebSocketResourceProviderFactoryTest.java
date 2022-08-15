@@ -1,3 +1,7 @@
+/*
+ * Copyright 2013-2020 Signal Messenger, LLC
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
 package su.sres.websocket;
 
 import org.eclipse.jetty.websocket.api.Session;
@@ -18,9 +22,14 @@ import java.security.Principal;
 import java.util.Optional;
 
 import io.dropwizard.jersey.DropwizardResourceConfig;
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.mockito.Matchers.eq;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
 public class WebSocketResourceProviderFactoryTest {
 

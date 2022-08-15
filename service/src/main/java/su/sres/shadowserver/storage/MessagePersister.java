@@ -12,15 +12,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import su.sres.shadowserver.entities.MessageProtos;
 import su.sres.shadowserver.util.Constants;
+import su.sres.shadowserver.util.Util;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
 
 import static com.codahale.metrics.MetricRegistry.name;
 
@@ -32,29 +30,43 @@ public class MessagePersister implements Managed {
 
     private final Duration persistDelay;
 
-    private final ScheduledExecutorService scheduledExecutorService;
-    private ScheduledFuture<?> persistQueuesFuture;
+    private final Thread workerThread;
+    private volatile boolean running;
 
-    private final MetricRegistry metricRegistry = SharedMetricRegistries.getOrCreate(Constants.METRICS_NAME);
-    private final Timer getQueuesTimer = metricRegistry.timer(name(MessagePersister.class, "getQueues"));
-    private final Timer persistQueueTimer = metricRegistry.timer(name(MessagePersister.class, "persistQueue"));
-    private final Meter          persistMessageMeter    = metricRegistry.meter(name(MessagePersister.class, "persistMessage"));
-    private final Histogram queueCountHistogram = metricRegistry.histogram(name(MessagePersister.class, "queueCount"));
-    private final Histogram queueSizeHistogram = metricRegistry.histogram(name(MessagePersister.class, "queueSize"));
+    private final MetricRegistry metricRegistry             = SharedMetricRegistries.getOrCreate(Constants.METRICS_NAME);
+    private final Timer          getQueuesTimer             = metricRegistry.timer(name(MessagePersister.class, "getQueues"));
+    private final Timer          persistQueueTimer          = metricRegistry.timer(name(MessagePersister.class, "persistQueue"));
+    private final Meter          persistMessageMeter        = metricRegistry.meter(name(MessagePersister.class, "persistMessage"));
+    private final Meter          persistQueueExceptionMeter = metricRegistry.meter(name(MessagePersister.class, "persistQueueException"));
+    private final Histogram      queueCountHistogram        = metricRegistry.histogram(name(MessagePersister.class, "queueCount"));
+    private final Histogram      queueSizeHistogram         = metricRegistry.histogram(name(MessagePersister.class, "queueSize"));
 
     static final int QUEUE_BATCH_LIMIT = 100;
     static final int MESSAGE_BATCH_LIMIT = 100;
-
-    static final String ENABLE_PERSISTENCE_FLAG = "enable-cluster-persister";
-
+    
     private static final Logger logger = LoggerFactory.getLogger(MessagePersister.class);
 
-    public MessagePersister(final MessagesCache messagesCache, final MessagesManager messagesManager, final AccountsManager accountsManager, final ScheduledExecutorService scheduledExecutorService, final Duration persistDelay) {
+    public MessagePersister(final MessagesCache messagesCache, final MessagesManager messagesManager, final AccountsManager accountsManager, final Duration persistDelay) {
 	this.messagesCache = messagesCache;
 	this.messagesManager = messagesManager;
 	this.accountsManager = accountsManager;
 	this.persistDelay = persistDelay;
-	this.scheduledExecutorService = scheduledExecutorService;
+	this.workerThread = new Thread(() -> {
+	    while (running) {
+		try {
+		    final int queuesPersisted = persistNextQueues(Instant.now());
+		    queueCountHistogram.update(queuesPersisted);
+
+		    if (queuesPersisted == 0) {
+			Util.sleep(100);
+		    }
+		} catch (final Throwable t) {
+		    logger.warn("Failed to persist queues", t);
+		}
+	    }
+	}, "MessagePersisterWorker");
+
+	metricRegistry.gauge(name(getClass(), "workerThreadRunning"), () -> () -> workerThread.isAlive() ? 1 : 0);
     }
 
     @VisibleForTesting
@@ -64,28 +76,23 @@ public class MessagePersister implements Managed {
 
     @Override
     public void start() {
-	if (persistQueuesFuture != null) {
-	    persistQueuesFuture.cancel(false);
-	}
-
-	persistQueuesFuture = scheduledExecutorService.scheduleWithFixedDelay(() -> {
-	    try {
-		persistNextQueues(Instant.now());
-	    } catch (final Exception e) {
-		logger.warn("Failed to persist queues", e);
-	    }
-	}, 0, 100, TimeUnit.MILLISECONDS);
+	running = true;
+	workerThread.start();
     }
 
     @Override
     public void stop() {
-	if (persistQueuesFuture != null) {
-	    persistQueuesFuture.cancel(false);
+	running = false;
+
+	try {
+	    workerThread.join();
+	} catch (final InterruptedException e) {
+	    logger.warn("Interrupted while waiting for worker thread to complete current operation");
 	}
     }
 
     @VisibleForTesting
-    void persistNextQueues(final Instant currentTime) {
+    int persistNextQueues(final Instant currentTime) {
 	final int slot = messagesCache.getNextSlotToPersist();
 
 	List<String> queuesToPersist;
@@ -103,6 +110,7 @@ public class MessagePersister implements Managed {
 		try {
 		    persistQueue(accountUuid, deviceId);
 		} catch (final Exception e) {
+		    persistQueueExceptionMeter.mark();
 		    logger.warn("Failed to persist queue {}::{}; will schedule for retry", accountUuid, deviceId, e);
 		    messagesCache.addQueueToPersist(accountUuid, deviceId);
 		}
@@ -111,7 +119,7 @@ public class MessagePersister implements Managed {
 	    queuesPersisted += queuesToPersist.size();
 	} while (queuesToPersist.size() >= QUEUE_BATCH_LIMIT);
 
-	queueCountHistogram.update(queuesPersisted);
+	return queuesPersisted;
     }
 
     @VisibleForTesting
@@ -129,7 +137,7 @@ public class MessagePersister implements Managed {
 	}
 
 	try (final Timer.Context ignored = persistQueueTimer.time()) {
-	    messagesCache.lockQueueForPersistence(accountUuid, deviceId);
+	    messagesCache.lockQueueForPersistence(accountUuid, deviceId);	    
 
 	    try {
 		int messageCount = 0;
@@ -140,7 +148,7 @@ public class MessagePersister implements Managed {
 
 		    messagesManager.persistMessages(accountNumber, accountUuid, deviceId, messages);
 		    messageCount += messages.size();
-		    
+
 		    persistMessageMeter.mark(messages.size());
 		} while (!messages.isEmpty());
 

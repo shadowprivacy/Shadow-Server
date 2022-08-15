@@ -245,11 +245,16 @@ public class DeviceController {
     private boolean isCapabilityDowngrade(Account account, DeviceCapabilities capabilities, String userAgent) {
 	boolean isDowngrade = false;
 
+	if (account.isGv1MigrationSupported() && !capabilities.isGv1Migration()) {
+	    isDowngrade = true;
+	}
+
 	if (account.isGroupsV2Supported()) {
 	    try {
 		switch (UserAgentUtil.parseUserAgentString(userAgent).getPlatform()) {
+		case DESKTOP:
 		case ANDROID: {
-		    if (!capabilities.isGv2() && !capabilities.isGv2_2() && !capabilities.isGv2_3()) {
+		    if (!capabilities.isGv2_3()) {
 			isDowngrade = true;
 		    }
 
@@ -264,13 +269,6 @@ public class DeviceController {
 		    break;
 		}
 
-		case DESKTOP: {
-		    if (!capabilities.isGv2_3()) {
-			isDowngrade = true;
-		    }
-
-		    break;
-		}
 		}
 	    } catch (final UnrecognizedUserAgentException e) {
 		// If we can't parse the UA string, the client is for sure too old to support

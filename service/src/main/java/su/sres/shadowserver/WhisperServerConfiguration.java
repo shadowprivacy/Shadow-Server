@@ -186,6 +186,11 @@ public class WhisperServerConfiguration extends Configuration {
     @Valid
     @NotNull
     @JsonProperty
+    private PaymentsServiceConfiguration paymentsService;
+
+    @Valid
+    @NotNull
+    @JsonProperty
     private ZkConfig zkConfig;
 
     @Valid
@@ -334,6 +339,10 @@ public class WhisperServerConfiguration extends Configuration {
 
     public ServiceConfiguration getServiceConfiguration() {
 	return serviceConfiguration;
+    }
+
+    public PaymentsServiceConfiguration getPaymentsServiceConfiguration() {
+	return paymentsService;
     }
 
     public ZkConfig getZkConfig() {
