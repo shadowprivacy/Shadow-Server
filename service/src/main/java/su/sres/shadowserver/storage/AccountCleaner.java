@@ -64,7 +64,7 @@ public class AccountCleaner extends AccountDatabaseCrawlerListener {
 	    }
 	}
 
-	accountsManager.delete(accountsToDelete, AccountsManager.DeletionReason.EXPIRED);
+	if (!accountsToDelete.isEmpty()) accountsManager.delete(accountsToDelete, AccountsManager.DeletionReason.EXPIRED);
 
 	deletableAccountHistogram.update(deletableAccountCount);
     }
