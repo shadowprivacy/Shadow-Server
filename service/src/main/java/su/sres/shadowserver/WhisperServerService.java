@@ -31,6 +31,7 @@ import javax.servlet.ServletRegistration;
 
 import java.security.Security;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
@@ -107,14 +108,17 @@ import su.sres.shadowserver.websocket.ProvisioningConnectListener;
 import su.sres.shadowserver.websocket.WebSocketAccountAuthenticator;
 import su.sres.shadowserver.workers.CertificateCommand;
 import su.sres.shadowserver.workers.CreatePendingAccountCommand;
+import su.sres.shadowserver.workers.DeleteFeatureFlagTask;
 import su.sres.shadowserver.workers.CertHashCommand;
 import su.sres.shadowserver.workers.DeleteUserCommand;
 import su.sres.shadowserver.workers.DirectoryCommand;
-import su.sres.shadowserver.workers.DisableRequestLoggingTask;
-import su.sres.shadowserver.workers.EnableRequestLoggingTask;
 import su.sres.shadowserver.workers.GetRedisCommandStatsCommand;
 import su.sres.shadowserver.workers.GetRedisSlowlogCommand;
 import su.sres.shadowserver.workers.LicenseHashCommand;
+import su.sres.shadowserver.workers.ListFeatureFlagsTask;
+import su.sres.shadowserver.workers.SetCrawlerAccelerationTask;
+import su.sres.shadowserver.workers.SetFeatureFlagTask;
+import su.sres.shadowserver.workers.SetRequestLoggingEnabledTask;
 import su.sres.shadowserver.workers.VacuumCommand;
 import su.sres.shadowserver.workers.ZkParamsCommand;
 
@@ -195,8 +199,10 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 	 * @Override public String uri() { return
 	 * config.getMicrometerConfiguration().getUri(); }
 	 * 
-	 * @Override public String apiToken() { return
-	 * config.getMicrometerConfiguration().getApiKey(); } }, Clock.SYSTEM) {
+	 * @Override public int batchSize() { return
+	 * config.getMicrometerConfiguration().getBatchSize(); }
+	 * 
+	 * }, Clock.SYSTEM) {
 	 * 
 	 * @Override protected DistributionStatisticConfig defaultHistogramConfig() {
 	 * return DistributionStatisticConfig.builder() .percentiles(.75, .95, .99,
@@ -276,7 +282,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 	Usernames usernames = new Usernames(accountDatabase);
 	ReservedUsernames reservedUsernames = new ReservedUsernames(accountDatabase);
 	Profiles profiles = new Profiles(accountDatabase);
-	Keys keys = new Keys(accountDatabase);
+	Keys keys = new Keys(accountDatabase, config.getAccountsDatabaseConfiguration().getKeyOperationRetryConfiguration());
 	Messages messages = new Messages(messageDatabase);
 	AbusiveHostRules abusiveHostRules = new AbusiveHostRules(abuseDatabase);
 	RemoteConfigs remoteConfigs = new RemoteConfigs(accountDatabase);
@@ -290,12 +296,25 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 	ReplicatedJedisPool directoryClient = directoryClientFactory.getRedisClientPool();
 //	ReplicatedJedisPool pushSchedulerClient = pushSchedulerClientFactory.getRedisClientPool();	
 
-	ClientResources redisClusterClientResources = ClientResources.builder().build();
-	ConnectionEventLogger.logConnectionEvents(redisClusterClientResources);
+	ClientResources generalCacheClientResources = ClientResources.builder().build();
+	ClientResources messageCacheClientResources = ClientResources.builder().build();
+	ClientResources presenceClientResources = ClientResources.builder().build();
+	ClientResources metricsCacheClientResources = ClientResources.builder().build();
+	ClientResources pushSchedulerCacheClientResources = ClientResources.builder().ioThreadPoolSize(4).build();
 
-	FaultTolerantRedisCluster cacheCluster = new FaultTolerantRedisCluster("main_cache_cluster", config.getCacheClusterConfiguration(), redisClusterClientResources);
-	FaultTolerantRedisCluster messagesCacheCluster = new FaultTolerantRedisCluster("messages_cluster", config.getMessageCacheConfiguration().getRedisClusterConfiguration(), redisClusterClientResources);
-	FaultTolerantRedisCluster metricsCluster = new FaultTolerantRedisCluster("metrics_cluster", config.getMetricsClusterConfiguration(), redisClusterClientResources);
+	ConnectionEventLogger.logConnectionEvents(generalCacheClientResources);
+	ConnectionEventLogger.logConnectionEvents(messageCacheClientResources);
+	ConnectionEventLogger.logConnectionEvents(presenceClientResources);
+	ConnectionEventLogger.logConnectionEvents(metricsCacheClientResources);
+
+	FaultTolerantRedisCluster cacheCluster = new FaultTolerantRedisCluster("main_cache_cluster", config.getCacheClusterConfiguration(), generalCacheClientResources);
+	FaultTolerantRedisCluster messagesCluster = new FaultTolerantRedisCluster("message_insert_cluster", config.getMessageCacheConfiguration().getRedisClusterConfiguration(), messageCacheClientResources);
+	FaultTolerantRedisCluster clientPresenceCluster = new FaultTolerantRedisCluster("client_presence_cluster", config.getClientPresenceClusterConfiguration(), presenceClientResources);
+	FaultTolerantRedisCluster metricsCluster = new FaultTolerantRedisCluster("metrics_cluster", config.getMetricsClusterConfiguration(), metricsCacheClientResources);
+	// disabled until iOS version is in place
+	// FaultTolerantRedisCluster pushSchedulerCluster = new
+	// FaultTolerantRedisCluster("push_scheduler", config.getPushSchedulerCluster(),
+	// pushSchedulerCacheClientResources);
 
 	BlockingQueue<Runnable> keyspaceNotificationDispatchQueue = new ArrayBlockingQueue<>(10_000);
 	Metrics.gaugeCollectionSize(name(getClass(), "keyspaceNotificationDispatchQueueSize"), Collections.emptyList(), keyspaceNotificationDispatchQueue);
@@ -305,7 +324,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 	ExecutorService apnSenderExecutor = environment.lifecycle().executorService(name(getClass(), "apnSender-%d")).maxThreads(1).minThreads(1).build();
 	ExecutorService gcmSenderExecutor = environment.lifecycle().executorService(name(getClass(), "gcmSender-%d")).maxThreads(1).minThreads(1).build();
 
-	ClientPresenceManager clientPresenceManager = new ClientPresenceManager(messagesCacheCluster, recurringJobExecutor, keyspaceNotificationDispatchExecutor);
+	ClientPresenceManager clientPresenceManager = new ClientPresenceManager(clientPresenceCluster, recurringJobExecutor, keyspaceNotificationDispatchExecutor);
 
 	DirectoryManager directory = new DirectoryManager(directoryClient);
 	PendingAccountsManager pendingAccountsManager = new PendingAccountsManager(pendingAccounts, cacheCluster);
@@ -316,7 +335,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 	// FederatedClientManager(environment, config.getJerseyClientConfiguration(),
 	// config.getFederationConfiguration());
 	ProfilesManager profilesManager = new ProfilesManager(profiles, cacheCluster);
-	MessagesCache messagesCache = new MessagesCache(messagesCacheCluster, keyspaceNotificationDispatchExecutor);
+	MessagesCache messagesCache = new MessagesCache(messagesCluster, messagesCluster, keyspaceNotificationDispatchExecutor);
 	PushLatencyManager pushLatencyManager = new PushLatencyManager(metricsCluster);
 	MessagesManager messagesManager = new MessagesManager(messages, messagesCache, pushLatencyManager);
 	AccountsManager accountsManager = new AccountsManager(accounts, directory, cacheCluster, keys, messagesManager, usernamesManager, profilesManager);
@@ -342,9 +361,9 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 	ExternalServiceCredentialGenerator storageCredentialsGenerator = new ExternalServiceCredentialGenerator(config.getSecureStorageServiceConfiguration().getUserAuthenticationTokenSharedSecret(), new byte[0], false);
 	ExternalServiceCredentialGenerator paymentsCredentialsGenerator = new ExternalServiceCredentialGenerator(config.getPaymentsServiceConfiguration().getUserAuthenticationTokenSharedSecret(), new byte[0], false);
 
-//    ApnFallbackManager       apnFallbackManager  = new ApnFallbackManager(pushSchedulerClient, apnSender, accountsManager);
+//    ApnFallbackManager       apnFallbackManager = new ApnFallbackManager(pushSchedulerClient, pushSchedulerCluster, apnSender, accountsManager);
 
-	MessageSender messageSender = new MessageSender(null, clientPresenceManager, messagesManager, gcmSender, null, config.getPushConfiguration().getQueueSize(), pushLatencyManager);
+	MessageSender messageSender = new MessageSender(null, clientPresenceManager, messagesManager, gcmSender, null, pushLatencyManager);
 // excluded federation, reserved for future purposes
 	// ReceiptSender receiptSender = new ReceiptSender(accountsManager, pushSender,
 	// federatedClientManager);
@@ -352,12 +371,12 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 	TurnTokenGenerator turnTokenGenerator = new TurnTokenGenerator(config.getTurnConfiguration());
 	RecaptchaClient recaptchaClient = new RecaptchaClient(config.getRecaptchaConfiguration().getSecret());
 
-	MessagePersister messagePersister = new MessagePersister(messagesCache, messagesManager, accountsManager, Duration.ofMinutes(config.getMessageCacheConfiguration().getPersistDelayMinutes()));
+	MessagePersister messagePersister = new MessagePersister(messagesCache, messagesManager, accountsManager, featureFlagsManager, Duration.ofMinutes(config.getMessageCacheConfiguration().getPersistDelayMinutes()));
 
-	ActiveUserCounter activeUserCounter = new ActiveUserCounter(config.getMetricsFactory(), cacheCluster);
-	AccountCleaner accountCleaner = new AccountCleaner(accountsManager);
-	PushFeedbackProcessor pushFeedbackProcessor = new PushFeedbackProcessor(accountsManager);
-	List<AccountDatabaseCrawlerListener> accountDatabaseCrawlerListeners = List.of(pushFeedbackProcessor, activeUserCounter, accountCleaner);
+	final List<AccountDatabaseCrawlerListener> accountDatabaseCrawlerListeners = new ArrayList<>();
+	accountDatabaseCrawlerListeners.add(new PushFeedbackProcessor(accountsManager));
+	accountDatabaseCrawlerListeners.add(new ActiveUserCounter(config.getMetricsFactory(), cacheCluster));
+	accountDatabaseCrawlerListeners.add(new AccountCleaner(accountsManager));
 
 	AccountDatabaseCrawlerCache accountDatabaseCrawlerCache = new AccountDatabaseCrawlerCache(cacheCluster);
 	AccountDatabaseCrawler accountDatabaseCrawler = new AccountDatabaseCrawler(accountsManager, accountDatabaseCrawlerCache, accountDatabaseCrawlerListeners, config.getAccountDatabaseCrawlerConfiguration().getChunkSize(), config.getAccountDatabaseCrawlerConfiguration().getChunkIntervalMs());
@@ -397,11 +416,10 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 		config.getAwsAttachmentsConfiguration().getBucket());
 	DebugLogController debugLogController = new DebugLogController(rateLimiters, config.getDebugLogsConfiguration().getAccessKey(), config.getDebugLogsConfiguration().getAccessSecret(), config.getDebugLogsConfiguration().getRegion(), config.getDebugLogsConfiguration().getBucket());
 	KeysController keysController = new KeysController(rateLimiters, keys, accountsManager);
-	MessageController messageController = new MessageController(rateLimiters, messageSender, receiptSender, accountsManager, messagesManager, null);
+	MessageController messageController = new MessageController(rateLimiters, messageSender, receiptSender, accountsManager, messagesManager, null, featureFlagsManager);
 	ProfileController profileController = new ProfileController(rateLimiters, accountsManager, profilesManager, usernamesManager, minioClient, profileCdnPolicyGenerator, profileCdnPolicySigner, config.getCdnConfiguration().getBucket(), zkProfileOperations, isZkEnabled);
 	StickerController stickerController = new StickerController(rateLimiters, config.getCdnConfiguration().getAccessKey(), config.getCdnConfiguration().getAccessSecret(), config.getCdnConfiguration().getRegion(), config.getCdnConfiguration().getBucket());
-	RemoteConfigController remoteConfigController = new RemoteConfigController(remoteConfigsManager, config.getRemoteConfigConfiguration().getAuthorizedTokens(), config.getRemoteConfigConfiguration().getGlobalConfig());
-	FeatureFlagsController featureFlagsController = new FeatureFlagsController(featureFlagsManager, config.getFeatureFlagConfiguration().getAuthorizedTokens());
+	RemoteConfigController remoteConfigController = new RemoteConfigController(remoteConfigsManager, config.getRemoteConfigConfiguration().getAuthorizedTokens(), config.getRemoteConfigConfiguration().getGlobalConfig());	
 
 	/*
 	 * excluded federation, reserved for future purposes
@@ -452,8 +470,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 	environment.jersey().register(messageController);
 	environment.jersey().register(profileController);
 	environment.jersey().register(stickerController);
-//    environment.jersey().register(remoteConfigController);
-	environment.jersey().register(featureFlagsController);
+//    environment.jersey().register(remoteConfigController);	
 
 	///
 	WebSocketEnvironment<Account> webSocketEnvironment = new WebSocketEnvironment<>(environment, config.getWebSocketConfiguration(), 90000);
@@ -487,8 +504,11 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 	provisioning.addMapping("/v1/websocket/provisioning/");
 	provisioning.setAsyncSupported(true);
 
-	environment.admin().addTask(new EnableRequestLoggingTask());
-	environment.admin().addTask(new DisableRequestLoggingTask());
+	environment.admin().addTask(new SetRequestLoggingEnabledTask());
+	environment.admin().addTask(new SetCrawlerAccelerationTask(accountDatabaseCrawlerCache));
+	environment.admin().addTask(new ListFeatureFlagsTask(featureFlagsManager));
+	environment.admin().addTask(new SetFeatureFlagTask(featureFlagsManager));
+	environment.admin().addTask(new DeleteFeatureFlagTask(featureFlagsManager));
 
 ///
 

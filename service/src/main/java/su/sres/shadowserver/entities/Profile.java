@@ -19,100 +19,116 @@ import java.util.UUID;
 
 public class Profile {
 
-  @JsonProperty
-  private String identityKey;
+    @JsonProperty
+    private String identityKey;
 
-  @JsonProperty
-  private String name;
+    @JsonProperty
+    private String name;
 
-  @JsonProperty
-  private String avatar;
-  
-  @JsonProperty
-  private String unidentifiedAccess;
+    @JsonProperty
+    private String about;
 
-  @JsonProperty
-  private boolean unrestrictedUnidentifiedAccess;
-  
-  @JsonProperty
-  private UserCapabilities capabilities;
-  
-  @JsonProperty
-  private String username;
+    @JsonProperty
+    private String aboutEmoji;
 
-  @JsonProperty
-  private UUID uuid;
-  
-  @JsonProperty
-  private List<PaymentAddress> payments;
-  
-  @JsonProperty
-  @JsonSerialize(using = ProfileKeyCredentialResponseAdapter.Serializing.class)
-  @JsonDeserialize(using = ProfileKeyCredentialResponseAdapter.Deserializing.class)
-  private ProfileKeyCredentialResponse credential;
+    @JsonProperty
+    private String avatar;
 
-  public Profile() {}
+    @JsonProperty
+    private String unidentifiedAccess;
 
-  public Profile(String name, String avatar, String identityKey,
-          String unidentifiedAccess, boolean unrestrictedUnidentifiedAccess,
-          UserCapabilities capabilities, String username, UUID uuid,
-          ProfileKeyCredentialResponse credential,
-          List<PaymentAddress> payments)
-{
-	    this.name                           = name;
-	    this.avatar                         = avatar;
-	    this.identityKey                    = identityKey;
-	    this.unidentifiedAccess             = unidentifiedAccess;
-	    this.unrestrictedUnidentifiedAccess = unrestrictedUnidentifiedAccess;
-	    this.capabilities                   = capabilities;
-	    this.username                       = username;
-	    this.uuid                           = uuid;
-	    this.payments                       = payments;
-	    this.credential                     = credential;
-  }
+    @JsonProperty
+    private boolean unrestrictedUnidentifiedAccess;
 
-  @VisibleForTesting
-  public String getIdentityKey() {
-    return identityKey;
-  }
+    @JsonProperty
+    private UserCapabilities capabilities;
 
-  @VisibleForTesting
-  public String getName() {
-    return name;
-  }
+    @JsonProperty
+    private String username;
 
-  @VisibleForTesting
-  public String getAvatar() {
-    return avatar;
-  }
-  
-  @VisibleForTesting
-  public String getUnidentifiedAccess() {
-    return unidentifiedAccess;
-  }
+    @JsonProperty
+    private UUID uuid;
 
-  @VisibleForTesting
-  public boolean isUnrestrictedUnidentifiedAccess() {
-    return unrestrictedUnidentifiedAccess;
-  }
-  
-  @VisibleForTesting
-  public UserCapabilities getCapabilities() {
-    return capabilities;
-  }
-  
-  @VisibleForTesting
-  public String getUsername() {
-    return username;
-  }
+    @JsonProperty
+    private List<PaymentAddress> payments;
 
-  @VisibleForTesting
-  public UUID getUuid() {
-    return uuid;
-  }
-  
-  @VisibleForTesting
-  public List<PaymentAddress> getPayments() {
-    return payments;
-  }
+    @JsonProperty
+    @JsonSerialize(using = ProfileKeyCredentialResponseAdapter.Serializing.class)
+    @JsonDeserialize(using = ProfileKeyCredentialResponseAdapter.Deserializing.class)
+    private ProfileKeyCredentialResponse credential;
+
+    public Profile() {
+    }
+
+    public Profile(String name, String about, String aboutEmoji, String avatar, String identityKey,
+	    String unidentifiedAccess, boolean unrestrictedUnidentifiedAccess,
+	    UserCapabilities capabilities, String username, UUID uuid,
+	    ProfileKeyCredentialResponse credential,
+	    List<PaymentAddress> payments) {
+	this.name = name;
+	this.about = about;
+	this.aboutEmoji = aboutEmoji;
+	this.avatar = avatar;
+	this.identityKey = identityKey;
+	this.unidentifiedAccess = unidentifiedAccess;
+	this.unrestrictedUnidentifiedAccess = unrestrictedUnidentifiedAccess;
+	this.capabilities = capabilities;
+	this.username = username;
+	this.uuid = uuid;
+	this.payments = payments;
+	this.credential = credential;
+    }
+
+    @VisibleForTesting
+    public String getIdentityKey() {
+	return identityKey;
+    }
+
+    @VisibleForTesting
+    public String getName() {
+	return name;
+    }
+
+    public String getAbout() {
+	return about;
+    }
+
+    public String getAboutEmoji() {
+	return aboutEmoji;
+    }
+
+    @VisibleForTesting
+    public String getAvatar() {
+	return avatar;
+    }
+
+    @VisibleForTesting
+    public String getUnidentifiedAccess() {
+	return unidentifiedAccess;
+    }
+
+    @VisibleForTesting
+    public boolean isUnrestrictedUnidentifiedAccess() {
+	return unrestrictedUnidentifiedAccess;
+    }
+
+    @VisibleForTesting
+    public UserCapabilities getCapabilities() {
+	return capabilities;
+    }
+
+    @VisibleForTesting
+    public String getUsername() {
+	return username;
+    }
+
+    @VisibleForTesting
+    public UUID getUuid() {
+	return uuid;
+    }
+
+    @VisibleForTesting
+    public List<PaymentAddress> getPayments() {
+	return payments;
+    }
 }

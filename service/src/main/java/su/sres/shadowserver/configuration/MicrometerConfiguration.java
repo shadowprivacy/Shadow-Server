@@ -8,6 +8,7 @@ package su.sres.shadowserver.configuration;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import javax.validation.constraints.NotEmpty;
+import javax.validation.constraints.Positive;
 
 public class MicrometerConfiguration {
 
@@ -15,14 +16,14 @@ public class MicrometerConfiguration {
     private String uri;
 
     @JsonProperty
-    @NotEmpty
-    private String apiKey;
-    
+    @Positive
+    private int batchSize = 10_000;
+
     public String getUri() {
 	return uri;
     }
 
-    public String getApiKey() {
-	return apiKey;
-    }    
+    public int getBatchSize() {
+	return batchSize;
+    }
 }

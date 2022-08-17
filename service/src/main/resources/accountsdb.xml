@@ -350,5 +350,17 @@
         
         <sql>INSERT INTO miscellaneous (parameter, parameter_value) VALUES ('directory_version', 0);</sql>
     </changeSet>
+    
+    <changeSet id="21" author="jon">
+        <addColumn tableName="profiles">
+            <column name="about" type="text">
+                <constraints nullable="true"/>
+            </column>
+
+            <column name="about_emoji" type="text">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+    </changeSet>
      
 </databaseChangeLog>

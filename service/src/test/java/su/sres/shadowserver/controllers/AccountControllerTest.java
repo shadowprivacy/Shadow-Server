@@ -177,7 +177,7 @@ public class AccountControllerTest {
 	when(senderRegLockAccount.getLastSeen()).thenReturn(System.currentTimeMillis());
 
 	when(pendingAccountsManager.getCodeForUserLogin(SENDER)).thenReturn(Optional
-		.of(new StoredVerificationCode("1234", System.currentTimeMillis(), null, VERIFICATION_CODE_LIFETIME)));
+		.of(new StoredVerificationCode("1234", System.currentTimeMillis(), "1234-push", VERIFICATION_CODE_LIFETIME)));
 	when(pendingAccountsManager.getCodeForUserLogin(SENDER_OLD))
 		.thenReturn(Optional.of(new StoredVerificationCode("1234",
 			System.currentTimeMillis() - TimeUnit.MINUTES.toMillis(31), null, VERIFICATION_CODE_LIFETIME)));
@@ -272,6 +272,7 @@ public class AccountControllerTest {
     @Ignore
     public void testSendCode() throws Exception {
 	Response response = resources.getJerseyTest().target(String.format("/v1/accounts/sms/code/%s", SENDER))
+		.queryParam("challenge", "1234-push")
 		.request().header("X-Forwarded-For", NICE_HOST).get();
 
 	assertThat(response.getStatus()).isEqualTo(200);
@@ -308,41 +309,35 @@ public class AccountControllerTest {
 	Response response = resources.getJerseyTest().target(String.format("/v1/accounts/sms/code/%s", SENDER_PREAUTH))
 		.request().header("X-Forwarded-For", NICE_HOST).get();
 
-	assertThat(response.getStatus()).isEqualTo(200);
-
-	verify(abusiveHostRules).getAbusiveHostRulesFor(eq(NICE_HOST));
+	assertThat(response.getStatus()).isEqualTo(402);
     }
 
     @Test
     public void testSendiOSCode() throws Exception {
 	Response response = resources.getJerseyTest().target(String.format("/v1/accounts/sms/code/%s", SENDER))
-		.queryParam("client", "ios").request().header("X-Forwarded-For", NICE_HOST).get();
+		.queryParam("client", "ios").queryParam("challenge", "1234-push").request().header("X-Forwarded-For", NICE_HOST).get();
 
 	assertThat(response.getStatus()).isEqualTo(200);
-
-//    verify(smsSender).deliverSmsVerification(eq(SENDER), eq(Optional.of("ios")), anyString());
     }
 
     @Test
     public void testSendAndroidNgCode() throws Exception {
 	Response response = resources.getJerseyTest().target(String.format("/v1/accounts/sms/code/%s", SENDER))
-		.queryParam("client", "android-ng").request().header("X-Forwarded-For", NICE_HOST).get();
+		.queryParam("client", "android-ng").queryParam("challenge", "1234-push").request().header("X-Forwarded-For", NICE_HOST).get();
 
 	assertThat(response.getStatus()).isEqualTo(200);
-
-//    verify(smsSender).deliverSmsVerification(eq(SENDER), eq(Optional.of("android-ng")), anyString());
     }
 
     @Test
     @Ignore
     public void testSendAbusiveHost() {
 	Response response = resources.getJerseyTest().target(String.format("/v1/accounts/sms/code/%s", SENDER))
+		.queryParam("challenge", "1234-push")
 		.request().header("X-Forwarded-For", ABUSIVE_HOST).get();
 
 	assertThat(response.getStatus()).isEqualTo(402);
 
 	verify(abusiveHostRules).getAbusiveHostRulesFor(eq(ABUSIVE_HOST));
-//    verifyNoMoreInteractions(smsSender);
     }
 
     @Test
@@ -375,6 +370,7 @@ public class AccountControllerTest {
     @Ignore
     public void testSendRateLimitedHostAutoBlock() {
 	Response response = resources.getJerseyTest().target(String.format("/v1/accounts/sms/code/%s", SENDER))
+		.queryParam("challenge", "1234-push")
 		.request().header("X-Forwarded-For", RATE_LIMITED_IP_HOST).get();
 
 	assertThat(response.getStatus()).isEqualTo(402);
@@ -391,7 +387,8 @@ public class AccountControllerTest {
     @Ignore
     public void testSendRateLimitedPrefixAutoBlock() {
 	Response response = resources.getJerseyTest()
-		.target(String.format("/v1/accounts/sms/code/%s", SENDER_OVER_PREFIX)).request()
+		.target(String.format("/v1/accounts/sms/code/%s", SENDER_OVER_PREFIX)).queryParam("challenge", "1234-push")
+		.request()
 		.header("X-Forwarded-For", RATE_LIMITED_PREFIX_HOST).get();
 
 	assertThat(response.getStatus()).isEqualTo(402);
@@ -401,13 +398,13 @@ public class AccountControllerTest {
 	verifyNoMoreInteractions(abusiveHostRules);
 
 	verifyNoMoreInteractions(recaptchaClient);
-//    verifyNoMoreInteractions(smsSender);
     }
 
     @Test
     @Ignore
     public void testSendRateLimitedHostNoAutoBlock() {
 	Response response = resources.getJerseyTest().target(String.format("/v1/accounts/sms/code/%s", SENDER))
+		.queryParam("challenge", "1234-push")
 		.request().header("X-Forwarded-For", RATE_LIMITED_HOST2).get();
 
 	assertThat(response.getStatus()).isEqualTo(402);
@@ -416,13 +413,13 @@ public class AccountControllerTest {
 	verifyNoMoreInteractions(abusiveHostRules);
 
 	verifyNoMoreInteractions(recaptchaClient);
-//    verifyNoMoreInteractions(smsSender);
     }
 
     @Test
     @Ignore
     public void testSendMultipleHost() {
 	Response response = resources.getJerseyTest().target(String.format("/v1/accounts/sms/code/%s", SENDER))
+		.queryParam("challenge", "1234-push")
 		.request().header("X-Forwarded-For", NICE_HOST + ", " + ABUSIVE_HOST).get();
 
 	assertThat(response.getStatus()).isEqualTo(402);
@@ -430,30 +427,31 @@ public class AccountControllerTest {
 	verify(abusiveHostRules, times(1)).getAbusiveHostRulesFor(eq(ABUSIVE_HOST));
 
 	verifyNoMoreInteractions(abusiveHostRules);
-//    verifyNoMoreInteractions(smsSender);
     }
 
     @Test
     @Ignore
     public void testSendRestrictedHostOut() {
 	Response response = resources.getJerseyTest().target(String.format("/v1/accounts/sms/code/%s", SENDER))
+		.queryParam("challenge", "1234-push")
 		.request().header("X-Forwarded-For", RESTRICTED_HOST).get();
 
 	assertThat(response.getStatus()).isEqualTo(402);
 
 	verify(abusiveHostRules).getAbusiveHostRulesFor(eq(RESTRICTED_HOST));
-	// verifyNoMoreInteractions(smsSender);
     }
 
     @Test
     public void testSendRestrictedIn() throws Exception {
-	Response response = resources.getJerseyTest().target(String.format("/v1/accounts/sms/code/%s", "johndoe"))
+	final String userLogin = "johndoe";
+	final String challenge = "challenge";
+
+	when(pendingAccountsManager.getCodeForUserLogin(userLogin)).thenReturn(Optional.of(new StoredVerificationCode("123456", System.currentTimeMillis(), challenge, VERIFICATION_CODE_LIFETIME)));
+	Response response = resources.getJerseyTest().target(String.format("/v1/accounts/sms/code/%s", userLogin))
+		.queryParam("challenge", challenge)
 		.request().header("X-Forwarded-For", RESTRICTED_HOST).get();
 
 	assertThat(response.getStatus()).isEqualTo(200);
-
-	// verify(smsSender).deliverSmsVerification(eq("+12345678901"),
-	// eq(Optional.empty()), anyString());
     }
 
     @Test
@@ -875,7 +873,7 @@ public class AccountControllerTest {
     }
 
     @Test
-    @Parameters({"/v1/accounts/whoami/", "/v1/accounts/me/"})
+    @Parameters({ "/v1/accounts/whoami/", "/v1/accounts/me/" })
     public void testWhoAmI(final String path) {
 	AccountCreationResult response = resources.getJerseyTest().target(path).request()
 		.header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
@@ -958,18 +956,17 @@ public class AccountControllerTest {
 
 	assertThat(response.getStatus()).isEqualTo(204);
     }
-    
+
     @Test
     public void testDeleteAccount() {
-      Response response =
-              resources.getJerseyTest()
-                       .target("/v1/accounts/me")
-                       .request()
-                       .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
-                       .delete();
+	Response response = resources.getJerseyTest()
+		.target("/v1/accounts/me")
+		.request()
+		.header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+		.delete();
 
-      assertThat(response.getStatus()).isEqualTo(204);
-      verify(accountsManager).delete(Stream.of(AuthHelper.VALID_ACCOUNT).collect(Collectors.toCollection(HashSet::new)), AccountsManager.DeletionReason.USER_REQUEST);
+	assertThat(response.getStatus()).isEqualTo(204);
+	verify(accountsManager).delete(Stream.of(AuthHelper.VALID_ACCOUNT).collect(Collectors.toCollection(HashSet::new)), AccountsManager.DeletionReason.USER_REQUEST);
     }
 
 }

@@ -95,6 +95,7 @@ public class AccountController {
     private final Meter rateLimitedHostMeter = metricRegistry.meter(name(AccountController.class, "rate_limited_host"));
     private final Meter rateLimitedPrefixMeter = metricRegistry
 	    .meter(name(AccountController.class, "rate_limited_prefix"));
+    private final Meter captchaRequiredMeter = metricRegistry.meter(name(AccountController.class, "captcha_required"));
     private final Meter captchaSuccessMeter = metricRegistry.meter(name(AccountController.class, "captcha_success"));
     private final Meter captchaFailureMeter = metricRegistry.meter(name(AccountController.class, "captcha_failure"));
 
@@ -206,6 +207,7 @@ public class AccountController {
 		storedVerificationCode, pushChallenge);
 
 	if (requirement.isCaptchaRequired()) {
+	    captchaRequiredMeter.mark();
 	    if (requirement.isAutoBlock() && shouldAutoBlock(requester)) {
 		logger.info("Auto-block: " + requester);
 		abusiveHostRules.setBlockedHost(requester, "Auto-Block");
@@ -637,10 +639,15 @@ public class AccountController {
 	    Optional<String> storedPushChallenge = storedVerificationCode.map(StoredVerificationCode::getPushCode);
 
 	    if (!pushChallenge.get().equals(storedPushChallenge.orElse(null))) {
-// captcha off
-//				return new CaptchaRequirement(true, false);
+		// captcha off
+		// return new CaptchaRequirement(true, false);
 		return new CaptchaRequirement(false, false);
 	    }
+
+	} else {
+	    // captcha off
+	    // return new CaptchaRequirement(true, false);
+	    return new CaptchaRequirement(false, false);
 	}
 
 	List<AbusiveHostRule> abuseRules = abusiveHostRules.getAbusiveHostRulesFor(requester);

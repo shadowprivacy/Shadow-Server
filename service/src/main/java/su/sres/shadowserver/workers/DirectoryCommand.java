@@ -70,34 +70,35 @@ public class DirectoryCommand extends EnvironmentCommand<WhisperServerConfigurat
 	    FaultTolerantDatabase messageDatabase = new FaultTolerantDatabase("message_database", messageJdbi, configuration.getMessageStoreConfiguration().getCircuitBreakerConfiguration());
 
 	    ClientResources redisClusterClientResources = ClientResources.builder().build();
-	    
+
 	    FaultTolerantRedisCluster cacheCluster = new FaultTolerantRedisCluster("main_cache_cluster", configuration.getCacheClusterConfiguration(), redisClusterClientResources);
-	    FaultTolerantRedisCluster messagesCacheCluster = new FaultTolerantRedisCluster("messages_cluster", configuration.getMessageCacheConfiguration().getRedisClusterConfiguration(), redisClusterClientResources);
+	    FaultTolerantRedisCluster messageInsertCacheCluster = new FaultTolerantRedisCluster("message_insert_cluster", configuration.getMessageCacheConfiguration().getRedisClusterConfiguration(), redisClusterClientResources);
+	    FaultTolerantRedisCluster messageReadDeleteCluster = new FaultTolerantRedisCluster("message_read_delete_cluster", configuration.getMessageCacheConfiguration().getRedisClusterConfiguration(), redisClusterClientResources);
 	    FaultTolerantRedisCluster metricsCluster = new FaultTolerantRedisCluster("metrics_cluster", configuration.getMetricsClusterConfiguration(), redisClusterClientResources);
 
 	    ExecutorService keyspaceNotificationDispatchExecutor = environment.lifecycle().executorService(name(getClass(), "keyspaceNotification-%d")).maxThreads(4).build();
-	    
+
 	    Accounts accounts = new Accounts(accountDatabase);
 	    Usernames usernames = new Usernames(accountDatabase);
 	    Profiles profiles = new Profiles(accountDatabase);
 	    ReservedUsernames reservedUsernames = new ReservedUsernames(accountDatabase);
-	    Keys keys = new Keys(accountDatabase);
+	    Keys keys = new Keys(accountDatabase, configuration.getAccountsDatabaseConfiguration().getKeyOperationRetryConfiguration());
 	    Messages messages = new Messages(messageDatabase);
-	    
+
 	    ReplicatedJedisPool redisClient = new RedisClientFactory("directory_cache_directory_command",
 		    configuration.getDirectoryConfiguration().getUrl(),
 		    configuration.getDirectoryConfiguration().getReplicaUrls(),
 		    configuration.getDirectoryConfiguration().getCircuitBreakerConfiguration()).getRedisClientPool();
 
 	    DirectoryManager directory = new DirectoryManager(redisClient);
-	    
-	    MessagesCache messagesCache = new MessagesCache(messagesCacheCluster, keyspaceNotificationDispatchExecutor);
+
+	    MessagesCache messagesCache = new MessagesCache(messageInsertCacheCluster, messageReadDeleteCluster, keyspaceNotificationDispatchExecutor);
 	    PushLatencyManager pushLatencyManager = new PushLatencyManager(metricsCluster);
-	    
+
 	    UsernamesManager usernamesManager = new UsernamesManager(usernames, reservedUsernames, cacheCluster);
 	    ProfilesManager profilesManager = new ProfilesManager(profiles, cacheCluster);
 	    MessagesManager messagesManager = new MessagesManager(messages, messagesCache, pushLatencyManager);
-	    
+
 	    AccountsManager accountsManager = new AccountsManager(accounts, directory, cacheCluster, keys, messagesManager, usernamesManager, profilesManager);
 
 	    PlainDirectoryUpdater updater = new PlainDirectoryUpdater(accountsManager);

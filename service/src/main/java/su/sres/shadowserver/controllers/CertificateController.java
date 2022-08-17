@@ -53,24 +53,17 @@ public class CertificateController {
     @Produces(MediaType.APPLICATION_JSON)
     @Path("/delivery")
     public DeliveryCertificate getDeliveryCertificate(@Auth Account account,
-	    @QueryParam("includeUserLogin") Optional<Boolean> includeUserLogin,
-	    @QueryParam("includeUuid") Optional<Boolean> includeUuid)
+	    @QueryParam("includeUserLogin") Optional<Boolean> includeUserLogin)
 	    throws IOException, InvalidKeyException {
-	if (!account.getAuthenticatedDevice().isPresent())
+	if (account.getAuthenticatedDevice().isEmpty()) {
 	    throw new AssertionError();
+	}
 
 	if (Util.isEmpty(account.getIdentityKey())) {
 	    throw new WebApplicationException(Response.Status.BAD_REQUEST);
 	}
 
-	final boolean effectiveIncludeUserLogin = includeUserLogin.orElse(true);
-	final boolean effectiveIncludeUuid = includeUuid.orElse(false);
-
-	if (!effectiveIncludeUserLogin && !effectiveIncludeUuid) {
-	    throw new WebApplicationException(Response.Status.BAD_REQUEST);
-	}
-
-	return new DeliveryCertificate(certificateGenerator.createFor(account, account.getAuthenticatedDevice().get(), effectiveIncludeUserLogin, effectiveIncludeUuid));
+	return new DeliveryCertificate(certificateGenerator.createFor(account, account.getAuthenticatedDevice().get(), includeUserLogin.orElse(true)));
     }
 
     @Timed

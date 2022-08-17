@@ -5,10 +5,6 @@
  */
 package su.sres.shadowserver.push;
 
-import com.codahale.metrics.Gauge;
-import com.codahale.metrics.SharedMetricRegistries;
-import com.google.common.annotations.VisibleForTesting;
-
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ExecutorService;
@@ -25,7 +21,6 @@ import su.sres.shadowserver.redis.RedisOperation;
 import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.storage.Device;
 import su.sres.shadowserver.storage.MessagesManager;
-import su.sres.shadowserver.util.BlockingThreadPoolExecutor;
 import su.sres.shadowserver.util.Constants;
 import su.sres.shadowserver.util.Util;
 
@@ -51,8 +46,6 @@ public class MessageSender implements Managed {
     private final MessagesManager messagesManager;
     private final GCMSender gcmSender;
     private final APNSender apnSender;
-    private final ExecutorService executor;
-    private final int queueSize;
     private final PushLatencyManager pushLatencyManager;
 
     private static final String SEND_COUNTER_NAME = name(MessageSender.class, "sendMessage");
@@ -65,30 +58,6 @@ public class MessageSender implements Managed {
 	    MessagesManager messagesManager,
 	    GCMSender gcmSender,
 	    APNSender apnSender,
-	    int queueSize,
-	    PushLatencyManager pushLatencyManager) {
-	this(apnFallbackManager,
-		clientPresenceManager,
-		messagesManager,
-		gcmSender,
-		apnSender,
-		queueSize,
-		new BlockingThreadPoolExecutor("pushSender", 50, queueSize),
-		pushLatencyManager);
-
-	SharedMetricRegistries.getOrCreate(Constants.METRICS_NAME)
-		.register(name(MessageSender.class, "send_queue_depth"),
-			(Gauge<Integer>) ((BlockingThreadPoolExecutor) executor)::getSize);
-    }
-
-    @VisibleForTesting
-    MessageSender(ApnFallbackManager apnFallbackManager,
-	    ClientPresenceManager clientPresenceManager,
-	    MessagesManager messagesManager,
-	    GCMSender gcmSender,
-	    APNSender apnSender,
-	    int queueSize,
-	    ExecutorService executor,
 	    PushLatencyManager pushLatencyManager) {
 
 	this.apnFallbackManager = apnFallbackManager;
@@ -96,8 +65,6 @@ public class MessageSender implements Managed {
 	this.messagesManager = messagesManager;
 	this.gcmSender = gcmSender;
 	this.apnSender = apnSender;
-	this.queueSize = queueSize;
-	this.executor = executor;
 	this.pushLatencyManager = pushLatencyManager;
     }
 
@@ -107,15 +74,6 @@ public class MessageSender implements Managed {
 	    throw new NotPushRegisteredException("No delivery possible!");
 	}
 
-	if (queueSize > 0) {
-	    executor.execute(() -> sendSynchronousMessage(account, device, message, online));
-	} else {
-	    sendSynchronousMessage(account, device, message, online);
-	}
-    }
-
-    @VisibleForTesting
-    void sendSynchronousMessage(Account account, Device device, Envelope message, boolean online) {
 	final String channel;
 
 	if (device.getGcmId() != null) {
@@ -198,9 +156,7 @@ public class MessageSender implements Managed {
     }
 
     @Override
-    public void stop() throws Exception {
-	executor.shutdown();
-	executor.awaitTermination(5, TimeUnit.MINUTES);
+    public void stop() {
 
 	// apnSender.stop();
     }

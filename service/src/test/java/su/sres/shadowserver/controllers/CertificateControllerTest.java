@@ -41,7 +41,6 @@ import io.dropwizard.testing.junit.ResourceTestRule;
 import static junit.framework.TestCase.assertTrue;
 import static org.assertj.core.api.Java6Assertions.assertThat;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 
 public class CertificateControllerTest {
 
@@ -94,7 +93,8 @@ public class CertificateControllerTest {
 
 	assertEquals(certificate.getSender(), AuthHelper.VALID_NUMBER);
 	assertEquals(certificate.getSenderDevice(), 1L);
-	assertFalse(certificate.hasSenderUuid());
+	assertTrue(certificate.hasSenderUuid());
+	assertEquals(AuthHelper.VALID_UUID.toString(), certificate.getSenderUuid());
 	assertTrue(Arrays.equals(certificate.getIdentityKey().toByteArray(), Base64.decode(AuthHelper.VALID_IDENTITY)));
     }
 
@@ -148,19 +148,6 @@ public class CertificateControllerTest {
 	assertEquals(certificate.getSenderDevice(), 1L);
 	assertEquals(certificate.getSenderUuid(), AuthHelper.VALID_UUID.toString());
 	assertTrue(Arrays.equals(certificate.getIdentityKey().toByteArray(), Base64.decode(AuthHelper.VALID_IDENTITY)));
-    }
-
-    @Test
-    public void testValidCertificateWithNoUuidNoUserLogin() throws Exception {
-	Response response = resources.getJerseyTest()
-		.target("/v1/certificate/delivery")
-		.queryParam("includeUuid", "false")
-		.queryParam("includeUserLogin", "false")
-		.request()
-		.header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
-		.get();
-
-	assertEquals(response.getStatus(), 400);
     }
 
     @Test

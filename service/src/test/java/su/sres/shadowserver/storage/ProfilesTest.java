@@ -25,117 +25,143 @@ import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 
 public class ProfilesTest {
 
-  @Rule
-  public PreparedDbRule db = EmbeddedPostgresRules.preparedDatabase(LiquibasePreparer.forClasspathLocation("accountsdb.xml"));
+    @Rule
+    public PreparedDbRule db = EmbeddedPostgresRules.preparedDatabase(LiquibasePreparer.forClasspathLocation("accountsdb.xml"));
 
-  private Profiles profiles;
+    private Profiles profiles;
 
-  @Before
-  public void setupProfilesDao() {
-    FaultTolerantDatabase faultTolerantDatabase = new FaultTolerantDatabase("profilesTest",
-                                                                            Jdbi.create(db.getTestDatabase()),
-                                                                            new CircuitBreakerConfiguration());
+    @Before
+    public void setupProfilesDao() {
+	FaultTolerantDatabase faultTolerantDatabase = new FaultTolerantDatabase("profilesTest",
+		Jdbi.create(db.getTestDatabase()),
+		new CircuitBreakerConfiguration());
 
-    this.profiles = new Profiles(faultTolerantDatabase);
-  }
+	this.profiles = new Profiles(faultTolerantDatabase);
+    }
 
-  @Ignore //
-  @Test
-  public void testSetGet() {
-    UUID             uuid    = UUID.randomUUID();
-    VersionedProfile profile = new VersionedProfile("123", "foo", "avatarLocation", "acommitment".getBytes());
-    profiles.set(uuid, profile);
+    @Ignore //
+    @Test
+    public void testSetGet() {
+	UUID uuid = UUID.randomUUID();
+	VersionedProfile profile = new VersionedProfile("123", "foo", "avatarLocation", "emoji", "the very model of a modern major general", "acommitment".getBytes());
+	profiles.set(uuid, profile);
 
-    Optional<VersionedProfile> retrieved = profiles.get(uuid, "123");
+	Optional<VersionedProfile> retrieved = profiles.get(uuid, "123");
 
-    assertThat(retrieved.isPresent()).isTrue();
-    assertThat(retrieved.get().getName()).isEqualTo(profile.getName());
-    assertThat(retrieved.get().getAvatar()).isEqualTo(profile.getAvatar());
-    assertThat(retrieved.get().getCommitment()).isEqualTo(profile.getCommitment());
-  }
+	assertThat(retrieved.isPresent()).isTrue();
+	assertThat(retrieved.get().getName()).isEqualTo(profile.getName());
+	assertThat(retrieved.get().getAvatar()).isEqualTo(profile.getAvatar());
+	assertThat(retrieved.get().getCommitment()).isEqualTo(profile.getCommitment());
+	assertThat(retrieved.get().getAbout()).isEqualTo(profile.getAbout());
+	assertThat(retrieved.get().getAboutEmoji()).isEqualTo(profile.getAboutEmoji());
+    }
 
-  @Ignore //
-  @Test
-  public void testSetReplace() {
-    UUID             uuid    = UUID.randomUUID();
-    VersionedProfile profile = new VersionedProfile("123", "foo", "avatarLocation", "acommitment".getBytes());
-    profiles.set(uuid, profile);
+    @Test
+    public void testSetGetNullOptionalFields() {
+	UUID uuid = UUID.randomUUID();
+	VersionedProfile profile = new VersionedProfile("123", "foo", null, null, null, "acommitment".getBytes());
+	profiles.set(uuid, profile);
 
-    Optional<VersionedProfile> retrieved = profiles.get(uuid, "123");
+	Optional<VersionedProfile> retrieved = profiles.get(uuid, "123");
 
-    assertThat(retrieved.isPresent()).isTrue();
-    assertThat(retrieved.get().getName()).isEqualTo(profile.getName());
-    assertThat(retrieved.get().getAvatar()).isEqualTo(profile.getAvatar());
-    assertThat(retrieved.get().getCommitment()).isEqualTo(profile.getCommitment());
+	assertThat(retrieved.isPresent()).isTrue();
+	assertThat(retrieved.get().getName()).isEqualTo(profile.getName());
+	assertThat(retrieved.get().getAvatar()).isEqualTo(profile.getAvatar());
+	assertThat(retrieved.get().getCommitment()).isEqualTo(profile.getCommitment());
+	assertThat(retrieved.get().getAbout()).isEqualTo(profile.getAbout());
+	assertThat(retrieved.get().getAboutEmoji()).isEqualTo(profile.getAboutEmoji());
+    }
 
-    VersionedProfile updated = new VersionedProfile("123", "bar", "baz", "boof".getBytes());
-    profiles.set(uuid, updated);
+    @Ignore //
+    @Test
+    public void testSetReplace() {
+	UUID uuid = UUID.randomUUID();
+	VersionedProfile profile = new VersionedProfile("123", "foo", "avatarLocation", null, null, "acommitment".getBytes());
+	profiles.set(uuid, profile);
 
-    retrieved = profiles.get(uuid, "123");
+	Optional<VersionedProfile> retrieved = profiles.get(uuid, "123");
 
-    assertThat(retrieved.isPresent()).isTrue();
-    assertThat(retrieved.get().getName()).isEqualTo(updated.getName());
-    assertThat(retrieved.get().getAvatar()).isEqualTo(updated.getAvatar());
-    assertThat(retrieved.get().getCommitment()).isEqualTo(profile.getCommitment());
-  }
+	assertThat(retrieved.isPresent()).isTrue();
+	assertThat(retrieved.get().getName()).isEqualTo(profile.getName());
+	assertThat(retrieved.get().getAvatar()).isEqualTo(profile.getAvatar());
+	assertThat(retrieved.get().getCommitment()).isEqualTo(profile.getCommitment());
+	assertThat(retrieved.get().getAbout()).isNull();
+	assertThat(retrieved.get().getAboutEmoji()).isNull();
 
-  @Ignore //
-  @Test
-  public void testMultipleVersions() {
-    UUID             uuid    = UUID.randomUUID();
-    VersionedProfile profileOne = new VersionedProfile("123", "foo", "avatarLocation", "acommitmnet".getBytes());
-    VersionedProfile profileTwo = new VersionedProfile("345", "bar", "baz", "boof".getBytes());
+	VersionedProfile updated = new VersionedProfile("123", "bar", "baz", "emoji", "bio", "boof".getBytes());
+	profiles.set(uuid, updated);
 
-    profiles.set(uuid, profileOne);
-    profiles.set(uuid, profileTwo);
+	retrieved = profiles.get(uuid, "123");
 
-    Optional<VersionedProfile> retrieved = profiles.get(uuid, "123");
+	assertThat(retrieved.isPresent()).isTrue();
+	assertThat(retrieved.get().getName()).isEqualTo(updated.getName());
+	assertThat(retrieved.get().getCommitment()).isEqualTo(profile.getCommitment());
+	assertThat(retrieved.get().getAbout()).isEqualTo(updated.getAbout());
+	assertThat(retrieved.get().getAboutEmoji()).isEqualTo(updated.getAboutEmoji());
 
-    assertThat(retrieved.isPresent()).isTrue();
-    assertThat(retrieved.get().getName()).isEqualTo(profileOne.getName());
-    assertThat(retrieved.get().getAvatar()).isEqualTo(profileOne.getAvatar());
-    assertThat(retrieved.get().getCommitment()).isEqualTo(profileOne.getCommitment());
+	// Commitment should be unchanged after an overwrite
+	assertThat(retrieved.get().getAvatar()).isEqualTo(updated.getAvatar());
+    }
 
-    retrieved = profiles.get(uuid, "345");
+    @Ignore //
+    @Test
+    public void testMultipleVersions() {
+	UUID uuid = UUID.randomUUID();
+	VersionedProfile profileOne = new VersionedProfile("123", "foo", "avatarLocation", null, null, "acommitmnet".getBytes());
+	VersionedProfile profileTwo = new VersionedProfile("345", "bar", "baz", "emoji", "i keep typing emoju for some reason", "boof".getBytes());
 
-    assertThat(retrieved.isPresent()).isTrue();
-    assertThat(retrieved.get().getName()).isEqualTo(profileTwo.getName());
-    assertThat(retrieved.get().getAvatar()).isEqualTo(profileTwo.getAvatar());
-    assertThat(retrieved.get().getCommitment()).isEqualTo(profileTwo.getCommitment());
-  }
+	profiles.set(uuid, profileOne);
+	profiles.set(uuid, profileTwo);
 
-  @Ignore //
-  @Test
-  public void testMissing() {
-    UUID             uuid    = UUID.randomUUID();
-    VersionedProfile profile = new VersionedProfile("123", "foo", "avatarLocation", "aDigest".getBytes());
-    profiles.set(uuid, profile);
+	Optional<VersionedProfile> retrieved = profiles.get(uuid, "123");
 
-    Optional<VersionedProfile> retrieved = profiles.get(uuid, "888");
-    assertThat(retrieved.isPresent()).isFalse();
-  }
+	assertThat(retrieved.isPresent()).isTrue();
+	assertThat(retrieved.get().getName()).isEqualTo(profileOne.getName());
+	assertThat(retrieved.get().getAvatar()).isEqualTo(profileOne.getAvatar());
+	assertThat(retrieved.get().getCommitment()).isEqualTo(profileOne.getCommitment());
+	assertThat(retrieved.get().getAbout()).isEqualTo(profileOne.getAbout());
+	assertThat(retrieved.get().getAboutEmoji()).isEqualTo(profileOne.getAboutEmoji());
 
+	retrieved = profiles.get(uuid, "345");
 
-  @Ignore //
-  @Test
-  public void testDelete() {
-    UUID             uuid    = UUID.randomUUID();
-    VersionedProfile profileOne = new VersionedProfile("123", "foo", "avatarLocation", "aDigest".getBytes());
-    VersionedProfile profileTwo = new VersionedProfile("345", "bar", "baz", "boof".getBytes());
+	assertThat(retrieved.isPresent()).isTrue();
+	assertThat(retrieved.get().getName()).isEqualTo(profileTwo.getName());
+	assertThat(retrieved.get().getAvatar()).isEqualTo(profileTwo.getAvatar());
+	assertThat(retrieved.get().getCommitment()).isEqualTo(profileTwo.getCommitment());
+	assertThat(retrieved.get().getAbout()).isEqualTo(profileTwo.getAbout());
+	assertThat(retrieved.get().getAboutEmoji()).isEqualTo(profileTwo.getAboutEmoji());
+    }
 
-    profiles.set(uuid, profileOne);
-    profiles.set(uuid, profileTwo);
+    @Ignore //
+    @Test
+    public void testMissing() {
+	UUID uuid = UUID.randomUUID();
+	VersionedProfile profile = new VersionedProfile("123", "foo", "avatarLocation", null, null, "aDigest".getBytes());
+	profiles.set(uuid, profile);
 
-    profiles.deleteAll(uuid);
+	Optional<VersionedProfile> retrieved = profiles.get(uuid, "888");
+	assertThat(retrieved.isPresent()).isFalse();
+    }
 
-    Optional<VersionedProfile> retrieved = profiles.get(uuid, "123");
+    @Ignore //
+    @Test
+    public void testDelete() {
+	UUID uuid = UUID.randomUUID();
+	VersionedProfile profileOne = new VersionedProfile("123", "foo", "avatarLocation", null, null, "aDigest".getBytes());
+	VersionedProfile profileTwo = new VersionedProfile("345", "bar", "baz", null, null, "boof".getBytes());
 
-    assertThat(retrieved.isPresent()).isFalse();
+	profiles.set(uuid, profileOne);
+	profiles.set(uuid, profileTwo);
 
-    retrieved = profiles.get(uuid, "345");
+	profiles.deleteAll(uuid);
 
-    assertThat(retrieved.isPresent()).isFalse();
-  }
+	Optional<VersionedProfile> retrieved = profiles.get(uuid, "123");
 
+	assertThat(retrieved.isPresent()).isFalse();
+
+	retrieved = profiles.get(uuid, "345");
+
+	assertThat(retrieved.isPresent()).isFalse();
+    }
 
 }

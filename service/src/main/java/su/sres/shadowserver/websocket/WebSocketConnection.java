@@ -12,12 +12,15 @@ import com.codahale.metrics.SharedMetricRegistries;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.ByteString;
 
+import io.micrometer.core.instrument.Metrics;
+import io.micrometer.core.instrument.Tag;
 import su.sres.shadowserver.controllers.MessageController;
 import su.sres.shadowserver.controllers.NoSuchUserException;
 import su.sres.shadowserver.entities.CryptoEncodingException;
 import su.sres.shadowserver.entities.EncryptedOutgoingMessage;
 import su.sres.shadowserver.entities.OutgoingMessageEntity;
 import su.sres.shadowserver.entities.OutgoingMessageEntityList;
+import su.sres.shadowserver.metrics.UserAgentTagUtil;
 import su.sres.shadowserver.push.DisplacedPresenceListener;
 import su.sres.shadowserver.push.ReceiptSender;
 // import su.sres.shadowserver.push.TransientPushFailureException;
@@ -28,13 +31,19 @@ import su.sres.shadowserver.storage.MessagesManager;
 import su.sres.shadowserver.util.Constants;
 import su.sres.shadowserver.util.TimestampHeaderUtil;
 import su.sres.shadowserver.util.Util;
+import su.sres.shadowserver.util.ua.ClientPlatform;
+import su.sres.shadowserver.util.ua.UnrecognizedUserAgentException;
+import su.sres.shadowserver.util.ua.UserAgentUtil;
 
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import su.sres.websocket.WebSocketClient;
 import su.sres.websocket.messages.WebSocketResponseMessage;
 
 import javax.ws.rs.WebApplicationException;
+
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -50,14 +59,23 @@ import static su.sres.shadowserver.entities.MessageProtos.Envelope;
 public class WebSocketConnection implements MessageAvailabilityListener, DisplacedPresenceListener {
 
     private static final MetricRegistry metricRegistry = SharedMetricRegistries.getOrCreate(Constants.METRICS_NAME);
-    public static final Histogram messageTime = metricRegistry.histogram(name(MessageController.class, "message_delivery_duration"));
+    private static final Histogram messageTime = metricRegistry.histogram(name(MessageController.class, "message_delivery_duration"));
+    private static final Histogram primaryDeviceMessageTime = metricRegistry.histogram(name(MessageController.class, "primary_device_message_delivery_duration"));
     private static final Meter sendMessageMeter = metricRegistry.meter(name(WebSocketConnection.class, "send_message"));
     private static final Meter messageAvailableMeter = metricRegistry.meter(name(WebSocketConnection.class, "messagesAvailable"));
     private static final Meter ephemeralMessageAvailableMeter = metricRegistry.meter(name(WebSocketConnection.class, "ephemeralMessagesAvailable"));
     private static final Meter messagesPersistedMeter = metricRegistry.meter(name(WebSocketConnection.class, "messagesPersisted"));
-    private static final Meter displacementMeter = metricRegistry.meter(name(WebSocketConnection.class, "explicitDisplacement"));
     private static final Meter bytesSentMeter = metricRegistry.meter(name(WebSocketConnection.class, "bytes_sent"));
     private static final Meter sendFailuresMeter = metricRegistry.meter(name(WebSocketConnection.class, "send_failures"));
+    private static final Meter discardedMessagesMeter = metricRegistry.meter(name(WebSocketConnection.class, "discardedMessages"));
+
+    private static final String DISPLACEMENT_COUNTER_NAME = name(WebSocketConnection.class, "displacement");
+    private static final String NON_SUCCESS_RESPONSE_COUNTER_NAME = name(WebSocketConnection.class, "clientNonSuccessResponse");
+    private static final String STATUS_CODE_TAG = "status";
+    private static final String STATUS_MESSAGE_TAG = "message";
+
+    @VisibleForTesting
+    static final int MAX_DESKTOP_MESSAGE_SIZE = 1024 * 1024;
 
     private static final Logger logger = LoggerFactory.getLogger(WebSocketConnection.class);
 
@@ -67,6 +85,8 @@ public class WebSocketConnection implements MessageAvailabilityListener, Displac
     private final Account account;
     private final Device device;
     private final WebSocketClient client;
+
+    private final boolean isDesktopClient;
 
     private final Semaphore processStoredMessagesSemaphore = new Semaphore(1);
     private final AtomicReference<StoredMessageState> storedMessageState = new AtomicReference<>(StoredMessageState.PERSISTED_NEW_MESSAGES_AVAILABLE);
@@ -88,6 +108,16 @@ public class WebSocketConnection implements MessageAvailabilityListener, Displac
 	this.account = account;
 	this.device = device;
 	this.client = client;
+
+	Optional<ClientPlatform> maybePlatform;
+
+	try {
+	    maybePlatform = Optional.of(UserAgentUtil.parseUserAgentString(client.getUserAgent()).getPlatform());
+	} catch (final UnrecognizedUserAgentException e) {
+	    maybePlatform = Optional.empty();
+	}
+
+	this.isDesktopClient = maybePlatform.map(platform -> platform == ClientPlatform.DESKTOP).orElse(false);
     }
 
     public void start() {
@@ -123,9 +153,20 @@ public class WebSocketConnection implements MessageAvailabilityListener, Displac
 			}
 
 			if (message.getType() != Envelope.Type.RECEIPT) {
-			    messageTime.update(System.currentTimeMillis() - message.getTimestamp());
+			    recordMessageDeliveryDuration(message.getTimestamp(), device);
 			    sendDeliveryReceiptFor(message);
 			}
+
+		    } else {
+			final List<Tag> tags = new ArrayList<>(List.of(Tag.of(STATUS_CODE_TAG, String.valueOf(response.getStatus())),
+				UserAgentTagUtil.getPlatformTag(client.getUserAgent())));
+
+// TODO Remove this once we've identified the cause of message rejections from desktop clients
+			if (StringUtils.isNotBlank(response.getMessage())) {
+			    tags.add(Tag.of(STATUS_MESSAGE_TAG, response.getMessage()));
+			}
+
+			Metrics.counter(NON_SUCCESS_RESPONSE_COUNTER_NAME, tags).increment();
 		    }
 		} else {
 		    sendFailuresMeter.mark();
@@ -135,6 +176,14 @@ public class WebSocketConnection implements MessageAvailabilityListener, Displac
 	} catch (CryptoEncodingException e) {
 	    logger.warn("Bad signaling key", e);
 	    return CompletableFuture.failedFuture(e);
+	}
+    }
+
+    public static void recordMessageDeliveryDuration(long timestamp, Device messageDestinationDevice) {
+	final long messageDeliveryDuration = System.currentTimeMillis() - timestamp;
+	messageTime.update(messageDeliveryDuration);
+	if (messageDestinationDevice.isMaster()) {
+	    primaryDeviceMessageTime.update(messageDeliveryDuration);
 	}
     }
 
@@ -215,7 +264,16 @@ public class WebSocketConnection implements MessageAvailabilityListener, Displac
 		builder.setRelay(message.getRelay());
 	    }
 
-	    sendFutures[i] = sendMessage(builder.build(), Optional.of(new StoredMessageInfo(message.getId(), message.isCached())));
+	    final Envelope envelope = builder.build();
+
+	    if (envelope.getSerializedSize() > MAX_DESKTOP_MESSAGE_SIZE && isDesktopClient) {
+		messagesManager.delete(account.getUserLogin(), account.getUuid(), device.getId(), message.getId(), message.isCached());
+		discardedMessagesMeter.mark();
+
+		sendFutures[i] = CompletableFuture.completedFuture(null);
+	    } else {
+		sendFutures[i] = sendMessage(builder.build(), Optional.of(new StoredMessageInfo(message.getId(), message.isCached())));
+	    }
 	}
 
 	CompletableFuture.allOf(sendFutures).whenComplete((v, cause) -> {
@@ -258,7 +316,7 @@ public class WebSocketConnection implements MessageAvailabilityListener, Displac
 
     @Override
     public void handleDisplacement() {
-	displacementMeter.mark();
+	Metrics.counter(DISPLACEMENT_COUNTER_NAME, List.of(UserAgentTagUtil.getPlatformTag(client.getUserAgent()))).increment();
 	client.hardDisconnectQuietly();
     }
 

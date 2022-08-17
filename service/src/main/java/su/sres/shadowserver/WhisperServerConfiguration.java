@@ -82,7 +82,17 @@ public class WhisperServerConfiguration extends Configuration {
     @NotNull
     @Valid
     @JsonProperty
+    private RedisClusterConfiguration pushSchedulerCluster;
+
+    @NotNull
+    @Valid
+    @JsonProperty
     private MessageCacheConfiguration messageCache;
+
+    @NotNull
+    @Valid
+    @JsonProperty
+    private RedisClusterConfiguration clientPresenceCluster;
 
     @Valid
     @NotNull
@@ -117,7 +127,7 @@ public class WhisperServerConfiguration extends Configuration {
     @Valid
     @NotNull
     @JsonProperty
-    private DatabaseConfiguration accountsDatabase;
+    private AccountsDatabaseConfiguration accountsDatabase;
 
     @Valid
     @NotNull
@@ -187,11 +197,6 @@ public class WhisperServerConfiguration extends Configuration {
     @JsonProperty
     private RemoteConfigConfiguration remoteConfig;
 
-    @Valid
-    @NotNull
-    @JsonProperty
-    private FeatureFlagConfiguration featureFlag;
-
     private Map<String, String> transparentDataIndex = new HashMap<>();
 
     public RecaptchaConfiguration getRecaptchaConfiguration() {
@@ -246,8 +251,16 @@ public class WhisperServerConfiguration extends Configuration {
 	return messageCache;
     }
 
+    public RedisClusterConfiguration getClientPresenceClusterConfiguration() {
+	return clientPresenceCluster;
+    }
+
     public RedisConfiguration getPushScheduler() {
 	return pushScheduler;
+    }
+
+    public RedisClusterConfiguration getPushSchedulerCluster() {
+	return pushSchedulerCluster;
     }
 
     public DatabaseConfiguration getMessageStoreConfiguration() {
@@ -258,7 +271,7 @@ public class WhisperServerConfiguration extends Configuration {
 	return abuseDatabase;
     }
 
-    public DatabaseConfiguration getAccountsDatabaseConfiguration() {
+    public AccountsDatabaseConfiguration getAccountsDatabaseConfiguration() {
 	return accountsDatabase;
     }
 
@@ -340,9 +353,5 @@ public class WhisperServerConfiguration extends Configuration {
 
     public RemoteConfigConfiguration getRemoteConfigConfiguration() {
 	return remoteConfig;
-    }
-
-    public FeatureFlagConfiguration getFeatureFlagConfiguration() {
-	return featureFlag;
     }
 }

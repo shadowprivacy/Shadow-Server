@@ -23,6 +23,8 @@ public class Profiles {
   public static final String VERSION       = "version";
   public static final String NAME          = "name";
   public static final String AVATAR        = "avatar";
+  public static final String ABOUT_EMOJI   = "about_emoji";
+  public static final String ABOUT         = "about";
   public static final String COMMITMENT    = "commitment";
 
   private final MetricRegistry metricRegistry = SharedMetricRegistries.getOrCreate(Constants.METRICS_NAME);
@@ -41,11 +43,13 @@ public class Profiles {
   public void set(UUID uuid, VersionedProfile profile) {
     database.use(jdbi -> jdbi.useHandle(handle -> {
       try (Timer.Context ignored = setTimer.time()) {
-        handle.createUpdate("INSERT INTO profiles (" + UID + ", " + VERSION + ", " + NAME + ", " + AVATAR + ", " + COMMITMENT + ") VALUES (:uuid, :version, :name, :avatar, :commitment) ON CONFLICT (" + UID + ", " + VERSION + ") DO UPDATE SET " + NAME + " = EXCLUDED." + NAME + ", " + AVATAR + " = EXCLUDED." + AVATAR)
+	  handle.createUpdate("INSERT INTO profiles (" + UID + ", " + VERSION + ", " + NAME + ", " + AVATAR + ", " + ABOUT_EMOJI + ", " + ABOUT + ", " + COMMITMENT + ") VALUES (:uuid, :version, :name, :avatar, :about_emoji, :about, :commitment) ON CONFLICT (" + UID + ", " + VERSION + ") DO UPDATE SET " + NAME + " = EXCLUDED." + NAME + ", " + AVATAR + " = EXCLUDED." + AVATAR + ", " + ABOUT + " = EXCLUDED." + ABOUT + ", " + ABOUT_EMOJI + " = EXCLUDED." + ABOUT_EMOJI)
               .bind("uuid", uuid)
               .bind("version", profile.getVersion())
               .bind("name", profile.getName())
               .bind("avatar", profile.getAvatar())
+              .bind("about_emoji", profile.getAboutEmoji())
+              .bind("about", profile.getAbout())
               .bind("commitment", profile.getCommitment())
               .execute();
       }

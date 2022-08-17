@@ -32,24 +32,17 @@ public class CertificateGenerator {
 	this.serverCertificate = ServerCertificate.parseFrom(serverCertificate);
     }
 
-    public byte[] createFor(Account account, Device device, boolean includeUserLogin, boolean includeUuid) throws IOException, InvalidKeyException {
+    public byte[] createFor(Account account, Device device, boolean includeUserLogin) throws IOException, InvalidKeyException {
 	SenderCertificate.Certificate.Builder builder = SenderCertificate.Certificate.newBuilder()
 		.setSenderDevice(Math.toIntExact(device.getId()))
 		.setExpires(System.currentTimeMillis() + TimeUnit.DAYS.toMillis(expiresDays))
 		.setIdentityKey(ByteString.copyFrom(Base64.decode(account.getIdentityKey())))
-		.setSigner(serverCertificate);
-
-	if (!includeUserLogin && !includeUuid) {
-	    throw new IllegalArgumentException("Certificates must include one of a sender user login or UUID");
-	}
+		.setSigner(serverCertificate)
+                .setSenderUuid(account.getUuid().toString());
 
 	if (includeUserLogin) {
 	    builder.setSender(account.getUserLogin());
-	}
-
-	if (includeUuid) {
-	    builder.setSenderUuid(account.getUuid().toString());
-	}
+	}	
 
 	byte[] certificate = builder.build().toByteArray();
 	byte[] signature = Curve.calculateSignature(privateKey, certificate);

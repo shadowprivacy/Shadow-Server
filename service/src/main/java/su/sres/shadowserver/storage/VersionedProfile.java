@@ -13,42 +13,59 @@ import su.sres.shadowserver.util.ByteArrayAdapter;
 
 public class VersionedProfile {
 
-  @JsonProperty
-  private String version;
+    @JsonProperty
+    private String version;
 
-  @JsonProperty
-  private String name;
+    @JsonProperty
+    private String name;
 
-  @JsonProperty
-  private String avatar;
+    @JsonProperty
+    private String avatar;
 
-  @JsonProperty
-  @JsonSerialize(using = ByteArrayAdapter.Serializing.class)
-  @JsonDeserialize(using = ByteArrayAdapter.Deserializing.class)
-  private byte[] commitment;
+    @JsonProperty
+    private String aboutEmoji;
 
-  public VersionedProfile() {}
+    @JsonProperty
+    private String about;
 
-  public VersionedProfile(String version, String name, String avatar, byte[] commitment) {
-    this.version    = version;
-    this.name       = name;
-    this.avatar     = avatar;
-    this.commitment = commitment;
-  }
+    @JsonProperty
+    @JsonSerialize(using = ByteArrayAdapter.Serializing.class)
+    @JsonDeserialize(using = ByteArrayAdapter.Deserializing.class)
+    private byte[] commitment;
 
-  public String getVersion() {
-    return version;
-  }
+    public VersionedProfile() {
+    }
 
-  public String getName() {
-    return name;
-  }
+    public VersionedProfile(String version, String name, String avatar, String aboutEmoji, String about, byte[] commitment) {
+	this.version = version;
+	this.name = name;
+	this.avatar = avatar;
+	this.aboutEmoji = aboutEmoji;
+	this.about = about;
+	this.commitment = commitment;
+    }
 
-  public String getAvatar() {
-    return avatar;
-  }
+    public String getVersion() {
+	return version;
+    }
 
-  public byte[] getCommitment() {
-    return commitment;
-  }
+    public String getName() {
+	return name;
+    }
+
+    public String getAvatar() {
+	return avatar;
+    }
+
+    public String getAboutEmoji() {
+	return aboutEmoji;
+    }
+
+    public String getAbout() {
+	return about;
+    }
+
+    public byte[] getCommitment() {
+	return commitment;
+    }
 }

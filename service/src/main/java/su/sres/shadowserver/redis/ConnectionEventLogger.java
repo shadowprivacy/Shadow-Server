@@ -18,7 +18,7 @@ public class ConnectionEventLogger {
     public static void logConnectionEvents(final ClientResources clientResources) {
 	clientResources.eventBus().get().subscribe(event -> {
 	    if (event instanceof ConnectionEvent) {
-		logger.info("Connection event: {}", event);
+		logger.debug("Connection event: {}", event);
 	    } else if (event instanceof ClusterTopologyChangedEvent) {
 		logger.info("Cluster topology changed: {}", event);
 	    }

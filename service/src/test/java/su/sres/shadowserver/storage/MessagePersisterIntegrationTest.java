@@ -65,9 +65,9 @@ public class MessagePersisterIntegrationTest extends AbstractRedisClusterTest {
 	final AccountsManager accountsManager = mock(AccountsManager.class);
 
 	notificationExecutorService = Executors.newSingleThreadExecutor();
-	messagesCache = new MessagesCache(getRedisCluster(), notificationExecutorService);
+	messagesCache = new MessagesCache(getRedisCluster(), getRedisCluster(), notificationExecutorService);
 	messagesManager = new MessagesManager(messages, messagesCache, mock(PushLatencyManager.class));
-	messagePersister = new MessagePersister(messagesCache, messagesManager, accountsManager, PERSIST_DELAY);
+	messagePersister = new MessagePersister(messagesCache, messagesManager, accountsManager, mock(FeatureFlagsManager.class), PERSIST_DELAY);
 
 	account = mock(Account.class);
 

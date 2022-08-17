@@ -126,5 +126,9 @@
             <column name="source_uuid" type="uuid"/>
         </addColumn>
     </changeSet>
+    
+    <changeSet runInTransaction="false" id="14" author="ehren">
+        <sql>DROP INDEX CONCURRENTLY IF EXISTS public.destination_index;</sql>
+    </changeSet>
 
 </databaseChangeLog>

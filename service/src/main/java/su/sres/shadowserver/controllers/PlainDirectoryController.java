@@ -5,9 +5,6 @@
  */
 package su.sres.shadowserver.controllers;
 
-import com.codahale.metrics.Histogram;
-import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.SharedMetricRegistries;
 import com.codahale.metrics.annotation.Timed;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,7 +17,6 @@ import javax.ws.rs.WebApplicationException;
 import java.util.HashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static com.codahale.metrics.MetricRegistry.name;
 import io.dropwizard.auth.Auth;
 import io.dropwizard.jersey.protobuf.ProtocolBufferMediaType;
 import su.sres.shadowserver.limits.RateLimiters;
@@ -30,7 +26,6 @@ import su.sres.shadowserver.storage.DirectoryManager;
 import su.sres.shadowserver.storage.protos.DirectoryResponse;
 import su.sres.shadowserver.storage.protos.DirectoryUpdate;
 import su.sres.shadowserver.storage.protos.DirectoryUpdate.Type;
-import su.sres.shadowserver.util.Constants;
 
 import static su.sres.shadowserver.storage.DirectoryManager.INCREMENTAL_UPDATES_TO_HOLD;
 

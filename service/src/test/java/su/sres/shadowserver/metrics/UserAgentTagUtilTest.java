@@ -1,5 +1,5 @@
 /*
- * Original software: Copyright 2013-2020 Signal Messenger, LLC
+ * Original software: Copyright 2013-2020 Shadow Messenger, LLC
  * Modified software: Copyright 2019-2022 Anton Alipov, sole trader
  * SPDX-License-Identifier: AGPL-3.0-only
  */
@@ -65,5 +65,31 @@ public class UserAgentTagUtilTest {
 	assertEquals(2, tags.size());
 	assertTrue(tags.contains(Tag.of(UserAgentTagUtil.PLATFORM_TAG, "android")));
 	assertTrue(tags.contains(Tag.of(UserAgentTagUtil.VERSION_TAG, "4.0.0")));
+    }
+    
+    @Test
+    @Parameters(method = "argumentsForTestGetPlatformTag")
+    public void testGetPlatformTag(final String userAgent, final Tag expectedTag) {
+        assertEquals(expectedTag, UserAgentTagUtil.getPlatformTag(userAgent));
+    }
+
+    private Object argumentsForTestGetPlatformTag() {
+        return new Object[] {
+                new Object[] { "This is obviously not a reasonable User-Agent string.", Tag.of(UserAgentTagUtil.PLATFORM_TAG, "unrecognized") },
+                new Object[] { null,                                                    Tag.of(UserAgentTagUtil.PLATFORM_TAG, "unrecognized") },
+                new Object[] { "Shadow-Android 4.53.7 (Android 8.1)",                   Tag.of(UserAgentTagUtil.PLATFORM_TAG, "android") },
+                new Object[] { "Shadow Desktop 1.2.3",                                  Tag.of(UserAgentTagUtil.PLATFORM_TAG, "desktop") },
+                new Object[] { "Shadow/3.9.0 (iPhone; iOS 12.2; Scale/3.00)",           Tag.of(UserAgentTagUtil.PLATFORM_TAG, "ios") },
+                new Object[] { "Shadow-Android 1.2.3 (Android 8.1)",                    Tag.of(UserAgentTagUtil.PLATFORM_TAG, "android") },
+                new Object[] { "Shadow Desktop 3.9.0",                                  Tag.of(UserAgentTagUtil.PLATFORM_TAG, "desktop") },
+                new Object[] { "Shadow/4.53.7 (iPhone; iOS 12.2; Scale/3.00)",          Tag.of(UserAgentTagUtil.PLATFORM_TAG, "ios") },
+                new Object[] { "Shadow-Android 4.68.3 (Android 9)",                     Tag.of(UserAgentTagUtil.PLATFORM_TAG, "android") },
+                new Object[] { "Shadow-Android 1.2.3 (Android 4.3)",                    Tag.of(UserAgentTagUtil.PLATFORM_TAG, "android") },
+                new Object[] { "Shadow-Android 4.68.3.0-bobsbootlegclient",             Tag.of(UserAgentTagUtil.PLATFORM_TAG, "android") },
+                new Object[] { "Shadow Desktop 1.22.45-foo-0",                          Tag.of(UserAgentTagUtil.PLATFORM_TAG, "desktop") },
+                new Object[] { "Shadow Desktop 1.34.5-beta.1-fakeclientemporium",       Tag.of(UserAgentTagUtil.PLATFORM_TAG, "desktop") },
+		new Object[] {
+			"Shadow Desktop 1.32.0-beta.3",                          Tag.of(UserAgentTagUtil.PLATFORM_TAG, "desktop") },
+        };
     }
 }

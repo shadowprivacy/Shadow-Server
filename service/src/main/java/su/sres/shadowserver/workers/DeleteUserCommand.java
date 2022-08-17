@@ -101,14 +101,15 @@ public class DeleteUserCommand extends EnvironmentCommand<WhisperServerConfigura
 	    Usernames usernames = new Usernames(accountDatabase);
 	    Profiles profiles = new Profiles(accountDatabase);
 	    ReservedUsernames reservedUsernames = new ReservedUsernames(accountDatabase);
-	    Keys keys = new Keys(accountDatabase);
+	    Keys keys = new Keys(accountDatabase, configuration.getAccountsDatabaseConfiguration().getKeyOperationRetryConfiguration());
 	    Messages messages = new Messages(messageDatabase);
 
 	    ReplicatedJedisPool redisClient = new RedisClientFactory("directory_cache_delete_command", configuration.getDirectoryConfiguration().getUrl(), configuration.getDirectoryConfiguration().getReplicaUrls(), configuration.getDirectoryConfiguration().getCircuitBreakerConfiguration())
 		    .getRedisClientPool();
-	    FaultTolerantRedisCluster messagesCacheCluster = new FaultTolerantRedisCluster("messages_cluster", configuration.getMessageCacheConfiguration().getRedisClusterConfiguration(), redisClusterClientResources);
+	    FaultTolerantRedisCluster messageInsertCacheCluster = new FaultTolerantRedisCluster("message_insert_cluster", configuration.getMessageCacheConfiguration().getRedisClusterConfiguration(), redisClusterClientResources);
+	    FaultTolerantRedisCluster messageReadDeleteCluster = new FaultTolerantRedisCluster("message_read_delete_cluster", configuration.getMessageCacheConfiguration().getRedisClusterConfiguration(), redisClusterClientResources);
 	    FaultTolerantRedisCluster metricsCluster = new FaultTolerantRedisCluster("metrics_cluster", configuration.getMetricsClusterConfiguration(), redisClusterClientResources);
-	    MessagesCache messagesCache = new MessagesCache(messagesCacheCluster, keyspaceNotificationDispatchExecutor);
+	    MessagesCache messagesCache = new MessagesCache(messageInsertCacheCluster, messageReadDeleteCluster, keyspaceNotificationDispatchExecutor);
 	    PushLatencyManager pushLatencyManager = new PushLatencyManager(metricsCluster);
 	    UsernamesManager usernamesManager = new UsernamesManager(usernames, reservedUsernames, cacheCluster);
 	    ProfilesManager profilesManager = new ProfilesManager(profiles, cacheCluster);

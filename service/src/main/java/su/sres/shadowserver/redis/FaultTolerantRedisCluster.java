@@ -13,6 +13,8 @@ import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.retry.Retry;
 import io.lettuce.core.RedisCommandTimeoutException;
 import io.lettuce.core.RedisURI;
+import io.lettuce.core.cluster.ClusterClientOptions;
+import io.lettuce.core.cluster.ClusterTopologyRefreshOptions;
 import io.lettuce.core.cluster.RedisClusterClient;
 import io.lettuce.core.cluster.api.StatefulRedisClusterConnection;
 import io.lettuce.core.cluster.pubsub.StatefulRedisClusterPubSubConnection;
@@ -27,10 +29,12 @@ import su.sres.shadowserver.configuration.RedisClusterConfiguration;
 import su.sres.shadowserver.configuration.RetryConfiguration;
 import su.sres.shadowserver.util.CircuitBreakerUtil;
 import su.sres.shadowserver.util.Constants;
+import su.sres.shadowserver.util.ThreadDumpUtil;
 
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -55,6 +59,7 @@ public class FaultTolerantRedisCluster {
     private final CircuitBreaker circuitBreaker;
     private final Retry retry;
     private final Meter commandTimeoutMeter;
+    private final AtomicBoolean wroteThreadDump = new AtomicBoolean(false);
 
     private static final Logger log = LoggerFactory.getLogger(FaultTolerantRedisCluster.class);
 
@@ -75,6 +80,12 @@ public class FaultTolerantRedisCluster {
 
 	this.clusterClient = clusterClient;
 	this.clusterClient.setDefaultTimeout(commandTimeout);
+	this.clusterClient.setOptions(ClusterClientOptions.builder()
+		.validateClusterNodeMembership(false)
+		.topologyRefreshOptions(ClusterTopologyRefreshOptions.builder()			
+			.enableAllAdaptiveRefreshTriggers()
+			.build())
+		.build());
 
 	this.stringConnection = clusterClient.connect();
 	this.binaryConnection = clusterClient.connect(ByteArrayCodec.INSTANCE);
@@ -123,8 +134,7 @@ public class FaultTolerantRedisCluster {
 		try {
 		    consumer.accept(connection);
 		} catch (final RedisCommandTimeoutException e) {
-		    commandTimeoutMeter.mark();
-		    log.warn("Command timeout exception ({})", this.name, e);
+		    recordCommandTimeout(e);
 		    throw e;
 		}
 	    }));
@@ -145,8 +155,7 @@ public class FaultTolerantRedisCluster {
 		try {
 		    return function.apply(connection);
 		} catch (final RedisCommandTimeoutException e) {
-		    commandTimeoutMeter.mark();
-		    log.warn("Command timeout exception ({})", this.name, e);
+		    recordCommandTimeout(e);
 		    throw e;
 		}
 	    }));
@@ -158,6 +167,15 @@ public class FaultTolerantRedisCluster {
 	    } else {
 		throw new RuntimeException(t);
 	    }
+	}
+    }
+
+    private void recordCommandTimeout(final RedisCommandTimeoutException e) {
+	commandTimeoutMeter.mark();
+	log.warn("[{}] Command timeout exception ({})", Thread.currentThread().getName(), this.name, e);
+
+	if (wroteThreadDump.compareAndSet(false, true)) {
+	    ThreadDumpUtil.writeThreadDump();
 	}
     }
 
