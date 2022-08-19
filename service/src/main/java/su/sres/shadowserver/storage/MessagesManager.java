@@ -20,30 +20,27 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.ExecutorService;
 import java.util.stream.Collectors;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import static com.codahale.metrics.MetricRegistry.name;
 
+// TODO Clean-up from the experiment stuff see https://github.com/signalapp/Signal-Server/commit/0dcb4b645c9fc30368f75344627b943744275b62
 public class MessagesManager {
 
     private static final MetricRegistry metricRegistry = SharedMetricRegistries.getOrCreate(Constants.METRICS_NAME);
-    private static final Meter cacheHitByIdMeter = metricRegistry.meter(name(MessagesManager.class, "cacheHitById"));
-    private static final Meter cacheMissByIdMeter = metricRegistry.meter(name(MessagesManager.class, "cacheMissById"));
     private static final Meter cacheHitByNameMeter = metricRegistry.meter(name(MessagesManager.class, "cacheHitByName"));
     private static final Meter cacheMissByNameMeter = metricRegistry.meter(name(MessagesManager.class, "cacheMissByName"));
     private static final Meter cacheHitByGuidMeter = metricRegistry.meter(name(MessagesManager.class, "cacheHitByGuid"));
     private static final Meter cacheMissByGuidMeter = metricRegistry.meter(name(MessagesManager.class, "cacheMissByGuid"));
 
     private final Messages messages;
+    private final MessagesScyllaDb messagesScyllaDb;
     private final MessagesCache messagesCache;
     private final PushLatencyManager pushLatencyManager;
 
-    public MessagesManager(Messages messages, MessagesCache messagesCache, PushLatencyManager pushLatencyManager) {
+    public MessagesManager(Messages messages, MessagesScyllaDb messagesScyllaDb, MessagesCache messagesCache, PushLatencyManager pushLatencyManager) {
 	this.messages = messages;
+	this.messagesScyllaDb = messagesScyllaDb;
 	this.messagesCache = messagesCache;
 	this.pushLatencyManager = pushLatencyManager;
     }
@@ -67,38 +64,55 @@ public class MessagesManager {
     public OutgoingMessageEntityList getMessagesForDevice(String destination, UUID destinationUuid, long destinationDevice, final String userAgent, final boolean cachedMessagesOnly) {
 	RedisOperation.unchecked(() -> pushLatencyManager.recordQueueRead(destinationUuid, destinationDevice, userAgent));
 
-	List<OutgoingMessageEntity> messages = cachedMessagesOnly ? new ArrayList<>() : this.messages.load(destination, destinationDevice);
+	List<OutgoingMessageEntity> messageList = new ArrayList<>();
 
-	if (messages.size() < Messages.RESULT_SET_CHUNK_SIZE) {
-	    messages.addAll(messagesCache.get(destinationUuid, destinationDevice, Messages.RESULT_SET_CHUNK_SIZE - messages.size()));
+	if (!cachedMessagesOnly) {
+	    messageList.addAll(messages.load(destination, destinationDevice));
 	}
 
-	return new OutgoingMessageEntityList(messages, messages.size() >= Messages.RESULT_SET_CHUNK_SIZE);
+	if (messageList.size() < Messages.RESULT_SET_CHUNK_SIZE && !cachedMessagesOnly) {
+	    messageList.addAll(messagesScyllaDb.load(destinationUuid, destinationDevice, Messages.RESULT_SET_CHUNK_SIZE - messageList.size()));
+	}
+
+	if (messageList.size() < Messages.RESULT_SET_CHUNK_SIZE) {
+	    messageList.addAll(messagesCache.get(destinationUuid, destinationDevice, Messages.RESULT_SET_CHUNK_SIZE - messageList.size()));
+	}
+
+	return new OutgoingMessageEntityList(messageList, messageList.size() >= Messages.RESULT_SET_CHUNK_SIZE);
     }
 
     public void clear(String destination, UUID destinationUuid) {
 	// TODO Remove this null check in a fully-UUID-ified world
 	if (destinationUuid != null) {
-	    this.messagesCache.clear(destinationUuid);
-	}
+	    messagesCache.clear(destinationUuid);
 
-	this.messages.clear(destination);
+	    messagesScyllaDb.deleteAllMessagesForAccount(destinationUuid);
+
+	    messages.clear(destination);
+
+	} else {
+	    messages.clear(destination);
+	}
     }
 
     public void clear(String destination, UUID destinationUuid, long deviceId) {
-	// TODO Remove this null check in a fully-UUID-ified world
-	if (destinationUuid != null) {
-	    this.messagesCache.clear(destinationUuid, deviceId);
-	}
+	messagesCache.clear(destinationUuid, deviceId);
 
-	this.messages.clear(destination, deviceId);
+	messagesScyllaDb.deleteAllMessagesForDevice(destinationUuid, deviceId);
+
+	messages.clear(destination, deviceId);
     }
 
     public Optional<OutgoingMessageEntity> delete(String destination, UUID destinationUuid, long destinationDevice, String source, long timestamp) {
 	Optional<OutgoingMessageEntity> removed = messagesCache.remove(destinationUuid, destinationDevice, source, timestamp);
 
-	if (!removed.isPresent()) {
-	    removed = this.messages.remove(destination, destinationDevice, source, timestamp);
+	if (removed.isEmpty()) {
+
+	    removed = messagesScyllaDb.deleteMessageByDestinationAndSourceAndTimestamp(destinationUuid, destinationDevice, source, timestamp);
+
+	    if (removed.isEmpty()) {
+		removed = messages.remove(destination, destinationDevice, source, timestamp);
+	    }
 	    cacheMissByNameMeter.mark();
 	} else {
 	    cacheHitByNameMeter.mark();
@@ -110,8 +124,13 @@ public class MessagesManager {
     public Optional<OutgoingMessageEntity> delete(String destination, UUID destinationUuid, long deviceId, UUID guid) {
 	Optional<OutgoingMessageEntity> removed = messagesCache.remove(destinationUuid, deviceId, guid);
 
-	if (!removed.isPresent()) {
-	    removed = this.messages.remove(destination, guid);
+	if (removed.isEmpty()) {
+
+	    removed = messagesScyllaDb.deleteMessageByDestinationAndGuid(destinationUuid, deviceId, guid);
+
+	    if (removed.isEmpty()) {
+		removed = messages.remove(destination, guid);
+	    }
 	    cacheMissByGuidMeter.mark();
 	} else {
 	    cacheHitByGuidMeter.mark();
@@ -120,17 +139,15 @@ public class MessagesManager {
 	return removed;
     }
 
-    public void delete(String destination, UUID destinationUuid, long deviceId, long id, boolean cached) {
-	if (cached) {
-	    messagesCache.remove(destinationUuid, deviceId, id);
-	    cacheHitByIdMeter.mark();
-	} else {
-	    this.messages.remove(destination, id);
-	    cacheMissByIdMeter.mark();
-	}
+    @Deprecated
+    public void delete(String destination, long id) {
+	messages.remove(destination, id);
     }
 
     public void persistMessages(final String destination, final UUID destinationUuid, final long destinationDeviceId, final List<Envelope> messages) {
+
+	messagesScyllaDb.store(messages, destinationUuid, destinationDeviceId);
+
 	this.messages.store(messages, destination, destinationDeviceId);
 
 	messagesCache.remove(destinationUuid, destinationDeviceId, messages.stream().map(message -> UUID.fromString(message.getServerGuid())).collect(Collectors.toList()));

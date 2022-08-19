@@ -29,10 +29,13 @@ import su.sres.shadowserver.storage.FaultTolerantDatabase;
 import su.sres.shadowserver.storage.Messages;
 import su.sres.shadowserver.storage.MessagesCache;
 import su.sres.shadowserver.storage.MessagesManager;
+import su.sres.shadowserver.storage.MessagesScyllaDb;
+import su.sres.shadowserver.util.MessagesDynamoDbRule;
 import su.sres.websocket.WebSocketClient;
 import su.sres.websocket.messages.WebSocketResponseMessage;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -47,6 +50,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atMost;
 import static org.mockito.Mockito.mock;
@@ -59,9 +63,13 @@ public class WebSocketConnectionIntegrationTest extends AbstractRedisClusterTest
 
     @Rule
     public PreparedDbRule db = EmbeddedPostgresRules.preparedDatabase(LiquibasePreparer.forClasspathLocation("messagedb.xml"));
+    
+    @Rule
+    public MessagesDynamoDbRule messagesDynamoDbRule = new MessagesDynamoDbRule();
 
     private ExecutorService executorService;
     private Messages messages;
+    private MessagesScyllaDb messagesScyllaDb;
     private MessagesCache messagesCache;
     private Account account;
     private Device device;
@@ -82,6 +90,7 @@ public class WebSocketConnectionIntegrationTest extends AbstractRedisClusterTest
 	executorService = Executors.newSingleThreadExecutor();
 	messages = new Messages(new FaultTolerantDatabase("messages-test", Jdbi.create(db.getTestDatabase()), new CircuitBreakerConfiguration()));
 	messagesCache = new MessagesCache(getRedisCluster(), getRedisCluster(), executorService);
+	messagesScyllaDb = new MessagesScyllaDb(messagesDynamoDbRule.getDynamoDB(), MessagesDynamoDbRule.TABLE_NAME, Duration.ofDays(7));
 	account = mock(Account.class);
 	device = mock(Device.class);
 	webSocketClient = mock(WebSocketClient.class);
@@ -92,7 +101,7 @@ public class WebSocketConnectionIntegrationTest extends AbstractRedisClusterTest
 
 	webSocketConnection = new WebSocketConnection(
 		mock(ReceiptSender.class),
-		new MessagesManager(messages, messagesCache, mock(PushLatencyManager.class)),
+		new MessagesManager(messages, messagesScyllaDb, messagesCache, mock(PushLatencyManager.class)),
 		account,
 		device,
 		webSocketClient);

@@ -47,6 +47,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -149,7 +150,7 @@ public class WebSocketConnection implements MessageAvailabilityListener, Displac
 
 		    if (isSuccessResponse(response)) {
 			if (storedMessageInfo.isPresent()) {
-			    messagesManager.delete(account.getUserLogin(), account.getUuid(), device.getId(), storedMessageInfo.get().id, storedMessageInfo.get().cached);
+			    messagesManager.delete(account.getUserLogin(), account.getUuid(), device.getId(), storedMessageInfo.get().getGuid());
 			}
 
 			if (message.getType() != Envelope.Type.RECEIPT) {
@@ -266,13 +267,17 @@ public class WebSocketConnection implements MessageAvailabilityListener, Displac
 
 	    final Envelope envelope = builder.build();
 
-	    if (envelope.getSerializedSize() > MAX_DESKTOP_MESSAGE_SIZE && isDesktopClient) {
-		messagesManager.delete(account.getUserLogin(), account.getUuid(), device.getId(), message.getId(), message.isCached());
+	    if (message.getGuid() == null || (envelope.getSerializedSize() > MAX_DESKTOP_MESSAGE_SIZE && isDesktopClient)) {
+		if (message.getGuid() == null) {
+		    messagesManager.delete(account.getUserLogin(), message.getId()); // TODO(ehren): Remove once the message DB is gone.
+		} else {
+		    messagesManager.delete(account.getUserLogin(), account.getUuid(), device.getId(), message.getGuid());
+		}
 		discardedMessagesMeter.mark();
 
 		sendFutures[i] = CompletableFuture.completedFuture(null);
 	    } else {
-		sendFutures[i] = sendMessage(builder.build(), Optional.of(new StoredMessageInfo(message.getId(), message.isCached())));
+		sendFutures[i] = sendMessage(builder.build(), Optional.of(new StoredMessageInfo(message.getGuid())));
 	    }
 	}
 
@@ -321,12 +326,14 @@ public class WebSocketConnection implements MessageAvailabilityListener, Displac
     }
 
     private static class StoredMessageInfo {
-	private final long id;
-	private final boolean cached;
+	private final UUID guid;
 
-	private StoredMessageInfo(long id, boolean cached) {
-	    this.id = id;
-	    this.cached = cached;
+	public StoredMessageInfo(UUID guid) {
+	    this.guid = guid;
+	}
+
+	public UUID getGuid() {
+	    return guid;
 	}
     }
 }

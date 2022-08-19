@@ -80,17 +80,24 @@
 			<groupId>io.micrometer</groupId>
 			<artifactId>micrometer-registry-wavefront</artifactId>
 			<version>1.5.3</version>
-		</dependency>			
+		</dependency>
 
 		<dependency>
 			<groupId>com.amazonaws</groupId>
 			<artifactId>aws-java-sdk-s3</artifactId>
-			<version>1.11.939</version>
+			<version>${aws.sdk.version}</version>
 		</dependency>
+
 		<dependency>
 			<groupId>com.amazonaws</groupId>
 			<artifactId>aws-java-sdk-sqs</artifactId>
-			<version>1.11.939</version>
+			<version>${aws.sdk.version}</version>
+		</dependency>
+
+		<dependency>
+			<groupId>com.amazonaws</groupId>
+			<artifactId>aws-java-sdk-dynamodb</artifactId>
+			<version>${aws.sdk.version}</version>
 		</dependency>
 
 		<dependency>
@@ -106,7 +113,7 @@
 			<artifactId>lettuce-core</artifactId>
 			<version>6.0.1.RELEASE</version>
 		</dependency>
-				
+
 		<dependency>
 			<groupId>org.postgresql</groupId>
 			<artifactId>postgresql</artifactId>
@@ -140,12 +147,12 @@
 			<version>2.0.34.Final</version>
 			<scope>runtime</scope>
 		</dependency>
-		
+
 		<dependency>
-            <groupId>com.vdurmont</groupId>
-            <artifactId>semver4j</artifactId>
-            <version>3.1.0</version>
-        </dependency>
+			<groupId>com.vdurmont</groupId>
+			<artifactId>semver4j</artifactId>
+			<version>3.1.0</version>
+		</dependency>
 
 		<dependency>
 			<groupId>com.googlecode.libphonenumber</groupId>
@@ -191,6 +198,19 @@
 			<version>3.2.0</version>
 			<scope>test</scope>
 		</dependency>
+		
+		<dependency>
+            <groupId>com.amazonaws</groupId>
+            <artifactId>DynamoDBLocal</artifactId>
+            <version>1.13.6</version>
+            <scope>test</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.antlr</groupId>
+                    <artifactId>antlr4-runtime</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
 
 		<dependency>
 			<groupId>pl.pragmatists</groupId>
@@ -210,12 +230,12 @@
 			<artifactId>dropwizard-protobuf</artifactId>
 			<version>2.0.7-1</version>
 		</dependency>
-		
+
 		<dependency>
-            <groupId>com.javax0.license3j</groupId>
-            <artifactId>license3j</artifactId>
-            <version>3.2.0</version>
-        </dependency>
+			<groupId>com.javax0.license3j</groupId>
+			<artifactId>license3j</artifactId>
+			<version>3.2.0</version>
+		</dependency>
 	</dependencies>
 
 	<build>

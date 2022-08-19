@@ -83,15 +83,15 @@ public class MessageController {
     private final MetricRegistry metricRegistry = SharedMetricRegistries.getOrCreate(Constants.METRICS_NAME);
     private final Meter unidentifiedMeter = metricRegistry.meter(name(getClass(), "delivery", "unidentified"));
     private final Meter identifiedMeter = metricRegistry.meter(name(getClass(), "delivery", "identified"));
-    private final Meter rejectOversizeMessageMeter = metricRegistry.meter(name(getClass(), "rejectOversizeMessage"));
     private final Meter rejectOver256kibMessageMeter = metricRegistry.meter(name(getClass(), "rejectOver256kibMessage"));
+    private final Meter rejectUnsealedSenderLimit = metricRegistry.meter(name(getClass(), "rejectUnsealedSenderLimit"));
     private final Timer sendMessageInternalTimer = metricRegistry.timer(name(getClass(), "sendMessageInternal"));
     private final Histogram outgoingMessageListSizeHistogram = metricRegistry.histogram(name(getClass(), "outgoingMessageListSize"));
 
     private final RateLimiters rateLimiters;
     private final MessageSender messageSender;
     private final ReceiptSender receiptSender;
-//excluded federation, reserved for future use
+    // excluded federation, reserved for future use
     // private final FederatedClientManager federatedClientManager;
     private final AccountsManager accountsManager;
     private final MessagesManager messagesManager;
@@ -102,8 +102,7 @@ public class MessageController {
     private static final String CONTENT_SIZE_DISTRIBUTION_NAME = name(MessageController.class, "messageContentSize");
     private static final String OUTGOING_MESSAGE_LIST_SIZE_BYTES_DISTRIBUTION_NAME = name(MessageController.class, "outgoingMessageListSizeBytes");
 
-    private static final long MAX_MESSAGE_SIZE = DataSize.mebibytes(1).toBytes();
-    private static final long SMALLER_MAX_MESSAGE_SIZE = DataSize.kibibytes(256).toBytes();
+    private static final long MAX_MESSAGE_SIZE = DataSize.kibibytes(256).toBytes();
 
     public MessageController(RateLimiters rateLimiters,
 	    MessageSender messageSender,
@@ -138,17 +137,24 @@ public class MessageController {
 	    @Valid IncomingMessageList messages)
 	    throws RateLimitExceededException {
 	if (shouldSend(destinationName)) {
-	    if (!source.isPresent() && !accessKey.isPresent()) {
+	    if (source.isEmpty() && accessKey.isEmpty()) {
 		throw new WebApplicationException(Response.Status.UNAUTHORIZED);
 	    }
 
 	    if (source.isPresent() && !source.get().isFor(destinationName)) {
 		rateLimiters.getMessagesLimiter().validate(source.get().getUserLogin() + "__" + destinationName);
+
+		try {
+		    rateLimiters.getUnsealedSenderLimiter().validate(source.get().getUuid().toString());
+		} catch (RateLimitExceededException e) {
+		    rejectUnsealedSenderLimit.mark();
+		    logger.debug("Rejected unsealed sender limit from: " + source.get().getUserLogin());
+		}
 	    }
 
 	    if (source.isPresent() && !source.get().isFor(destinationName)) {
 		identifiedMeter.mark();
-	    } else if (!source.isPresent()) {
+	    } else if (source.isEmpty()) {
 		unidentifiedMeter.mark();
 	    }
 
@@ -166,12 +172,8 @@ public class MessageController {
 		Metrics.summary(CONTENT_SIZE_DISTRIBUTION_NAME, UserAgentTagUtil.getUserAgentTags(userAgent)).record(contentLength);
 
 		if (contentLength > MAX_MESSAGE_SIZE) {
-		    // TODO Reject the request
-		    rejectOversizeMessageMeter.mark();
-		}
-
-		if (contentLength > SMALLER_MAX_MESSAGE_SIZE) {
 		    rejectOver256kibMessageMeter.mark();
+		    return Response.status(Response.Status.REQUEST_ENTITY_TOO_LARGE).build();
 		}
 	    }
 

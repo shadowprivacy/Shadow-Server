@@ -5,7 +5,11 @@
  */
 package su.sres.shadowserver.limits;
 
+import java.util.concurrent.atomic.AtomicReference;
+
 import su.sres.shadowserver.configuration.RateLimitsConfiguration;
+import su.sres.shadowserver.configuration.RateLimitsConfiguration.RateLimitConfiguration;
+import su.sres.shadowserver.configuration.dynamic.DynamicRateLimitsConfiguration;
 import su.sres.shadowserver.redis.FaultTolerantRedisCluster;
 import su.sres.shadowserver.redis.ReplicatedJedisPool;
 
@@ -42,7 +46,16 @@ public class RateLimiters {
     private final RateLimiter directoryLimiter;
     private final RateLimiter licenseLimiter;
 
-    public RateLimiters(RateLimitsConfiguration config, FaultTolerantRedisCluster cacheCluster) {
+    private final AtomicReference<RateLimiter> unsealedSenderLimiter;
+    private final AtomicReference<RateLimiter> unsealedIpLimiter;
+
+    private final FaultTolerantRedisCluster cacheCluster;
+    private final DynamicRateLimitsConfiguration dynamicConfig;
+
+    public RateLimiters(RateLimitsConfiguration config, DynamicRateLimitsConfiguration dynamicConfig, FaultTolerantRedisCluster cacheCluster) {
+	this.cacheCluster = cacheCluster;
+	this.dynamicConfig = dynamicConfig;
+
 	this.smsDestinationLimiter = new RateLimiter(cacheCluster, "smsDestination",
 		config.getSmsDestination().getBucketSize(), config.getSmsDestination().getLeakRatePerMinute());
 
@@ -126,6 +139,33 @@ public class RateLimiters {
 
 	this.licenseLimiter = new RateLimiter(cacheCluster, "licenseRequest", config.getLicenseRequest().getBucketSize(),
 		config.getLicenseRequest().getLeakRatePerMinute());
+
+	this.unsealedSenderLimiter = new AtomicReference<>(createUnsealedSenderLimiter(cacheCluster, dynamicConfig.getUnsealedSenderNumber()));
+	this.unsealedIpLimiter = new AtomicReference<>(createUnsealedIpLimiter(cacheCluster, dynamicConfig.getUnsealedSenderIp()));
+    }
+
+    public RateLimiter getUnsealedSenderLimiter() {
+	RateLimitConfiguration currentConfiguration = dynamicConfig.getUnsealedSenderNumber();
+
+	return this.unsealedSenderLimiter.updateAndGet(rateLimiter -> {
+	    if (isLimiterConfigurationCurrent(rateLimiter, currentConfiguration)) {
+		return rateLimiter;
+	    } else {
+		return createUnsealedSenderLimiter(cacheCluster, currentConfiguration);
+	    }
+	});
+    }
+
+    public RateLimiter getUnsealedIpLimiter() {
+	RateLimitConfiguration currentConfiguration = dynamicConfig.getUnsealedSenderIp();
+
+	return this.unsealedIpLimiter.updateAndGet(rateLimiter -> {
+	    if (isLimiterConfigurationCurrent(rateLimiter, currentConfiguration)) {
+		return rateLimiter;
+	    } else {
+		return createUnsealedIpLimiter(cacheCluster, currentConfiguration);
+	    }
+	});
     }
 
     public RateLimiter getAllocateDeviceLimiter() {
@@ -222,5 +262,25 @@ public class RateLimiters {
 
     public RateLimiter getLicenseLimiter() {
 	return licenseLimiter;
+    }
+
+    private RateLimiter createUnsealedSenderLimiter(FaultTolerantRedisCluster cacheCluster,
+	    RateLimitConfiguration configuration) {
+	return createLimiter(cacheCluster, configuration, "unsealedSender");
+    }
+
+    private RateLimiter createUnsealedIpLimiter(FaultTolerantRedisCluster cacheCluster,
+	    RateLimitConfiguration configuration) {
+	return createLimiter(cacheCluster, configuration, "unsealedIp");
+    }
+
+    private RateLimiter createLimiter(FaultTolerantRedisCluster cacheCluster, RateLimitConfiguration configuration, String name) {
+	return new RateLimiter(cacheCluster, name,
+		configuration.getBucketSize(),
+		configuration.getLeakRatePerMinute());
+    }
+
+    private boolean isLimiterConfigurationCurrent(RateLimiter limiter, RateLimitConfiguration configuration) {
+	return limiter.getBucketSize() == configuration.getBucketSize() && limiter.getLeakRatePerMinute() == configuration.getLeakRatePerMinute();
     }
 }

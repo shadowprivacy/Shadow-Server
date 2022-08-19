@@ -5,6 +5,10 @@
  */
 package su.sres.shadowserver;
 
+import com.amazonaws.ClientConfiguration;
+import com.amazonaws.auth.InstanceProfileCredentialsProvider;
+import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
+import com.amazonaws.services.dynamodbv2.document.DynamoDB;
 import com.codahale.metrics.SharedMetricRegistries;
 import com.codahale.metrics.jdbi3.strategies.DefaultNameStrategy;
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
@@ -56,6 +60,7 @@ import su.sres.shadowserver.auth.ExternalServiceCredentialGenerator;
 import su.sres.shadowserver.auth.DisabledPermittedAccount;
 import su.sres.shadowserver.auth.DisabledPermittedAccountAuthenticator;
 import su.sres.shadowserver.auth.TurnTokenGenerator;
+import su.sres.shadowserver.configuration.dynamic.DynamicRateLimitsConfiguration;
 import su.sres.shadowserver.controllers.*;
 import su.sres.shadowserver.filters.TimestampResponseFilter;
 
@@ -276,6 +281,23 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 	FaultTolerantDatabase messageDatabase = new FaultTolerantDatabase("message_database", messageJdbi, config.getMessageStoreConfiguration().getCircuitBreakerConfiguration());
 	FaultTolerantDatabase abuseDatabase = new FaultTolerantDatabase("abuse_database", abuseJdbi, config.getAbuseDatabaseConfiguration().getCircuitBreakerConfiguration());
 
+	AmazonDynamoDBClientBuilder messageScyllaDbClientBuilder = AmazonDynamoDBClientBuilder
+		.standard()
+		.withRegion(config.getMessageScyllaDbConfiguration().getRegion())
+		.withClientConfiguration(new ClientConfiguration().withClientExecutionTimeout(((int) config.getMessageScyllaDbConfiguration().getClientExecutionTimeout().toMillis()))
+			.withRequestTimeout((int) config.getMessageScyllaDbConfiguration().getClientRequestTimeout().toMillis()))
+		.withCredentials(InstanceProfileCredentialsProvider.getInstance());
+
+	AmazonDynamoDBClientBuilder keysScyllaDbClientBuilder = AmazonDynamoDBClientBuilder
+		.standard()
+		.withRegion(config.getKeysScyllaDbConfiguration().getRegion())
+		.withClientConfiguration(new ClientConfiguration().withClientExecutionTimeout(((int) config.getKeysScyllaDbConfiguration().getClientExecutionTimeout().toMillis()))
+			.withRequestTimeout((int) config.getKeysScyllaDbConfiguration().getClientRequestTimeout().toMillis()))
+		.withCredentials(InstanceProfileCredentialsProvider.getInstance());
+
+	DynamoDB messageScyllaDb = new DynamoDB(messageScyllaDbClientBuilder.build());
+	DynamoDB preKeyScyllaDb = new DynamoDB(keysScyllaDbClientBuilder.build());
+
 	Accounts accounts = new Accounts(accountDatabase);
 	PendingAccounts pendingAccounts = new PendingAccounts(accountDatabase);
 	PendingDevices pendingDevices = new PendingDevices(accountDatabase);
@@ -283,7 +305,9 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 	ReservedUsernames reservedUsernames = new ReservedUsernames(accountDatabase);
 	Profiles profiles = new Profiles(accountDatabase);
 	Keys keys = new Keys(accountDatabase, config.getAccountsDatabaseConfiguration().getKeyOperationRetryConfiguration());
+	KeysScyllaDb keysScyllaDb = new KeysScyllaDb(preKeyScyllaDb, config.getKeysScyllaDbConfiguration().getTableName());
 	Messages messages = new Messages(messageDatabase);
+	MessagesScyllaDb messagesScyllaDb = new MessagesScyllaDb(messageScyllaDb, config.getMessageScyllaDbConfiguration().getTableName(), config.getMessageScyllaDbConfiguration().getTimeToLive());
 	AbusiveHostRules abusiveHostRules = new AbusiveHostRules(abuseDatabase);
 	RemoteConfigs remoteConfigs = new RemoteConfigs(accountDatabase);
 	FeatureFlags featureFlags = new FeatureFlags(accountDatabase);
@@ -337,8 +361,8 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 	ProfilesManager profilesManager = new ProfilesManager(profiles, cacheCluster);
 	MessagesCache messagesCache = new MessagesCache(messagesCluster, messagesCluster, keyspaceNotificationDispatchExecutor);
 	PushLatencyManager pushLatencyManager = new PushLatencyManager(metricsCluster);
-	MessagesManager messagesManager = new MessagesManager(messages, messagesCache, pushLatencyManager);
-	AccountsManager accountsManager = new AccountsManager(accounts, directory, cacheCluster, keys, messagesManager, usernamesManager, profilesManager);
+	MessagesManager messagesManager = new MessagesManager(messages, messagesScyllaDb, messagesCache, pushLatencyManager);
+	AccountsManager accountsManager = new AccountsManager(accounts, directory, cacheCluster, keys, keysScyllaDb, messagesManager, usernamesManager, profilesManager);
 	RemoteConfigsManager remoteConfigsManager = new RemoteConfigsManager(remoteConfigs);
 	FeatureFlagsManager featureFlagsManager = new FeatureFlagsManager(featureFlags, recurringJobExecutor);
 	DeadLetterHandler deadLetterHandler = new DeadLetterHandler(accountsManager, messagesManager);
@@ -352,7 +376,8 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 	// FederatedPeerAuthenticator federatedPeerAuthenticator = new
 	// FederatedPeerAuthenticator(config.getFederationConfiguration());
 
-	RateLimiters rateLimiters = new RateLimiters(config.getLimitsConfiguration(), cacheCluster);
+	DynamicRateLimitsConfiguration dynamicRLConfig = new DynamicRateLimitsConfiguration();
+	RateLimiters rateLimiters = new RateLimiters(config.getLimitsConfiguration(), dynamicRLConfig, cacheCluster);
 	ProvisioningManager provisioningManager = new ProvisioningManager(pubSubManager);
 
 	AccountAuthenticator accountAuthenticator = new AccountAuthenticator(accountsManager);
@@ -415,11 +440,11 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 	AttachmentControllerV2 attachmentControllerV2 = new AttachmentControllerV2(rateLimiters, config.getAwsAttachmentsConfiguration().getAccessKey(), config.getAwsAttachmentsConfiguration().getAccessSecret(), config.getAwsAttachmentsConfiguration().getRegion(),
 		config.getAwsAttachmentsConfiguration().getBucket());
 	DebugLogController debugLogController = new DebugLogController(rateLimiters, config.getDebugLogsConfiguration().getAccessKey(), config.getDebugLogsConfiguration().getAccessSecret(), config.getDebugLogsConfiguration().getRegion(), config.getDebugLogsConfiguration().getBucket());
-	KeysController keysController = new KeysController(rateLimiters, keys, accountsManager);
+	KeysController keysController = new KeysController(rateLimiters, keys, keysScyllaDb, accountsManager);
 	MessageController messageController = new MessageController(rateLimiters, messageSender, receiptSender, accountsManager, messagesManager, null, featureFlagsManager);
 	ProfileController profileController = new ProfileController(rateLimiters, accountsManager, profilesManager, usernamesManager, minioClient, profileCdnPolicyGenerator, profileCdnPolicySigner, config.getCdnConfiguration().getBucket(), zkProfileOperations, isZkEnabled);
 	StickerController stickerController = new StickerController(rateLimiters, config.getCdnConfiguration().getAccessKey(), config.getCdnConfiguration().getAccessSecret(), config.getCdnConfiguration().getRegion(), config.getCdnConfiguration().getBucket());
-	RemoteConfigController remoteConfigController = new RemoteConfigController(remoteConfigsManager, config.getRemoteConfigConfiguration().getAuthorizedTokens(), config.getRemoteConfigConfiguration().getGlobalConfig());	
+	RemoteConfigController remoteConfigController = new RemoteConfigController(remoteConfigsManager, config.getRemoteConfigConfiguration().getAuthorizedTokens(), config.getRemoteConfigConfiguration().getGlobalConfig());
 
 	/*
 	 * excluded federation, reserved for future purposes

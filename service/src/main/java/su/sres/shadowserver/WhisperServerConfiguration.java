@@ -97,6 +97,16 @@ public class WhisperServerConfiguration extends Configuration {
     @Valid
     @NotNull
     @JsonProperty
+    private MessageScyllaDbConfiguration messageScyllaDb;
+    
+    @Valid
+    @NotNull
+    @JsonProperty
+    private ScyllaDbConfiguration keysScyllaDb;
+
+    @Valid
+    @NotNull
+    @JsonProperty
     private DatabaseConfiguration messageStore;
 
     @Valid
@@ -261,6 +271,14 @@ public class WhisperServerConfiguration extends Configuration {
 
     public RedisClusterConfiguration getPushSchedulerCluster() {
 	return pushSchedulerCluster;
+    }
+
+    public MessageScyllaDbConfiguration getMessageScyllaDbConfiguration() {
+	return messageScyllaDb;
+    }
+    
+    public ScyllaDbConfiguration getKeysScyllaDbConfiguration() {
+	return keysScyllaDb;
     }
 
     public DatabaseConfiguration getMessageStoreConfiguration() {

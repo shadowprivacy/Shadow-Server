@@ -5,6 +5,10 @@
  */
 package su.sres.shadowserver.workers;
 
+import com.amazonaws.ClientConfiguration;
+import com.amazonaws.auth.InstanceProfileCredentialsProvider;
+import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
+import com.amazonaws.services.dynamodbv2.document.DynamoDB;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.google.common.annotations.VisibleForTesting;
 
@@ -40,9 +44,11 @@ import su.sres.shadowserver.storage.AccountsManager;
 import su.sres.shadowserver.storage.DirectoryManager;
 import su.sres.shadowserver.storage.FaultTolerantDatabase;
 import su.sres.shadowserver.storage.Keys;
+import su.sres.shadowserver.storage.KeysScyllaDb;
 import su.sres.shadowserver.storage.Messages;
 import su.sres.shadowserver.storage.MessagesCache;
 import su.sres.shadowserver.storage.MessagesManager;
+import su.sres.shadowserver.storage.MessagesScyllaDb;
 import su.sres.shadowserver.storage.PendingAccounts;
 import su.sres.shadowserver.storage.PendingAccountsManager;
 import su.sres.shadowserver.storage.Profiles;
@@ -158,6 +164,23 @@ public class CreatePendingAccountCommand extends EnvironmentCommand<WhisperServe
 	    FaultTolerantDatabase messageDatabase = new FaultTolerantDatabase("message_database", messageJdbi, configuration.getMessageStoreConfiguration().getCircuitBreakerConfiguration());
 
 	    ClientResources redisClusterClientResources = ClientResources.builder().build();
+	    
+	    AmazonDynamoDBClientBuilder clientBuilder = AmazonDynamoDBClientBuilder
+		    .standard()
+		    .withRegion(configuration.getMessageScyllaDbConfiguration().getRegion())
+		    .withClientConfiguration(new ClientConfiguration().withClientExecutionTimeout(((int) configuration.getMessageScyllaDbConfiguration().getClientExecutionTimeout().toMillis()))
+			    .withRequestTimeout((int) configuration.getMessageScyllaDbConfiguration().getClientRequestTimeout().toMillis()))
+		    .withCredentials(InstanceProfileCredentialsProvider.getInstance());
+	    
+	    AmazonDynamoDBClientBuilder keysScyllaDbClientBuilder = AmazonDynamoDBClientBuilder
+	              .standard()
+	              .withRegion(configuration.getKeysScyllaDbConfiguration().getRegion())
+	              .withClientConfiguration(new ClientConfiguration().withClientExecutionTimeout(((int) configuration.getKeysScyllaDbConfiguration().getClientExecutionTimeout().toMillis()))
+	                                                                .withRequestTimeout((int) configuration.getKeysScyllaDbConfiguration().getClientRequestTimeout().toMillis()))
+	              .withCredentials(InstanceProfileCredentialsProvider.getInstance());
+	    
+	    DynamoDB messageDynamoDb = new DynamoDB(clientBuilder.build());
+	    DynamoDB preKeyScyllaDb  = new DynamoDB(keysScyllaDbClientBuilder.build());
 
 	    FaultTolerantRedisCluster cacheCluster = new FaultTolerantRedisCluster("main_cache_cluster", configuration.getCacheClusterConfiguration(), redisClusterClientResources);
 	    FaultTolerantRedisCluster messageInsertCacheCluster = new FaultTolerantRedisCluster("message_insert_cluster", configuration.getMessageCacheConfiguration().getRedisClusterConfiguration(), redisClusterClientResources);
@@ -175,7 +198,9 @@ public class CreatePendingAccountCommand extends EnvironmentCommand<WhisperServe
 	    Profiles profiles = new Profiles(accountDatabase);
 	    ReservedUsernames reservedUsernames = new ReservedUsernames(accountDatabase);
 	    Keys keys = new Keys(accountDatabase, configuration.getAccountsDatabaseConfiguration().getKeyOperationRetryConfiguration());
+	    KeysScyllaDb              keysScyllaDb         = new KeysScyllaDb(messageDynamoDb, configuration.getKeysScyllaDbConfiguration().getTableName());
 	    Messages messages = new Messages(messageDatabase);
+	    MessagesScyllaDb messagesScyllaDb = new MessagesScyllaDb(messageDynamoDb, configuration.getMessageScyllaDbConfiguration().getTableName(), configuration.getMessageScyllaDbConfiguration().getTimeToLive());
 
 	    PendingAccountsManager pendingAccountsManager = new PendingAccountsManager(pendingAccounts, cacheCluster);
 
@@ -185,9 +210,9 @@ public class CreatePendingAccountCommand extends EnvironmentCommand<WhisperServe
 
 	    UsernamesManager usernamesManager = new UsernamesManager(usernames, reservedUsernames, cacheCluster);
 	    ProfilesManager profilesManager = new ProfilesManager(profiles, cacheCluster);
-	    MessagesManager messagesManager = new MessagesManager(messages, messagesCache, pushLatencyManager);
+	    MessagesManager messagesManager = new MessagesManager(messages, messagesScyllaDb, messagesCache, pushLatencyManager);
 
-	    AccountsManager accountsManager = new AccountsManager(accounts, directory, cacheCluster, keys, messagesManager, usernamesManager, profilesManager);
+	    AccountsManager accountsManager = new AccountsManager(accounts, directory, cacheCluster, keys, keysScyllaDb, messagesManager, usernamesManager, profilesManager);
 
 	    for (String user : users) {
 		Optional<Account> existingAccount = accountsManager.get(user);

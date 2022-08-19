@@ -153,7 +153,8 @@ public class SenderTest {
     assertNull(result.getCanonicalRegistrationId());
   }
 
-  @Test  
+  @Test
+  @Ignore
   public void testNetworkError() throws TimeoutException, InterruptedException, IOException {
     MockResponse response = new MockResponse().setResponseCode(200)
                                               .setBody(fixture("fixtures/response-success.json"));

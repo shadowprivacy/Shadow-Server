@@ -69,6 +69,7 @@ public class AccountsManager {
     private final FaultTolerantRedisCluster cacheCluster;
     private final DirectoryManager directory;
     private final Keys keys;
+    private final KeysScyllaDb keysScyllaDb;
     private final MessagesManager messagesManager;
     private final UsernamesManager usernamesManager;
     private final ProfilesManager profilesManager;
@@ -94,11 +95,12 @@ public class AccountsManager {
 
     private final AtomicInteger accountCreateLock;
 
-    public AccountsManager(Accounts accounts, DirectoryManager directory, FaultTolerantRedisCluster cacheCluster, final Keys keys, final MessagesManager messagesManager, final UsernamesManager usernamesManager, final ProfilesManager profilesManager) {
+    public AccountsManager(Accounts accounts, DirectoryManager directory, FaultTolerantRedisCluster cacheCluster, final Keys keys, final KeysScyllaDb keysScyllaDb, final MessagesManager messagesManager, final UsernamesManager usernamesManager, final ProfilesManager profilesManager) {
 	this.accounts = accounts;
 	this.directory = directory;
 	this.cacheCluster = cacheCluster;
 	this.keys = keys;
+	this.keysScyllaDb = keysScyllaDb;
 	this.messagesManager = messagesManager;
 	this.usernamesManager = usernamesManager;
 	this.profilesManager = profilesManager;
@@ -253,7 +255,8 @@ public class AccountsManager {
 
 		usernamesManager.delete(account.getUuid());
 		profilesManager.deleteAll(account.getUuid());
-		keys.delete(account.getUserLogin());
+		keys.delete(account);
+		keysScyllaDb.delete(account);
 		messagesManager.clear(account.getUserLogin(), account.getUuid());
 		redisDelete(account);
 		databaseDelete(account, newDirectoryVersion);

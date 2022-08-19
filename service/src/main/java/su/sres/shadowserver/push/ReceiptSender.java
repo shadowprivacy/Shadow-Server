@@ -71,7 +71,9 @@ public class ReceiptSender {
 	}
 
 	Account destinationAccount = getDestinationAccount(destination);
-	Envelope.Builder message = Envelope.newBuilder().setSource(source.getUserLogin())
+	Envelope.Builder message = Envelope.newBuilder()
+		.setServerTimestamp(System.currentTimeMillis())
+		.setSource(source.getUserLogin())
 		.setSourceUuid(source.getUuid().toString())
 		.setSourceDevice((int) source.getAuthenticatedDevice().get().getId()).setTimestamp(messageId)
 		.setType(Envelope.Type.RECEIPT);
