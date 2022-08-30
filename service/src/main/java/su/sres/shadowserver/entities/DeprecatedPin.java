@@ -7,14 +7,14 @@ package su.sres.shadowserver.entities;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.annotations.VisibleForTesting;
-import org.hibernate.validator.constraints.Length;
-import org.hibernate.validator.constraints.NotEmpty;
+import javax.validation.constraints.Size;
+import javax.validation.constraints.NotEmpty;
 
 public class DeprecatedPin {
 
   @JsonProperty
   @NotEmpty
-  @Length(min=4,max=20)
+  @Size(min=4,max=20)
   private String pin;
 
   public DeprecatedPin() {}

@@ -114,7 +114,7 @@ public class ClientPresenceManager extends RedisClusterPubSubAdapter<String, Str
 	    final String presenceChannel = getManagerPresenceChannel(managerId);
 	    final int slot = SlotHash.getSlot(presenceChannel);
 
-	    connection.sync().nodes(node -> node.is(RedisClusterNode.NodeFlag.MASTER) && node.hasSlot(slot)).commands().subscribe(presenceChannel);
+	    connection.sync().nodes(node -> node.is(RedisClusterNode.NodeFlag.UPSTREAM) && node.hasSlot(slot)).commands().subscribe(presenceChannel);
 	});
 
 	presenceCluster.useCluster(connection -> connection.sync().sadd(MANAGER_SET_KEY, managerId));
@@ -145,7 +145,7 @@ public class ClientPresenceManager extends RedisClusterPubSubAdapter<String, Str
 	    connection.sync().del(getConnectedClientSetKey(managerId));
 	});
 
-	pubSubConnection.usePubSubConnection(connection -> connection.sync().masters().commands().unsubscribe(getManagerPresenceChannel(managerId)));
+	pubSubConnection.usePubSubConnection(connection -> connection.sync().upstream().commands().unsubscribe(getManagerPresenceChannel(managerId)));
     }
 
     public void setPresent(final UUID accountUuid, final long deviceId, final DisplacedPresenceListener displacementListener) {
@@ -206,7 +206,7 @@ public class ClientPresenceManager extends RedisClusterPubSubAdapter<String, Str
     private void subscribeForRemotePresenceChanges(final String presenceKey) {
 	final int slot = SlotHash.getSlot(presenceKey);
 
-	pubSubConnection.usePubSubConnection(connection -> connection.sync().nodes(node -> node.is(RedisClusterNode.NodeFlag.MASTER) && node.hasSlot(slot))
+	pubSubConnection.usePubSubConnection(connection -> connection.sync().nodes(node -> node.is(RedisClusterNode.NodeFlag.UPSTREAM) && node.hasSlot(slot))
 		.commands()
 		.subscribe(getKeyspaceNotificationChannel(presenceKey)));
     }
@@ -218,7 +218,7 @@ public class ClientPresenceManager extends RedisClusterPubSubAdapter<String, Str
     }
 
     private void unsubscribeFromRemotePresenceChanges(final String presenceKey) {
-	pubSubConnection.usePubSubConnection(connection -> connection.sync().masters().commands().unsubscribe(getKeyspaceNotificationChannel(presenceKey)));
+	pubSubConnection.usePubSubConnection(connection -> connection.sync().upstream().commands().unsubscribe(getKeyspaceNotificationChannel(presenceKey)));
     }
 
     void pruneMissingPeers() {

@@ -28,9 +28,9 @@ public class RemoteConfigs {
     public static final String HASH_KEY = "hash_key";
 
     private final MetricRegistry metricRegistry = SharedMetricRegistries.getOrCreate(Constants.METRICS_NAME);
-    private final Timer setTimer = metricRegistry.timer(name(Accounts.class, "set"));
-    private final Timer getAllTimer = metricRegistry.timer(name(Accounts.class, "getAll"));
-    private final Timer deleteTimer = metricRegistry.timer(name(Accounts.class, "delete"));
+    private final Timer          setTimer       = metricRegistry.timer(name(RemoteConfigs.class, "set"   ));
+    private final Timer          getAllTimer    = metricRegistry.timer(name(RemoteConfigs.class, "getAll"));
+    private final Timer          deleteTimer    = metricRegistry.timer(name(RemoteConfigs.class, "delete"));
 
     private final FaultTolerantDatabase database;
 

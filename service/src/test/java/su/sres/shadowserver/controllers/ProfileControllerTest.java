@@ -5,6 +5,18 @@
  */
 package su.sres.shadowserver.controllers;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.argThat;
+import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
+
 import com.google.common.collect.ImmutableSet;
 
 import org.apache.commons.lang3.RandomStringUtils;
@@ -53,438 +65,513 @@ import su.sres.shadowserver.s3.PolicySigner;
 import su.sres.shadowserver.s3.PostPolicyGenerator;
 import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.storage.AccountsManager;
-import su.sres.shadowserver.storage.PaymentAddress;
 import su.sres.shadowserver.storage.ProfilesManager;
 import su.sres.shadowserver.storage.UsernamesManager;
 import su.sres.shadowserver.storage.VersionedProfile;
 import su.sres.shadowserver.util.AuthHelper;
 import su.sres.shadowserver.util.SystemMapper;
 
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.nullValue;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.mockito.ArgumentMatchers.startsWith;
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.argThat;
-import static org.mockito.Mockito.clearInvocations;
-import static org.mockito.Mockito.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.reset;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.when;
-
 @ExtendWith(DropwizardExtensionsSupport.class)
 public class ProfileControllerTest {
 
-    private static AccountsManager accountsManager = mock(AccountsManager.class);
-    private static ProfilesManager profilesManager = mock(ProfilesManager.class);
-    private static UsernamesManager usernamesManager = mock(UsernamesManager.class);
-    private static RateLimiters rateLimiters = mock(RateLimiters.class);
-    private static RateLimiter rateLimiter = mock(RateLimiter.class);
-    private static RateLimiter usernameRateLimiter = mock(RateLimiter.class);
-    private static MinioClient minioClient = mock(MinioClient.class);
-    private static PostPolicyGenerator postPolicyGenerator = new PostPolicyGenerator("us-east-1", "profile-bucket",
-	    "accessKey");
-    private static PolicySigner policySigner = new PolicySigner("accessSecret", "us-east-1");
-    private static ServerZkProfileOperations zkProfileOperations = mock(ServerZkProfileOperations.class);
+  private static AccountsManager accountsManager = mock(AccountsManager.class);
+  private static ProfilesManager profilesManager = mock(ProfilesManager.class);
+  private static UsernamesManager usernamesManager = mock(UsernamesManager.class);
+  private static RateLimiters rateLimiters = mock(RateLimiters.class);
+  private static RateLimiter rateLimiter = mock(RateLimiter.class);
+  private static RateLimiter usernameRateLimiter = mock(RateLimiter.class);
+  private static MinioClient minioClient = mock(MinioClient.class);
+  private static PostPolicyGenerator postPolicyGenerator = new PostPolicyGenerator("us-east-1", "profile-bucket",
+      "accessKey");
+  private static PolicySigner policySigner = new PolicySigner("accessSecret", "us-east-1");
+  private static ServerZkProfileOperations zkProfileOperations = mock(ServerZkProfileOperations.class);
 
-    public static final ResourceExtension resources;
-    // static initializer for resources
-    static {
-	try {
-	    resources = ResourceExtension.builder().addProvider(AuthHelper.getAuthFilter())
-		    .addProvider(new PolymorphicAuthValueFactoryProvider.Binder<>(
-			    ImmutableSet.of(Account.class, DisabledPermittedAccount.class)))
-		    .setMapper(SystemMapper.getMapper()).setTestContainerFactory(new GrizzlyWebTestContainerFactory())
-		    .addResource(new ProfileController(rateLimiters, accountsManager, profilesManager, usernamesManager,
-			    minioClient, postPolicyGenerator, policySigner, "profilesBucket", zkProfileOperations,
-			    true))
-		    .build();
-	} catch (final Exception e) {
-	    throw new RuntimeException("Failed to create ResourceExtension instance in static block.", e);
-	}
+  private Account profileAccount;
+
+  public static final ResourceExtension resources;
+  // static initializer for resources
+  static {
+    try {
+      resources = ResourceExtension.builder().addProvider(AuthHelper.getAuthFilter())
+          .addProvider(new PolymorphicAuthValueFactoryProvider.Binder<>(
+              ImmutableSet.of(Account.class, DisabledPermittedAccount.class)))
+          .setMapper(SystemMapper.getMapper()).setTestContainerFactory(new GrizzlyWebTestContainerFactory())
+          .addResource(new ProfileController(rateLimiters, accountsManager, profilesManager, usernamesManager,
+              minioClient, postPolicyGenerator, policySigner, "profilesBucket", zkProfileOperations,
+              true))
+          .build();
+    } catch (final Exception e) {
+      throw new RuntimeException("Failed to create ResourceExtension instance in static block.", e);
     }
+  }
 
-    @Before
-    public void setup() throws Exception {
-	
-	reset(minioClient);
+  @Before
+  public void setup() throws Exception {
 
-	when(rateLimiters.getProfileLimiter()).thenReturn(rateLimiter);
-	when(rateLimiters.getUsernameLookupLimiter()).thenReturn(usernameRateLimiter);
+    reset(minioClient);
 
-	Account profileAccount = mock(Account.class);
+    when(rateLimiters.getProfileLimiter()).thenReturn(rateLimiter);
+    when(rateLimiters.getUsernameLookupLimiter()).thenReturn(usernameRateLimiter);
 
-	when(profileAccount.getIdentityKey()).thenReturn("bar");
-	when(profileAccount.getProfileName()).thenReturn("baz");
-	when(profileAccount.getAvatar()).thenReturn("bang");
-	when(profileAccount.getUuid()).thenReturn(AuthHelper.VALID_UUID_TWO);
-	when(profileAccount.isEnabled()).thenReturn(true);
-	when(profileAccount.isGroupsV2Supported()).thenReturn(false);
-	when(profileAccount.isGv1MigrationSupported()).thenReturn(false);
-	when(profileAccount.getPayments())
-		.thenReturn(List.of(new PaymentAddress("mc", "12345678901234567890123456789012")));
+    profileAccount = mock(Account.class);
 
-	Account capabilitiesAccount = mock(Account.class);
+    when(profileAccount.getIdentityKey()).thenReturn("bar");
+    when(profileAccount.getProfileName()).thenReturn("baz");
+    when(profileAccount.getAvatar()).thenReturn("bang");
+    when(profileAccount.getUuid()).thenReturn(AuthHelper.VALID_UUID_TWO);
+    when(profileAccount.isEnabled()).thenReturn(true);
+    when(profileAccount.isGroupsV2Supported()).thenReturn(false);
+    when(profileAccount.isGv1MigrationSupported()).thenReturn(false);
+    when(profileAccount.getCurrentProfileVersion()).thenReturn(Optional.empty());
 
-	when(capabilitiesAccount.getIdentityKey()).thenReturn("barz");
-	when(capabilitiesAccount.getProfileName()).thenReturn("bazz");
-	when(capabilitiesAccount.getAvatar()).thenReturn("bangz");
-	when(capabilitiesAccount.isEnabled()).thenReturn(true);
-	when(capabilitiesAccount.isGroupsV2Supported()).thenReturn(true);
-	when(capabilitiesAccount.isGv1MigrationSupported()).thenReturn(true);
+    Account capabilitiesAccount = mock(Account.class);
 
-	when(accountsManager.get(AuthHelper.VALID_NUMBER_TWO)).thenReturn(Optional.of(profileAccount));
-	when(accountsManager.get(AuthHelper.VALID_UUID_TWO)).thenReturn(Optional.of(profileAccount));
-	when(usernamesManager.get(AuthHelper.VALID_UUID_TWO)).thenReturn(Optional.of("n00bkiller"));
-	when(usernamesManager.get("n00bkiller")).thenReturn(Optional.of(AuthHelper.VALID_UUID_TWO));
-	when(accountsManager.get(argThat((ArgumentMatcher<AmbiguousIdentifier>) identifier -> identifier != null
-		&& identifier.hasUserLogin() && identifier.getUserLogin().equals(AuthHelper.VALID_NUMBER_TWO))))
-			.thenReturn(Optional.of(profileAccount));
-	when(accountsManager.get(argThat((ArgumentMatcher<AmbiguousIdentifier>) identifier -> identifier != null
-		&& identifier.hasUuid() && identifier.getUuid().equals(AuthHelper.VALID_UUID_TWO))))
-			.thenReturn(Optional.of(profileAccount));
+    when(capabilitiesAccount.getIdentityKey()).thenReturn("barz");
+    when(capabilitiesAccount.getProfileName()).thenReturn("bazz");
+    when(capabilitiesAccount.getAvatar()).thenReturn("bangz");
+    when(capabilitiesAccount.isEnabled()).thenReturn(true);
+    when(capabilitiesAccount.isGroupsV2Supported()).thenReturn(true);
+    when(capabilitiesAccount.isGv1MigrationSupported()).thenReturn(true);
 
-	when(accountsManager.get(AuthHelper.VALID_NUMBER)).thenReturn(Optional.of(capabilitiesAccount));
-	when(accountsManager.get(argThat((ArgumentMatcher<AmbiguousIdentifier>) identifier -> identifier != null
-		&& identifier.hasUserLogin() && identifier.getUserLogin().equals(AuthHelper.VALID_NUMBER))))
-			.thenReturn(Optional.of(capabilitiesAccount));
+    when(accountsManager.get(AuthHelper.VALID_NUMBER_TWO)).thenReturn(Optional.of(profileAccount));
+    when(accountsManager.get(AuthHelper.VALID_UUID_TWO)).thenReturn(Optional.of(profileAccount));
+    when(usernamesManager.get(AuthHelper.VALID_UUID_TWO)).thenReturn(Optional.of("n00bkiller"));
+    when(usernamesManager.get("n00bkiller")).thenReturn(Optional.of(AuthHelper.VALID_UUID_TWO));
+    when(accountsManager.get(argThat((ArgumentMatcher<AmbiguousIdentifier>) identifier -> identifier != null
+        && identifier.hasUserLogin() && identifier.getUserLogin().equals(AuthHelper.VALID_NUMBER_TWO))))
+            .thenReturn(Optional.of(profileAccount));
+    when(accountsManager.get(argThat((ArgumentMatcher<AmbiguousIdentifier>) identifier -> identifier != null
+        && identifier.hasUuid() && identifier.getUuid().equals(AuthHelper.VALID_UUID_TWO))))
+            .thenReturn(Optional.of(profileAccount));
 
-	when(profilesManager.get(eq(AuthHelper.VALID_UUID), eq("someversion"))).thenReturn(Optional.empty());
-	when(profilesManager.get(eq(AuthHelper.VALID_UUID_TWO), eq("validversion"))).thenReturn(Optional.of(new VersionedProfile("validversion", "validname", "validavatar", "emoji", "about", "validcommitmnet".getBytes())));
+    when(accountsManager.get(AuthHelper.VALID_NUMBER)).thenReturn(Optional.of(capabilitiesAccount));
+    when(accountsManager.get(argThat((ArgumentMatcher<AmbiguousIdentifier>) identifier -> identifier != null
+        && identifier.hasUserLogin() && identifier.getUserLogin().equals(AuthHelper.VALID_NUMBER))))
+            .thenReturn(Optional.of(capabilitiesAccount));
 
-	clearInvocations(rateLimiter);
-	clearInvocations(accountsManager);
-	clearInvocations(usernamesManager);
-	clearInvocations(usernameRateLimiter);
-	clearInvocations(profilesManager);
-    }
+    when(profilesManager.get(eq(AuthHelper.VALID_UUID), eq("someversion"))).thenReturn(Optional.empty());
+    when(profilesManager.get(eq(AuthHelper.VALID_UUID_TWO), eq("validversion"))).thenReturn(Optional.of(new VersionedProfile(
+        "validversion", "validname", "profiles/validavatar", "emoji", "about", null, "validcommitmnet".getBytes())));
 
-    @Test
-    public void testProfileGetByUuid() throws RateLimitExceededException {
-	Profile profile = resources.getJerseyTest().target("/v1/profile/" + AuthHelper.VALID_UUID_TWO).request()
-		.header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
-		.get(Profile.class);
+    clearInvocations(rateLimiter);
+    clearInvocations(accountsManager);
+    clearInvocations(usernamesManager);
+    clearInvocations(usernameRateLimiter);
+    clearInvocations(profilesManager);
+  }
 
-	assertThat(profile.getIdentityKey(), equalTo("bar"));
-	assertThat(profile.getName(), equalTo("baz"));
-	assertThat(profile.getAvatar(), equalTo("bang"));
-	assertThat(profile.getUsername(), equalTo("n00bkiller"));
-	assertThat(profile.getPayments(), equalTo(List.of(new PaymentAddress("mc", "12345678901234567890123456789012"))));
+  @Test
+  public void testProfileGetByUuid() throws RateLimitExceededException {
+    Profile profile = resources.getJerseyTest().target("/v1/profile/" + AuthHelper.VALID_UUID_TWO).request()
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .get(Profile.class);
 
-	verify(accountsManager, times(1))
-		.get(argThat((ArgumentMatcher<AmbiguousIdentifier>) identifier -> identifier != null
-			&& identifier.hasUuid() && identifier.getUuid().equals(AuthHelper.VALID_UUID_TWO)));
-	verify(usernamesManager, times(1)).get(eq(AuthHelper.VALID_UUID_TWO));
-	verify(rateLimiter, times(1)).validate(eq(AuthHelper.VALID_NUMBER));
-    }
+    assertThat(profile.getIdentityKey()).isEqualTo("bar");
+    assertThat(profile.getName()).isEqualTo("baz");
+    assertThat(profile.getAvatar()).isEqualTo("bang");
+    assertThat(profile.getUsername()).isEqualTo("n00bkiller");
 
-    @Test
-    public void testProfileGetByNumber() throws RateLimitExceededException {
-	Profile profile = resources.getJerseyTest().target("/v1/profile/" + AuthHelper.VALID_NUMBER_TWO).request()
-		.header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
-		.get(Profile.class);
+    verify(accountsManager, times(1))
+        .get(argThat((ArgumentMatcher<AmbiguousIdentifier>) identifier -> identifier != null
+            && identifier.hasUuid() && identifier.getUuid().equals(AuthHelper.VALID_UUID_TWO)));
+    verify(usernamesManager, times(1)).get(eq(AuthHelper.VALID_UUID_TWO));
+    verify(rateLimiter, times(1)).validate(eq(AuthHelper.VALID_NUMBER));
+  }
 
-	assertThat(profile.getIdentityKey(), equalTo("bar"));
-	assertThat(profile.getName(), equalTo("baz"));
-	assertThat(profile.getAvatar(), equalTo("bang"));
-	assertThat(profile.getPayments(), equalTo(List.of(new PaymentAddress("mc", "12345678901234567890123456789012"))));
-	assertThat(profile.getCapabilities().isGv2(), equalTo(false));
-	assertThat(profile.getCapabilities().isGv1Migration(), equalTo(false));
-	assertThat(profile.getUsername(), nullValue());
-	assertThat(profile.getUuid(), nullValue());
+  @Test
+  public void testProfileGetByNumber() throws RateLimitExceededException {
+    Profile profile = resources.getJerseyTest().target("/v1/profile/" + AuthHelper.VALID_NUMBER_TWO).request()
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .get(Profile.class);
 
-	verify(accountsManager, times(1))
-		.get(argThat((ArgumentMatcher<AmbiguousIdentifier>) identifier -> identifier != null
-			&& identifier.hasUserLogin() && identifier.getUserLogin().equals(AuthHelper.VALID_NUMBER_TWO)));
-	verifyNoMoreInteractions(usernamesManager);
-	verify(rateLimiter, times(1)).validate(eq(AuthHelper.VALID_NUMBER));
-    }
+    assertThat(profile.getIdentityKey()).isEqualTo("bar");
+    assertThat(profile.getName()).isEqualTo("baz");
+    assertThat(profile.getAvatar()).isEqualTo("bang");
+    assertThat(profile.getCapabilities().isGv2()).isFalse();
+    assertThat(profile.getCapabilities().isGv1Migration()).isFalse();
+    assertThat(profile.getUsername()).isNull();
+    assertThat(profile.getUuid()).isNull();
 
-    @Test
-    public void testProfileGetByUsername() throws RateLimitExceededException {
-	Profile profile = resources.getJerseyTest().target("/v1/profile/username/n00bkiller").request()
-		.header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
-		.get(Profile.class);
+    verify(accountsManager, times(1))
+        .get(argThat((ArgumentMatcher<AmbiguousIdentifier>) identifier -> identifier != null
+            && identifier.hasUserLogin() && identifier.getUserLogin().equals(AuthHelper.VALID_NUMBER_TWO)));
+    verifyNoMoreInteractions(usernamesManager);
+    verify(rateLimiter, times(1)).validate(eq(AuthHelper.VALID_NUMBER));
+  }
 
-	assertThat(profile.getIdentityKey(), equalTo("bar"));
-	assertThat(profile.getName(), equalTo("baz"));
-	assertThat(profile.getAvatar(), equalTo("bang"));
-	assertThat(profile.getUsername(), equalTo("n00bkiller"));
-	assertThat(profile.getPayments(), equalTo(List.of(new PaymentAddress("mc", "12345678901234567890123456789012"))));
-	assertThat(profile.getUuid(), equalTo(AuthHelper.VALID_UUID_TWO));
+  @Test
+  public void testProfileGetByUsername() throws RateLimitExceededException {
+    Profile profile = resources.getJerseyTest().target("/v1/profile/username/n00bkiller").request()
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .get(Profile.class);
 
-	verify(accountsManager, times(1)).get(eq(AuthHelper.VALID_UUID_TWO));
-	verify(usernamesManager, times(1)).get(eq("n00bkiller"));
-	verify(usernameRateLimiter, times(1)).validate(eq(AuthHelper.VALID_UUID.toString()));
-    }
+    assertThat(profile.getIdentityKey()).isEqualTo("bar");
+    assertThat(profile.getName()).isEqualTo("baz");
+    assertThat(profile.getAvatar()).isEqualTo("bang");
+    assertThat(profile.getUsername()).isEqualTo("n00bkiller");
+    assertThat(profile.getUuid()).isEqualTo(AuthHelper.VALID_UUID_TWO);
 
-    @Test
-    public void testProfileGetUnauthorized() throws Exception {
-	Response response = resources.getJerseyTest().target("/v1/profile/" + AuthHelper.VALID_NUMBER_TWO).request()
-		.get();
+    verify(accountsManager, times(1)).get(eq(AuthHelper.VALID_UUID_TWO));
+    verify(usernamesManager, times(1)).get(eq("n00bkiller"));
+    verify(usernameRateLimiter, times(1)).validate(eq(AuthHelper.VALID_UUID.toString()));
+  }
 
-	assertThat(response.getStatus(), equalTo(401));
-    }
+  @Test
+  public void testProfileGetUnauthorized() {
+    Response response = resources.getJerseyTest().target("/v1/profile/" + AuthHelper.VALID_NUMBER_TWO).request()
+        .get();
 
-    @Test
-    public void testProfileGetByUsernameUnauthorized() throws Exception {
-	Response response = resources.getJerseyTest().target("/v1/profile/username/n00bkiller").request().get();
+    assertThat(response.getStatus()).isEqualTo(401);
+  }
 
-	assertThat(response.getStatus(), equalTo(401));
-    }
+  @Test
+  public void testProfileGetByUsernameUnauthorized() {
+    Response response = resources.getJerseyTest().target("/v1/profile/username/n00bkiller").request().get();
 
-    @Test
-    public void testProfileGetByUsernameNotFound() throws RateLimitExceededException {
-	Response response = resources.getJerseyTest().target("/v1/profile/username/n00bkillerzzzzz").request()
-		.header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
-		.get();
+    assertThat(response.getStatus()).isEqualTo(401);
+  }
 
-	assertThat(response.getStatus(), equalTo(404));
+  @Test
+  public void testProfileGetByUsernameNotFound() throws RateLimitExceededException {
+    Response response = resources.getJerseyTest().target("/v1/profile/username/n00bkillerzzzzz").request()
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .get();
 
-	verify(usernamesManager, times(1)).get(eq("n00bkillerzzzzz"));
-	verify(usernameRateLimiter, times(1)).validate(eq(AuthHelper.VALID_UUID.toString()));
-    }
+    assertThat(response.getStatus()).isEqualTo(404);
 
-    @Test
-    public void testProfileGetDisabled() throws Exception {
-	Response response = resources.getJerseyTest().target("/v1/profile/" + AuthHelper.VALID_NUMBER_TWO).request()
-		.header("Authorization",
-			AuthHelper.getAuthHeader(AuthHelper.DISABLED_NUMBER, AuthHelper.DISABLED_PASSWORD))
-		.get();
+    verify(usernamesManager, times(1)).get(eq("n00bkillerzzzzz"));
+    verify(usernameRateLimiter, times(1)).validate(eq(AuthHelper.VALID_UUID.toString()));
+  }
 
-	assertThat(response.getStatus(), equalTo(401));
-    }
+  @Test
+  public void testProfileGetDisabled() {
+    Response response = resources.getJerseyTest().target("/v1/profile/" + AuthHelper.VALID_NUMBER_TWO).request()
+        .header("Authorization",
+            AuthHelper.getAuthHeader(AuthHelper.DISABLED_NUMBER, AuthHelper.DISABLED_PASSWORD))
+        .get();
 
-    @Test
-    public void testProfileCapabilities() throws Exception {
-	Profile profile = resources.getJerseyTest().target("/v1/profile/" + AuthHelper.VALID_NUMBER).request()
-		.header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
-		.get(Profile.class);
+    assertThat(response.getStatus()).isEqualTo(401);
+  }
 
-	assertThat(profile.getCapabilities().isGv2(), equalTo(true));
-	assertThat(profile.getCapabilities().isGv1Migration(), equalTo(true));
-    }
+  @Test
+  public void testProfileCapabilities() {
+    Profile profile = resources.getJerseyTest().target("/v1/profile/" + AuthHelper.VALID_NUMBER).request()
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .get(Profile.class);
 
-    @Test
-    public void testSetProfileNameDeprecated() {
-	Response response = resources.getJerseyTest()
-		.target("/v1/profile/name/123456789012345678901234567890123456789012345678901234567890123456789012")
-		.request()
-		.header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
-		.put(Entity.text(""));
+    assertThat(profile.getCapabilities().isGv2()).isEqualTo(true);
+    assertThat(profile.getCapabilities().isGv1Migration()).isEqualTo(true);
+  }
 
-	assertThat(response.getStatus(), equalTo(204));
+  @Test
+  public void testSetProfileNameDeprecated() {
+    Response response = resources.getJerseyTest()
+        .target("/v1/profile/name/123456789012345678901234567890123456789012345678901234567890123456789012")
+        .request()
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .put(Entity.text(""));
 
-	verify(accountsManager, times(1)).update(any(Account.class));
-    }
+    assertThat(response.getStatus()).isEqualTo(204);
 
-    @Test
-    public void testSetProfileNameExtendedDeprecated() {
-	Response response = resources.getJerseyTest().target(
-		"/v1/profile/name/123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678")
-		.request()
-		.header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
-		.put(Entity.text(""));
+    verify(accountsManager, times(1)).update(any(Account.class));
+  }
 
-	assertThat(response.getStatus(), equalTo(204));
+  @Test
+  public void testSetProfileNameExtendedDeprecated() {
+    Response response = resources.getJerseyTest().target(
+        "/v1/profile/name/123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678")
+        .request()
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .put(Entity.text(""));
 
-	verify(accountsManager, times(1)).update(any(Account.class));
-    }
+    assertThat(response.getStatus()).isEqualTo(204);
 
-    @Test
-    public void testSetProfileNameWrongSizeDeprecated() {
-	Response response = resources.getJerseyTest().target(
-		"/v1/profile/name/1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890")
-		.request()
-		.header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
-		.put(Entity.text(""));
+    verify(accountsManager, times(1)).update(any(Account.class));
+  }
 
-	assertThat(response.getStatus(), equalTo(400));
-	verifyNoMoreInteractions(accountsManager);
-    }
+  @Test
+  public void testSetProfileNameWrongSizeDeprecated() {
+    Response response = resources.getJerseyTest().target(
+        "/v1/profile/name/1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890")
+        .request()
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .put(Entity.text(""));
+
+    assertThat(response.getStatus()).isEqualTo(400);
+    verifyNoMoreInteractions(accountsManager);
+  }
 
 /////
 
-    @Test
-    public void testSetProfileWantAvatarUpload() throws InvalidInputException {
-	ProfileKeyCommitment commitment = new ProfileKey(new byte[32]).getCommitment(AuthHelper.VALID_UUID);
+  @Test
+  public void testSetProfileWantAvatarUpload() throws InvalidInputException {
+    ProfileKeyCommitment commitment = new ProfileKey(new byte[32]).getCommitment(AuthHelper.VALID_UUID);
 
-	ProfileAvatarUploadAttributes uploadAttributes = resources.getJerseyTest().target("/v1/profile/").request()
-		.header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
-		.put(Entity.entity(new CreateProfileRequest(commitment, "someversion", "123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678", null, null, true), MediaType.APPLICATION_JSON_TYPE), ProfileAvatarUploadAttributes.class);
+    ProfileAvatarUploadAttributes uploadAttributes = resources.getJerseyTest().target("/v1/profile/").request()
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .put(Entity.entity(new CreateProfileRequest(commitment, "someversion", "123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678", null, null,
+            null, true), MediaType.APPLICATION_JSON_TYPE), ProfileAvatarUploadAttributes.class);
 
-	ArgumentCaptor<VersionedProfile> profileArgumentCaptor = ArgumentCaptor.forClass(VersionedProfile.class);
+    ArgumentCaptor<VersionedProfile> profileArgumentCaptor = ArgumentCaptor.forClass(VersionedProfile.class);
 
-	verify(profilesManager, times(1)).get(eq(AuthHelper.VALID_UUID), eq("someversion"));
-	verify(profilesManager, times(1)).set(eq(AuthHelper.VALID_UUID), profileArgumentCaptor.capture());
+    verify(profilesManager, times(1)).get(eq(AuthHelper.VALID_UUID), eq("someversion"));
+    verify(profilesManager, times(1)).set(eq(AuthHelper.VALID_UUID), profileArgumentCaptor.capture());
 
-	verifyNoMoreInteractions(minioClient);
+    verifyNoMoreInteractions(minioClient);
 
-	assertThat(profileArgumentCaptor.getValue().getCommitment(), equalTo(commitment.serialize()));
-	assertThat(profileArgumentCaptor.getValue().getAvatar(), equalTo(uploadAttributes.getKey()));
-	assertThat(profileArgumentCaptor.getValue().getVersion(), equalTo("someversion"));
-	assertThat(profileArgumentCaptor.getValue().getName(), equalTo(
-		"123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678"));
-	    assertThat(profileArgumentCaptor.getValue().getAboutEmoji(), nullValue());
-	    assertThat(profileArgumentCaptor.getValue().getAbout(), nullValue());
-	    }
+    assertThat(profileArgumentCaptor.getValue().getCommitment()).isEqualTo(commitment.serialize());
+    assertThat(profileArgumentCaptor.getValue().getAvatar()).isEqualTo(uploadAttributes.getKey());
+    assertThat(profileArgumentCaptor.getValue().getVersion()).isEqualTo("someversion");
+    assertThat(profileArgumentCaptor.getValue().getName()).isEqualTo(
+        "123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678");
+    assertThat(profileArgumentCaptor.getValue().getAboutEmoji()).isNull();
+    assertThat(profileArgumentCaptor.getValue().getAbout()).isNull();
+  }
 
-    @Test
-    public void testSetProfileWantAvatarUploadWithBadProfileSize() throws InvalidInputException {
-	ProfileKeyCommitment commitment = new ProfileKey(new byte[32]).getCommitment(AuthHelper.VALID_UUID);
+  @Test
+  public void testSetProfileWantAvatarUploadWithBadProfileSize() throws InvalidInputException {
+    ProfileKeyCommitment commitment = new ProfileKey(new byte[32]).getCommitment(AuthHelper.VALID_UUID);
 
-	Response response = resources.getJerseyTest().target("/v1/profile/").request()
-		.header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
-		.put(Entity.entity(new CreateProfileRequest(commitment, "someversion", "1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890", null, null, true), MediaType.APPLICATION_JSON_TYPE));
+    Response response = resources.getJerseyTest().target("/v1/profile/").request()
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .put(Entity.entity(new CreateProfileRequest(commitment, "someversion", "1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890", null, null,
+            null, true), MediaType.APPLICATION_JSON_TYPE));
 
-	assertThat(response.getStatus(), equalTo(422));
-    }
+    assertThat(response.getStatus()).isEqualTo(422);
+  }
 
-    @Test
-    public void testSetProfileWithoutAvatarUpload() throws InvalidInputException {
-	ProfileKeyCommitment commitment = new ProfileKey(new byte[32]).getCommitment(AuthHelper.VALID_UUID);
+  @Test
+  public void testSetProfileWithoutAvatarUpload() throws InvalidInputException {
+    ProfileKeyCommitment commitment = new ProfileKey(new byte[32]).getCommitment(AuthHelper.VALID_UUID);
 
-	clearInvocations(AuthHelper.VALID_ACCOUNT_TWO);
+    clearInvocations(AuthHelper.VALID_ACCOUNT_TWO);
 
-	Response response = resources.getJerseyTest().target("/v1/profile/").request()
-		.header("Authorization",
-			AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER_TWO, AuthHelper.VALID_PASSWORD_TWO))
-		.put(Entity.entity(new CreateProfileRequest(commitment, "anotherversion", "123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678", null, null, false), MediaType.APPLICATION_JSON_TYPE));
+    Response response = resources.getJerseyTest().target("/v1/profile/").request()
+        .header("Authorization",
+            AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER_TWO, AuthHelper.VALID_PASSWORD_TWO))
+        .put(Entity.entity(new CreateProfileRequest(commitment, "anotherversion", "123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678", null, null,
+            null, false), MediaType.APPLICATION_JSON_TYPE));
 
-	assertThat(response.getStatus(), equalTo(200));
-	assertThat(response.hasEntity(), equalTo(false));
+    assertThat(response.getStatus()).isEqualTo(200);
+    assertThat(response.hasEntity()).isFalse();
 
-	ArgumentCaptor<VersionedProfile> profileArgumentCaptor = ArgumentCaptor.forClass(VersionedProfile.class);
+    ArgumentCaptor<VersionedProfile> profileArgumentCaptor = ArgumentCaptor.forClass(VersionedProfile.class);
 
-	verify(profilesManager, times(1)).get(eq(AuthHelper.VALID_UUID_TWO), eq("anotherversion"));
-	verify(profilesManager, times(1)).set(eq(AuthHelper.VALID_UUID_TWO), profileArgumentCaptor.capture());
+    verify(profilesManager, times(1)).get(eq(AuthHelper.VALID_UUID_TWO), eq("anotherversion"));
+    verify(profilesManager, times(1)).set(eq(AuthHelper.VALID_UUID_TWO), profileArgumentCaptor.capture());
 
-	verify(AuthHelper.VALID_ACCOUNT_TWO).setProfileName("123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678");
-	verify(AuthHelper.VALID_ACCOUNT_TWO).setAvatar(null);
+    verify(AuthHelper.VALID_ACCOUNT_TWO).setProfileName("123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678");
+    verify(AuthHelper.VALID_ACCOUNT_TWO).setAvatar(null);
 
-	verifyNoMoreInteractions(minioClient);
+    verifyNoMoreInteractions(minioClient);
 
-	assertThat(profileArgumentCaptor.getValue().getCommitment(), equalTo(commitment.serialize()));
-	assertThat(profileArgumentCaptor.getValue().getAvatar(), nullValue());
-	assertThat(profileArgumentCaptor.getValue().getVersion(), equalTo("anotherversion"));
-	assertThat(profileArgumentCaptor.getValue().getName(), equalTo(
-		"123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678"));
-	assertThat(profileArgumentCaptor.getValue().getAboutEmoji(), nullValue());
-	    assertThat(profileArgumentCaptor.getValue().getAbout(), nullValue());
-	    }
+    assertThat(profileArgumentCaptor.getValue().getCommitment()).isEqualTo(commitment.serialize());
+    assertThat(profileArgumentCaptor.getValue().getAvatar()).isNull();
+    assertThat(profileArgumentCaptor.getValue().getVersion()).isEqualTo("anotherversion");
+    assertThat(profileArgumentCaptor.getValue().getName()).isEqualTo(
+        "123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678");
+    assertThat(profileArgumentCaptor.getValue().getAboutEmoji()).isNull();
+    assertThat(profileArgumentCaptor.getValue().getAbout()).isNull();
+  }
 
-    @Test
-    public void testSetProfileWithAvatarUploadAndPreviousAvatar()
-	    throws InvalidInputException, MinioException, InvalidKeyException, IOException, NoSuchAlgorithmException {
-	ProfileKeyCommitment commitment = new ProfileKey(new byte[32]).getCommitment(AuthHelper.VALID_UUID_TWO);
+  @Test
+  public void testSetProfileWithAvatarUploadAndPreviousAvatar()
+      throws InvalidInputException, MinioException, InvalidKeyException, IOException, NoSuchAlgorithmException {
+    ProfileKeyCommitment commitment = new ProfileKey(new byte[32]).getCommitment(AuthHelper.VALID_UUID_TWO);
 
-	ProfileAvatarUploadAttributes uploadAttributes = resources.getJerseyTest().target("/v1/profile/").request()
-		.header("Authorization",
-			AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER_TWO, AuthHelper.VALID_PASSWORD_TWO))
-		.put(Entity.entity(new CreateProfileRequest(commitment, "validversion", "123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678", null, null, true), MediaType.APPLICATION_JSON_TYPE), ProfileAvatarUploadAttributes.class);
+    ProfileAvatarUploadAttributes uploadAttributes = resources.getJerseyTest().target("/v1/profile/").request()
+        .header("Authorization",
+            AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER_TWO, AuthHelper.VALID_PASSWORD_TWO))
+        .put(Entity.entity(new CreateProfileRequest(commitment, "validversion", "123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678", null, null,
+            null, true), MediaType.APPLICATION_JSON_TYPE), ProfileAvatarUploadAttributes.class);
 
-	ArgumentCaptor<VersionedProfile> profileArgumentCaptor = ArgumentCaptor.forClass(VersionedProfile.class);
+    ArgumentCaptor<VersionedProfile> profileArgumentCaptor = ArgumentCaptor.forClass(VersionedProfile.class);
 
-	verify(profilesManager, times(1)).get(eq(AuthHelper.VALID_UUID_TWO), eq("validversion"));
-	verify(profilesManager, times(1)).set(eq(AuthHelper.VALID_UUID_TWO), profileArgumentCaptor.capture());
-	verify(minioClient, times(1)).removeObject(
-		RemoveObjectArgs.builder().bucket(eq("profilesBucket")).object(eq("validavatar")).build());
+    verify(profilesManager, times(1)).get(eq(AuthHelper.VALID_UUID_TWO), eq("validversion"));
+    verify(profilesManager, times(1)).set(eq(AuthHelper.VALID_UUID_TWO), profileArgumentCaptor.capture());
+    verify(minioClient, times(1)).removeObject(
+        RemoveObjectArgs.builder().bucket(eq("profilesBucket")).object(eq("validavatar")).build());
 
-	assertThat(profileArgumentCaptor.getValue().getCommitment(), equalTo(commitment.serialize()));
-	assertThat(profileArgumentCaptor.getValue().getVersion(), equalTo("validversion"));
-	assertThat(profileArgumentCaptor.getValue().getName(), equalTo(
-		"123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678"));
-	    assertThat(profileArgumentCaptor.getValue().getAboutEmoji(), nullValue());
-	    assertThat(profileArgumentCaptor.getValue().getAbout(), nullValue());
-	    }
-    
-    @Test
-    public void testSetProfileExtendedName() throws InvalidInputException, InvalidKeyException, ErrorResponseException, IllegalArgumentException, InsufficientDataException, InternalException, InvalidBucketNameException, InvalidResponseException, NoSuchAlgorithmException, ServerException, XmlParserException, IOException {
-      ProfileKeyCommitment commitment = new ProfileKey(new byte[32]).getCommitment(AuthHelper.VALID_UUID_TWO);
+    assertThat(profileArgumentCaptor.getValue().getCommitment()).isEqualTo(commitment.serialize());
+    assertThat(profileArgumentCaptor.getValue().getVersion()).isEqualTo("validversion");
+    assertThat(profileArgumentCaptor.getValue().getName()).isEqualTo(
+        "123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678");
+    assertThat(profileArgumentCaptor.getValue().getAboutEmoji()).isNull();
+    assertThat(profileArgumentCaptor.getValue().getAbout()).isNull();
+  }
 
-      final String name = RandomStringUtils.randomAlphabetic(380);
+  @Test
+  public void testSetProfileExtendedName() throws InvalidInputException, InvalidKeyException, ErrorResponseException, IllegalArgumentException, InsufficientDataException, InternalException, InvalidBucketNameException, InvalidResponseException, NoSuchAlgorithmException, ServerException, XmlParserException, IOException {
+    ProfileKeyCommitment commitment = new ProfileKey(new byte[32]).getCommitment(AuthHelper.VALID_UUID_TWO);
 
-      resources.getJerseyTest()
-              .target("/v1/profile/")
-              .request()
-              .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER_TWO, AuthHelper.VALID_PASSWORD_TWO))
-              .put(Entity.entity(new CreateProfileRequest(commitment, "validversion", name, null, null, true), MediaType.APPLICATION_JSON_TYPE), ProfileAvatarUploadAttributes.class);
+    final String name = RandomStringUtils.randomAlphabetic(380);
 
-      ArgumentCaptor<VersionedProfile> profileArgumentCaptor = ArgumentCaptor.forClass(VersionedProfile.class);
+    resources.getJerseyTest()
+        .target("/v1/profile/")
+        .request()
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER_TWO, AuthHelper.VALID_PASSWORD_TWO))
+        .put(Entity.entity(new CreateProfileRequest(commitment, "validversion", name, null, null, null, true), MediaType.APPLICATION_JSON_TYPE), ProfileAvatarUploadAttributes.class);
 
-      verify(profilesManager, times(1)).get(eq(AuthHelper.VALID_UUID_TWO), eq("validversion"));
-      verify(profilesManager, times(1)).set(eq(AuthHelper.VALID_UUID_TWO), profileArgumentCaptor.capture());
-      verify(minioClient, times(1)).removeObject(RemoveObjectArgs.builder().bucket(eq("profilesBucket")).object(eq("validavatar")).build());
+    ArgumentCaptor<VersionedProfile> profileArgumentCaptor = ArgumentCaptor.forClass(VersionedProfile.class);
 
-      assertThat(profileArgumentCaptor.getValue().getCommitment(), equalTo(commitment.serialize()));      
-      assertThat(profileArgumentCaptor.getValue().getVersion(), equalTo("validversion"));
-      assertThat(profileArgumentCaptor.getValue().getName(), equalTo(name));
-      assertThat(profileArgumentCaptor.getValue().getAboutEmoji(), nullValue());
-      assertThat(profileArgumentCaptor.getValue().getAbout(), nullValue());
-    }
+    verify(profilesManager, times(1)).get(eq(AuthHelper.VALID_UUID_TWO), eq("validversion"));
+    verify(profilesManager, times(1)).set(eq(AuthHelper.VALID_UUID_TWO), profileArgumentCaptor.capture());
+    verify(minioClient, times(1)).removeObject(RemoveObjectArgs.builder().bucket(eq("profilesBucket")).object(eq("validavatar")).build());
 
-    @Test
-    public void testSetProfileEmojiAndBioText() throws InvalidInputException {
-      ProfileKeyCommitment commitment = new ProfileKey(new byte[32]).getCommitment(AuthHelper.VALID_UUID);
+    assertThat(profileArgumentCaptor.getValue().getCommitment()).isEqualTo(commitment.serialize());
+    assertThat(profileArgumentCaptor.getValue().getVersion()).isEqualTo("validversion");
+    assertThat(profileArgumentCaptor.getValue().getName()).isEqualTo(name);
+    assertThat(profileArgumentCaptor.getValue().getAboutEmoji()).isNull();
+    assertThat(profileArgumentCaptor.getValue().getAbout()).isNull();
+  }
 
-      clearInvocations(AuthHelper.VALID_ACCOUNT_TWO);
+  @Test
+  public void testSetProfileEmojiAndBioText() throws InvalidInputException {
+    ProfileKeyCommitment commitment = new ProfileKey(new byte[32]).getCommitment(AuthHelper.VALID_UUID);
 
-      final String name = RandomStringUtils.randomAlphabetic(380);
-      final String emoji = RandomStringUtils.randomAlphanumeric(80);
-      final String text = RandomStringUtils.randomAlphanumeric(720);
+    clearInvocations(AuthHelper.VALID_ACCOUNT_TWO);
 
-      Response response = resources.getJerseyTest()
-              .target("/v1/profile/")
-              .request()
-              .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER_TWO, AuthHelper.VALID_PASSWORD_TWO))
-              .put(Entity.entity(new CreateProfileRequest(commitment, "anotherversion", name, emoji, text, false), MediaType.APPLICATION_JSON_TYPE));
+    final String name = RandomStringUtils.randomAlphabetic(380);
+    final String emoji = RandomStringUtils.randomAlphanumeric(80);
+    final String text = RandomStringUtils.randomAlphanumeric(720);
 
-      assertThat(response.getStatus(), equalTo(200));
-      assertThat(response.hasEntity(), equalTo(false));
+    Response response = resources.getJerseyTest()
+        .target("/v1/profile/")
+        .request()
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER_TWO, AuthHelper.VALID_PASSWORD_TWO))
+        .put(Entity.entity(new CreateProfileRequest(commitment, "anotherversion", name, emoji, text, null, false), MediaType.APPLICATION_JSON_TYPE));
 
-      ArgumentCaptor<VersionedProfile> profileArgumentCaptor = ArgumentCaptor.forClass(VersionedProfile.class);
+    assertThat(response.getStatus()).isEqualTo(200);
+    assertThat(response.hasEntity()).isFalse();
 
-      verify(profilesManager, times(1)).get(eq(AuthHelper.VALID_UUID_TWO), eq("anotherversion"));
-      verify(profilesManager, times(1)).set(eq(AuthHelper.VALID_UUID_TWO), profileArgumentCaptor.capture());
+    ArgumentCaptor<VersionedProfile> profileArgumentCaptor = ArgumentCaptor.forClass(VersionedProfile.class);
 
-      verify(AuthHelper.VALID_ACCOUNT_TWO).setProfileName(name);
-      verify(AuthHelper.VALID_ACCOUNT_TWO).setAvatar(null);
+    verify(profilesManager, times(1)).get(eq(AuthHelper.VALID_UUID_TWO), eq("anotherversion"));
+    verify(profilesManager, times(1)).set(eq(AuthHelper.VALID_UUID_TWO), profileArgumentCaptor.capture());
 
-      verifyNoMoreInteractions(minioClient);
+    verify(AuthHelper.VALID_ACCOUNT_TWO).setProfileName(name);
+    verify(AuthHelper.VALID_ACCOUNT_TWO).setAvatar(null);
 
-      assertThat(profileArgumentCaptor.getValue().getCommitment(), equalTo(commitment.serialize()));
-      assertThat(profileArgumentCaptor.getValue().getAvatar(), nullValue());
-      assertThat(profileArgumentCaptor.getValue().getVersion(), equalTo("anotherversion"));
-      assertThat(profileArgumentCaptor.getValue().getName(), equalTo(name));
-      assertThat(profileArgumentCaptor.getValue().getAboutEmoji(), equalTo(emoji));
-      assertThat(profileArgumentCaptor.getValue().getAbout(), equalTo(text));
-    }
+    verifyNoMoreInteractions(minioClient);
 
-    @Test
-    public void testGetProfileByVersion() throws RateLimitExceededException {
-	Profile profile = resources.getJerseyTest().target("/v1/profile/" + AuthHelper.VALID_UUID_TWO + "/validversion")
-		.request()
-		.header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
-		.get(Profile.class);
+    final VersionedProfile profile = profileArgumentCaptor.getValue();
+    assertThat(profile.getCommitment()).isEqualTo(commitment.serialize());
+    assertThat(profile.getAvatar()).isNull();
+    assertThat(profile.getVersion()).isEqualTo("anotherversion");
+    assertThat(profile.getName()).isEqualTo(name);
+    assertThat(profile.getAboutEmoji()).isEqualTo(emoji);
+    assertThat(profile.getAbout()).isEqualTo(text);
+    assertThat(profile.getPaymentAddress()).isNull();
+  }
 
-	assertThat(profile.getIdentityKey(), equalTo("bar"));
-	assertThat(profile.getName(), equalTo("validname"));
-	assertThat(profile.getAbout(), equalTo("about"));
-	    assertThat(profile.getAboutEmoji(), equalTo("emoji"));
-	    assertThat(profile.getAvatar(), equalTo("validavatar"));
-	assertThat(profile.getCapabilities().isGv2(), equalTo(false));
-	assertThat(profile.getCapabilities().isGv1Migration(), equalTo(false));
-	assertThat(profile.getUsername(), equalTo("n00bkiller"));
-	assertThat(profile.getUuid(), nullValue());
+  @Test
+  public void testSetProfilePaymentAddress() throws InvalidInputException {
+    ProfileKeyCommitment commitment = new ProfileKey(new byte[32]).getCommitment(AuthHelper.VALID_UUID);
 
-	verify(accountsManager, times(1)).get(eq(AuthHelper.VALID_UUID_TWO));
-	verify(usernamesManager, times(1)).get(eq(AuthHelper.VALID_UUID_TWO));
-	verify(profilesManager, times(1)).get(eq(AuthHelper.VALID_UUID_TWO), eq("validversion"));
+    clearInvocations(AuthHelper.VALID_ACCOUNT_TWO);
 
-	verify(rateLimiter, times(1)).validate(eq(AuthHelper.VALID_NUMBER));
-    }
+    final String name = RandomStringUtils.randomAlphabetic(380);
+    final String paymentAddress = RandomStringUtils.randomAlphanumeric(776);
 
+    Response response = resources.getJerseyTest()
+        .target("/v1/profile")
+        .request()
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER_TWO, AuthHelper.VALID_PASSWORD_TWO))
+        .put(Entity.entity(new CreateProfileRequest(commitment, "yetanotherversion", name, null, null, paymentAddress, false), MediaType.APPLICATION_JSON_TYPE));
+
+    assertThat(response.getStatus()).isEqualTo(200);
+    assertThat(response.hasEntity()).isFalse();
+
+    ArgumentCaptor<VersionedProfile> profileArgumentCaptor = ArgumentCaptor.forClass(VersionedProfile.class);
+
+    verify(profilesManager).get(eq(AuthHelper.VALID_UUID_TWO), eq("yetanotherversion"));
+    verify(profilesManager).set(eq(AuthHelper.VALID_UUID_TWO), profileArgumentCaptor.capture());
+
+    verify(AuthHelper.VALID_ACCOUNT_TWO).setProfileName(eq(name));
+    verify(AuthHelper.VALID_ACCOUNT_TWO).setAvatar(null);
+
+    verifyNoMoreInteractions(minioClient);
+
+    final VersionedProfile profile = profileArgumentCaptor.getValue();
+    assertThat(profile.getCommitment()).isEqualTo(commitment.serialize());
+    assertThat(profile.getAvatar()).isNull();
+    assertThat(profile.getVersion()).isEqualTo("yetanotherversion");
+    assertThat(profile.getName()).isEqualTo(name);
+    assertThat(profile.getAboutEmoji()).isNull();
+    assertThat(profile.getAbout()).isNull();
+    assertThat(profile.getPaymentAddress()).isEqualTo(paymentAddress);
+  }
+
+  @Test
+  public void testGetProfileByVersion() throws RateLimitExceededException {
+    Profile profile = resources.getJerseyTest().target("/v1/profile/" + AuthHelper.VALID_UUID_TWO + "/validversion")
+        .request()
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .get(Profile.class);
+
+    assertThat(profile.getIdentityKey()).isEqualTo("bar");
+    assertThat(profile.getName()).isEqualTo("validname");
+    assertThat(profile.getAbout()).isEqualTo("about");
+    assertThat(profile.getAboutEmoji()).isEqualTo("emoji");
+    assertThat(profile.getAvatar()).isEqualTo("validavatar");
+    assertThat(profile.getCapabilities().isGv2()).isFalse();
+    assertThat(profile.getCapabilities().isGv1Migration()).isFalse();
+    assertThat(profile.getUsername()).isEqualTo("n00bkiller");
+    assertThat(profile.getUuid()).isNull();
+
+    verify(accountsManager, times(1)).get(eq(AuthHelper.VALID_UUID_TWO));
+    verify(usernamesManager, times(1)).get(eq(AuthHelper.VALID_UUID_TWO));
+    verify(profilesManager, times(1)).get(eq(AuthHelper.VALID_UUID_TWO), eq("validversion"));
+
+    verify(rateLimiter, times(1)).validate(eq(AuthHelper.VALID_NUMBER));
+  }
+
+  @Test
+  public void testSetProfileUpdatesAccountCurrentVersion() throws InvalidInputException {
+    ProfileKeyCommitment commitment = new ProfileKey(new byte[32]).getCommitment(AuthHelper.VALID_UUID_TWO);
+
+    clearInvocations(AuthHelper.VALID_ACCOUNT_TWO);
+
+    final String name = RandomStringUtils.randomAlphabetic(380);
+    final String paymentAddress = RandomStringUtils.randomAlphanumeric(776);
+
+    Response response = resources.getJerseyTest()
+        .target("/v1/profile")
+        .request()
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER_TWO, AuthHelper.VALID_PASSWORD_TWO))
+        .put(Entity.entity(new CreateProfileRequest(commitment, "someversion", name, null, null, paymentAddress, false), MediaType.APPLICATION_JSON_TYPE));
+
+    assertThat(response.getStatus()).isEqualTo(200);
+    assertThat(response.hasEntity()).isFalse();
+
+    verify(AuthHelper.VALID_ACCOUNT_TWO).setCurrentProfileVersion("someversion");
+  }
+
+  @Test
+  public void testGetProfileReturnsNoPaymentAddressIfCurrentVersionMismatch() {
+    when(profilesManager.get(AuthHelper.VALID_UUID_TWO, "validversion")).thenReturn(
+        Optional.of(new VersionedProfile(null, null, null, null, null, "paymentaddress", null)));
+    Profile profile = resources.getJerseyTest()
+        .target("/v1/profile/" + AuthHelper.VALID_UUID_TWO + "/validversion")
+        .request()
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .get(Profile.class);
+    assertThat(profile.getPaymentAddress()).isEqualTo("paymentaddress");
+
+    when(profileAccount.getCurrentProfileVersion()).thenReturn(Optional.of("validversion"));
+    profile = resources.getJerseyTest()
+        .target("/v1/profile/" + AuthHelper.VALID_UUID_TWO + "/validversion")
+        .request()
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .get(Profile.class);
+    assertThat(profile.getPaymentAddress()).isEqualTo("paymentaddress");
+
+    when(profileAccount.getCurrentProfileVersion()).thenReturn(Optional.of("someotherversion"));
+    profile = resources.getJerseyTest()
+        .target("/v1/profile/" + AuthHelper.VALID_UUID_TWO + "/validversion")
+        .request()
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .get(Profile.class);
+    assertThat(profile.getPaymentAddress()).isNull();
+  }
 }

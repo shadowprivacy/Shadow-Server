@@ -10,12 +10,16 @@ import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import static com.codahale.metrics.MetricRegistry.name;
 import static su.sres.shadowserver.entities.MessageProtos.Envelope;
 
 import io.dropwizard.lifecycle.Managed;
 import io.micrometer.core.instrument.Metrics;
 import io.micrometer.core.instrument.Tag;
+import su.sres.shadowserver.controllers.MessageController;
 import su.sres.shadowserver.metrics.PushLatencyManager;
 import su.sres.shadowserver.redis.RedisOperation;
 import su.sres.shadowserver.storage.Account;
@@ -47,6 +51,8 @@ public class MessageSender implements Managed {
     private final GCMSender gcmSender;
     private final APNSender apnSender;
     private final PushLatencyManager pushLatencyManager;
+    
+    private final Logger logger = LoggerFactory.getLogger(MessageController.class);
 
     private static final String SEND_COUNTER_NAME = name(MessageSender.class, "sendMessage");
     private static final String CHANNEL_TAG_NAME = "channel";
@@ -78,10 +84,14 @@ public class MessageSender implements Managed {
 
 	if (device.getGcmId() != null) {
 	    channel = "gcm";
+	    // remove after testing
+	    logger.warn("Channel is GCM");;
 	} else if (device.getApnId() != null) {
 	    channel = "apn";
 	} else if (device.getFetchesMessages()) {
 	    channel = "websocket";
+	 // remove after testing
+        logger.warn("Channel is Websocket");
 	} else {
 	    throw new AssertionError();
 	}
@@ -90,6 +100,9 @@ public class MessageSender implements Managed {
 
 	if (online) {
 	    clientPresent = clientPresenceManager.isPresent(account.getUuid(), device.getId());
+	    
+	 // remove after testing
+        logger.warn("Online is true and clientPresent is: " + clientPresent);
 
 	    if (clientPresent) {
 		messagesManager.insertEphemeral(account.getUuid(), device.getId(), message);
@@ -104,6 +117,9 @@ public class MessageSender implements Managed {
 	    // but disconnected before the message was delivered, we should send a
 	    // notification.
 	    clientPresent = clientPresenceManager.isPresent(account.getUuid(), device.getId());
+	    
+	    // remove after testing
+	    logger.warn("Online is false and clientPresent is: " + clientPresent);;
 
 	    if (!clientPresent) {
 		sendNewMessageNotification(account, device);

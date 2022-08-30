@@ -9,44 +9,41 @@ import java.util.UUID;
 
 public class AmbiguousIdentifier {
 
-    private final UUID uuid;
-    private final String userLogin;
+  private final UUID uuid;
+  private final String userLogin;
 
-    public AmbiguousIdentifier(String target) {
-	if (!isUuid(target)) {
-	    this.uuid = null;
-	    this.userLogin = target;
-	} else {
-	    this.uuid = UUID.fromString(target);
-	    this.userLogin = null;
-	}
+  public AmbiguousIdentifier(String target) {
+    if (!isUuid(target)) {
+      this.uuid = null;
+      this.userLogin = target;
+    } else {
+      this.uuid = UUID.fromString(target);
+      this.userLogin = null;
     }
+  }
 
-    public UUID getUuid() {
-	return uuid;
-    }
+  public UUID getUuid() {
+    return uuid;
+  }
 
-    public String getUserLogin() {
-	return userLogin;
-    }
+  public String getUserLogin() {
+    return userLogin;
+  }
 
-    public boolean hasUuid() {
-	return uuid != null;
-    }
+  public boolean hasUuid() {
+    return uuid != null;
+  }
 
-    public boolean hasUserLogin() {
-	return userLogin != null;
-    }
+  public boolean hasUserLogin() {
+    return userLogin != null;
+  }
 
-    private boolean isUuid(String test) {
-	return test.matches("^[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$");
-    }
+  private boolean isUuid(String test) {
+    return test.matches("^[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$");
+  }
 
-    public int sendingGateHash() {
-	if (uuid != null) {
-	    return (int) (uuid.getLeastSignificantBits() & 0xff);
-	} else {
-	    return userLogin.hashCode() & 0xff;
-	}
-    }
+  @Override
+  public String toString() {
+    return hasUuid() ? uuid.toString() : userLogin;
+  }
 }

@@ -13,59 +13,69 @@ import su.sres.shadowserver.util.ByteArrayAdapter;
 
 public class VersionedProfile {
 
-    @JsonProperty
-    private String version;
+  @JsonProperty
+  private String version;
 
-    @JsonProperty
-    private String name;
+  @JsonProperty
+  private String name;
 
-    @JsonProperty
-    private String avatar;
+  @JsonProperty
+  private String avatar;
 
-    @JsonProperty
-    private String aboutEmoji;
+  @JsonProperty
+  private String aboutEmoji;
 
-    @JsonProperty
-    private String about;
+  @JsonProperty
+  private String about;
 
-    @JsonProperty
-    @JsonSerialize(using = ByteArrayAdapter.Serializing.class)
-    @JsonDeserialize(using = ByteArrayAdapter.Deserializing.class)
-    private byte[] commitment;
+  @JsonProperty
+  private String paymentAddress;
 
-    public VersionedProfile() {
-    }
+  @JsonProperty
+  @JsonSerialize(using = ByteArrayAdapter.Serializing.class)
+  @JsonDeserialize(using = ByteArrayAdapter.Deserializing.class)
+  private byte[] commitment;
 
-    public VersionedProfile(String version, String name, String avatar, String aboutEmoji, String about, byte[] commitment) {
-	this.version = version;
-	this.name = name;
-	this.avatar = avatar;
-	this.aboutEmoji = aboutEmoji;
-	this.about = about;
-	this.commitment = commitment;
-    }
+  public VersionedProfile() {
+  }
 
-    public String getVersion() {
-	return version;
-    }
+  public VersionedProfile(
+      String version, String name, String avatar, String aboutEmoji, String about, String paymentAddress,
+      byte[] commitment) {
+    this.version = version;
+    this.name = name;
+    this.avatar = avatar;
+    this.aboutEmoji = aboutEmoji;
+    this.about = about;
+    this.paymentAddress = paymentAddress;
+    this.commitment = commitment;
+  }
 
-    public String getName() {
-	return name;
-    }
+  public String getVersion() {
+    return version;
+  }
 
-    public String getAvatar() {
-	return avatar;
-    }
+  public String getName() {
+    return name;
+  }
 
-    public String getAboutEmoji() {
-	return aboutEmoji;
-    }
+  public String getAvatar() {
+    return avatar;
+  }
 
-    public String getAbout() {
-	return about;
-    }
+  public String getAboutEmoji() {
+    return aboutEmoji;
+  }
 
-    public byte[] getCommitment() {
-	return commitment;
-    }
+  public String getAbout() {
+    return about;
+  }
+  
+  public String getPaymentAddress() {
+    return paymentAddress;
+  }
+
+  public byte[] getCommitment() {
+    return commitment;
+  }
 }

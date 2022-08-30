@@ -125,7 +125,7 @@ public class MessagesCache extends RedisClusterPubSubAdapter<String, String> imp
 
     @Override
     public void stop() {
-	pubSubConnection.usePubSubConnection(connection -> connection.sync().masters().commands().unsubscribe());
+	pubSubConnection.usePubSubConnection(connection -> connection.sync().upstream().commands().unsubscribe());
     }
 
     private void resubscribeAll() {
@@ -370,13 +370,13 @@ public class MessagesCache extends RedisClusterPubSubAdapter<String, String> imp
     private void subscribeForKeyspaceNotifications(final String queueName) {
 	final int slot = SlotHash.getSlot(queueName);
 
-	pubSubConnection.usePubSubConnection(connection -> connection.sync().nodes(node -> node.is(RedisClusterNode.NodeFlag.MASTER) && node.hasSlot(slot))
+	pubSubConnection.usePubSubConnection(connection -> connection.sync().nodes(node -> node.is(RedisClusterNode.NodeFlag.UPSTREAM) && node.hasSlot(slot))
 		.commands()
 		.subscribe(getKeyspaceChannels(queueName)));
     }
 
     private void unsubscribeFromKeyspaceNotifications(final String queueName) {
-	pubSubConnection.usePubSubConnection(connection -> connection.sync().masters()
+	pubSubConnection.usePubSubConnection(connection -> connection.sync().upstream()
 		.commands()
 		.unsubscribe(getKeyspaceChannels(queueName)));
     }

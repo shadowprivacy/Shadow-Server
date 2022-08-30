@@ -5,8 +5,23 @@
  */
 package su.sres.shadowserver.controllers;
 
+import java.time.Duration;
+
 public class RateLimitExceededException extends Exception {
-  public RateLimitExceededException(String number) {
-    super(number);
+
+  private final Duration retryDuration;
+
+  public RateLimitExceededException(final Duration retryDuration) {
+    super();
+    this.retryDuration = retryDuration;
+  }
+
+  public RateLimitExceededException(final String message, final Duration retryDuration) {
+    super(message);
+    this.retryDuration = retryDuration;
+  }
+
+  public Duration getRetryDuration() {
+    return retryDuration;
   }
 }

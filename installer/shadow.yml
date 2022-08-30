@@ -49,11 +49,6 @@ messageCache:                 # Redis server configuration for message store cac
       urls:
         - "redis://localhost:6379/"                                       # replication URL(s) 
 
-pushScheduler:                # Redis server configuration for push scheduler
-     url: "redis://localhost:6379/3"                                    # fake/unused for now
-     replicaUrls:
-              - "redis://localhost:6379"                                # fake/unused for now
-
 pushSchedulerCluster:                 # Redis server configuration for push scheduler cluster
   urls:
     - "redis://localhost:6379/"                                         # fake/unused for now
@@ -86,11 +81,19 @@ server:
       trustStorePassword: changeit                                      # password to access the truststore
       needClientAuth: true                                              # uncommenting this effectively disables the web admin access
               
-messageStore:                 # Postgres database configuration for messages database
-  driverClass: org.postgresql.Driver
-  user:  shadow                                                         # username of the Postgres user
-  password: your_postgres_user_password                                 # password of the Postgres user configured at installation
-  url: "jdbc:postgresql://localhost:5432/messagedb"                     # URL of the messages database   
+messageScyllaDb:              # ScyllaDB database configuration for messages database
+  region: us-east-1
+  tableName:  messagedb
+  endpoint: "http://localhost:8083/"
+  accessKey: scylla_shadow                                              # Scylla service access key
+  accessSecret: your_service_password                                   # Scylla service secret key configured when installing ScyllaDB
+  
+keysScyllaDb:                 # ScyllaDB database configuration for keys database
+  region: us-east-1
+  tableName:  keysdb
+  endpoint: "http://localhost:8083/"
+  accessKey: scylla_shadow                                              # Scylla service access key
+  accessSecret: your_service_password                                   # Scylla service secret key configured when installing ScyllaDB      
 
 accountsDatabase:             # Postgres database configuration for accounts database  
   driverClass: org.postgresql.Driver  
@@ -159,6 +162,10 @@ remoteConfig:
 
 paymentsService:
   userAuthenticationTokenSharedSecret: 6730674e1bd4f3a9cfdb2645159230b1 # fake/unused
+  fixerApiKey: 6730674e1bd4f3a9cfdb2645159230b1 # fake/unused
+  paymentCurrencies:                            # unused for now 
+    - USD
+    - RUB
 
 storageService:
   userAuthenticationTokenSharedSecret: 6730674e1bd4f3a9cfdb2645159230b1 # fake/unused

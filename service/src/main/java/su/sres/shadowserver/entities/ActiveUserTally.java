@@ -17,31 +17,23 @@ public class ActiveUserTally {
   @JsonProperty
   private Map<String, long[]> platforms;
 
-  @JsonProperty
-  private Map<String, long[]> countries;
+  public ActiveUserTally() {
+  }
 
-  public ActiveUserTally() {}
-
-  public ActiveUserTally(UUID fromUuid, Map<String, long[]> platforms, Map<String, long[]> countries) {
-	this.fromUuid   = fromUuid;
-    this.platforms  = platforms;
-    this.countries  = countries;
+  public ActiveUserTally(UUID fromUuid, Map<String, long[]> platforms) {
+    this.fromUuid = fromUuid;
+    this.platforms = platforms;
   }
 
   public UUID getFromUuid() {
-	return this.fromUuid;
+    return this.fromUuid;
   }
 
   public Map<String, long[]> getPlatforms() {
     return this.platforms;
   }
 
-  public Map<String, long[]> getCountries() {
-    return this.countries;
-  }
-
   public void setFromUuid(UUID fromUuid) {
-	this.fromUuid = fromUuid;
+    this.fromUuid = fromUuid;
   }
-
 }

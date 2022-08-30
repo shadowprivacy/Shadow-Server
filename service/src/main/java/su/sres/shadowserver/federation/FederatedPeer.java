@@ -6,8 +6,7 @@
 package su.sres.shadowserver.federation;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import org.hibernate.validator.constraints.NotEmpty;
-import org.hibernate.validator.constraints.URL;
+import javax.validation.constraints.NotEmpty;
 
 public class FederatedPeer {
 
@@ -15,8 +14,7 @@ public class FederatedPeer {
   @JsonProperty
   private String name;
 
-  @NotEmpty
-  @URL
+  @NotEmpty  
   @JsonProperty
   private String url;
 

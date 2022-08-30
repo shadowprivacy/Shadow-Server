@@ -10,125 +10,120 @@ import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.google.common.annotations.VisibleForTesting;
 
-import su.sres.shadowserver.storage.PaymentAddress;
-
 import org.signal.zkgroup.profiles.ProfileKeyCredentialResponse;
 
-import java.util.List;
 import java.util.UUID;
 
 public class Profile {
 
-    @JsonProperty
-    private String identityKey;
+  @JsonProperty
+  private String identityKey;
 
-    @JsonProperty
-    private String name;
+  @JsonProperty
+  private String name;
 
-    @JsonProperty
-    private String about;
+  @JsonProperty
+  private String about;
 
-    @JsonProperty
-    private String aboutEmoji;
+  @JsonProperty
+  private String aboutEmoji;
 
-    @JsonProperty
-    private String avatar;
+  @JsonProperty
+  private String avatar;
 
-    @JsonProperty
-    private String unidentifiedAccess;
+  @JsonProperty
+  private String paymentAddress;
 
-    @JsonProperty
-    private boolean unrestrictedUnidentifiedAccess;
+  @JsonProperty
+  private String unidentifiedAccess;
 
-    @JsonProperty
-    private UserCapabilities capabilities;
+  @JsonProperty
+  private boolean unrestrictedUnidentifiedAccess;
 
-    @JsonProperty
-    private String username;
+  @JsonProperty
+  private UserCapabilities capabilities;
 
-    @JsonProperty
-    private UUID uuid;
+  @JsonProperty
+  private String username;
 
-    @JsonProperty
-    private List<PaymentAddress> payments;
+  @JsonProperty
+  private UUID uuid;
 
-    @JsonProperty
-    @JsonSerialize(using = ProfileKeyCredentialResponseAdapter.Serializing.class)
-    @JsonDeserialize(using = ProfileKeyCredentialResponseAdapter.Deserializing.class)
-    private ProfileKeyCredentialResponse credential;
+  @JsonProperty
+  @JsonSerialize(using = ProfileKeyCredentialResponseAdapter.Serializing.class)
+  @JsonDeserialize(using = ProfileKeyCredentialResponseAdapter.Deserializing.class)
+  private ProfileKeyCredentialResponse credential;
 
-    public Profile() {
-    }
+  public Profile() {
+  }
 
-    public Profile(String name, String about, String aboutEmoji, String avatar, String identityKey,
-	    String unidentifiedAccess, boolean unrestrictedUnidentifiedAccess,
-	    UserCapabilities capabilities, String username, UUID uuid,
-	    ProfileKeyCredentialResponse credential,
-	    List<PaymentAddress> payments) {
-	this.name = name;
-	this.about = about;
-	this.aboutEmoji = aboutEmoji;
-	this.avatar = avatar;
-	this.identityKey = identityKey;
-	this.unidentifiedAccess = unidentifiedAccess;
+  public Profile(
+        String name, String about, String aboutEmoji, String avatar, String paymentAddress, String identityKey,
+        String unidentifiedAccess, boolean unrestrictedUnidentifiedAccess, UserCapabilities capabilities, String username,
+        UUID uuid, ProfileKeyCredentialResponse credential) {
+    this.name = name;
+    this.about = about;
+    this.aboutEmoji = aboutEmoji;
+    this.avatar = avatar;
+    this.paymentAddress = paymentAddress;
+    this.identityKey = identityKey;
+    this.unidentifiedAccess = unidentifiedAccess;
 	this.unrestrictedUnidentifiedAccess = unrestrictedUnidentifiedAccess;
 	this.capabilities = capabilities;
 	this.username = username;
-	this.uuid = uuid;
-	this.payments = payments;
+	this.uuid = uuid;	
 	this.credential = credential;
     }
 
-    @VisibleForTesting
-    public String getIdentityKey() {
-	return identityKey;
-    }
+  @VisibleForTesting
+  public String getIdentityKey() {
+    return identityKey;
+  }
 
-    @VisibleForTesting
-    public String getName() {
-	return name;
-    }
+  @VisibleForTesting
+  public String getName() {
+    return name;
+  }
 
-    public String getAbout() {
-	return about;
-    }
+  public String getAbout() {
+    return about;
+  }
 
-    public String getAboutEmoji() {
-	return aboutEmoji;
-    }
+  public String getAboutEmoji() {
+    return aboutEmoji;
+  }
 
-    @VisibleForTesting
-    public String getAvatar() {
-	return avatar;
-    }
+  @VisibleForTesting
+  public String getAvatar() {
+    return avatar;
+  }
 
-    @VisibleForTesting
-    public String getUnidentifiedAccess() {
-	return unidentifiedAccess;
-    }
+  public String getPaymentAddress() {
+    return paymentAddress;
+  }
 
-    @VisibleForTesting
-    public boolean isUnrestrictedUnidentifiedAccess() {
-	return unrestrictedUnidentifiedAccess;
-    }
+  @VisibleForTesting
+  public String getUnidentifiedAccess() {
+    return unidentifiedAccess;
+  }
 
-    @VisibleForTesting
-    public UserCapabilities getCapabilities() {
-	return capabilities;
-    }
+  @VisibleForTesting
+  public boolean isUnrestrictedUnidentifiedAccess() {
+    return unrestrictedUnidentifiedAccess;
+  }
 
-    @VisibleForTesting
-    public String getUsername() {
-	return username;
-    }
+  @VisibleForTesting
+  public UserCapabilities getCapabilities() {
+    return capabilities;
+  }
 
-    @VisibleForTesting
-    public UUID getUuid() {
-	return uuid;
-    }
+  @VisibleForTesting
+  public String getUsername() {
+    return username;
+  }
 
-    @VisibleForTesting
-    public List<PaymentAddress> getPayments() {
-	return payments;
-    }
+  @VisibleForTesting
+  public UUID getUuid() {
+    return uuid;
+  }
 }

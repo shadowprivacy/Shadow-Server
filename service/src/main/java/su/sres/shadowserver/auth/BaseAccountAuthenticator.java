@@ -22,41 +22,46 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
 import java.util.Optional;
-import java.util.UUID;
 
 import static com.codahale.metrics.MetricRegistry.name;
 import io.dropwizard.auth.basic.BasicCredentials;
+import io.micrometer.core.instrument.DistributionSummary;
+import io.micrometer.core.instrument.Metrics;
 
 public class BaseAccountAuthenticator {
 
-  private final MetricRegistry metricRegistry               = SharedMetricRegistries.getOrCreate(Constants.METRICS_NAME);
-  private final Meter          authenticationFailedMeter    = metricRegistry.meter(name(getClass(), "authentication", "failed"         ));
-  private final Meter          authenticationSucceededMeter = metricRegistry.meter(name(getClass(), "authentication", "succeeded"      ));
-  private final Meter          noSuchAccountMeter           = metricRegistry.meter(name(getClass(), "authentication", "noSuchAccount"  ));
-  private final Meter          noSuchDeviceMeter            = metricRegistry.meter(name(getClass(), "authentication", "noSuchDevice"   ));
-  private final Meter          accountDisabledMeter         = metricRegistry.meter(name(getClass(), "authentication", "accountDisabled"));
-  private final Meter          deviceDisabledMeter          = metricRegistry.meter(name(getClass(), "authentication", "deviceDisabled" ));
-  private final Meter          invalidAuthHeaderMeter       = metricRegistry.meter(name(getClass(), "authentication", "invalidHeader"  ));
+  private final MetricRegistry metricRegistry = SharedMetricRegistries.getOrCreate(Constants.METRICS_NAME);
+  private final Meter authenticationFailedMeter = metricRegistry.meter(name(getClass(), "authentication", "failed"));
+  private final Meter authenticationSucceededMeter = metricRegistry.meter(name(getClass(), "authentication", "succeeded"));
+  private final Meter noSuchAccountMeter = metricRegistry.meter(name(getClass(), "authentication", "noSuchAccount"));
+  private final Meter noSuchDeviceMeter = metricRegistry.meter(name(getClass(), "authentication", "noSuchDevice"));
+  private final Meter accountDisabledMeter = metricRegistry.meter(name(getClass(), "authentication", "accountDisabled"));
+  private final Meter deviceDisabledMeter = metricRegistry.meter(name(getClass(), "authentication", "deviceDisabled"));
+  private final Meter invalidAuthHeaderMeter = metricRegistry.meter(name(getClass(), "authentication", "invalidHeader"));
 
-  private final Logger logger = LoggerFactory.getLogger(AccountAuthenticator.class);
+  private final String daysSinceLastSeenDistributionName = name(getClass(), "authentication", "daysSinceLastSeen");
+
+  private static final String IS_PRIMARY_DEVICE_TAG = "isPrimary";
+
+  private final Logger logger = LoggerFactory.getLogger(BaseAccountAuthenticator.class);
 
   private final AccountsManager accountsManager;
-  private final Clock           clock;
+  private final Clock clock;
 
   public BaseAccountAuthenticator(AccountsManager accountsManager) {
-      this(accountsManager, Clock.systemUTC());
+    this(accountsManager, Clock.systemUTC());
   }
 
   @VisibleForTesting
   public BaseAccountAuthenticator(AccountsManager accountsManager, Clock clock) {
     this.accountsManager = accountsManager;
-    this.clock           = clock;
+    this.clock = clock;
   }
 
   public Optional<Account> authenticate(BasicCredentials basicCredentials, boolean enabledRequired) {
     try {
       AuthorizationHeader authorizationHeader = AuthorizationHeader.fromUserAndPassword(basicCredentials.getUsername(), basicCredentials.getPassword());
-      Optional<Account>   account             = accountsManager.get(authorizationHeader.getIdentifier());
+      Optional<Account> account = accountsManager.get(authorizationHeader.getIdentifier());
 
       if (!account.isPresent()) {
         noSuchAccountMeter.mark();
@@ -99,10 +104,15 @@ public class BaseAccountAuthenticator {
 
   @VisibleForTesting
   public void updateLastSeen(Account account, Device device) {
-    final long lastSeenOffsetSeconds   = Math.abs(account.getUuid().getLeastSignificantBits()) % ChronoUnit.DAYS.getDuration().toSeconds();
+    final long lastSeenOffsetSeconds = Math.abs(account.getUuid().getLeastSignificantBits()) % ChronoUnit.DAYS.getDuration().toSeconds();
     final long todayInMillisWithOffset = Util.todayInMillisGivenOffsetFromNow(clock, Duration.ofSeconds(lastSeenOffsetSeconds).negated());
 
     if (device.getLastSeen() < todayInMillisWithOffset) {
+      DistributionSummary.builder(daysSinceLastSeenDistributionName)
+          .tags(IS_PRIMARY_DEVICE_TAG, String.valueOf(device.isMaster()))
+          .publishPercentileHistogram()
+          .register(Metrics.globalRegistry)
+          .record(Duration.ofMillis(todayInMillisWithOffset - device.getLastSeen()).toDays());
       device.setLastSeen(Util.todayInMillis(clock));
       accountsManager.update(account);
     }

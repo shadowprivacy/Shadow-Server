@@ -14,7 +14,7 @@ import java.io.IOException;
 
 public class NetworkReceivedGauge extends NetworkGauge {
 
-  private final Logger logger = LoggerFactory.getLogger(NetworkSentGauge.class);
+  private final Logger logger = LoggerFactory.getLogger(NetworkReceivedGauge.class);
 
   private long lastTimestamp;
   private long lastReceived;

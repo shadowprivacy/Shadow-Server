@@ -10,110 +10,88 @@ import com.google.common.annotations.VisibleForTesting;
 
 import java.util.List;
 
-import org.hibernate.validator.constraints.Length;
+import javax.validation.constraints.Size;
 
 import su.sres.shadowserver.storage.Device;
 import su.sres.shadowserver.storage.Device.DeviceCapabilities;
-import su.sres.shadowserver.storage.PaymentAddress;
 
 public class AccountAttributes {
 
-    @JsonProperty
-    private String signalingKey;
+  @JsonProperty
+  private boolean fetchesMessages;
 
-    @JsonProperty
-    private boolean fetchesMessages;
+  @JsonProperty
+  private int registrationId;
 
-    @JsonProperty
-    private int registrationId;
+  @JsonProperty
+  @Size(max = 204, message = "This field must be less than 50 characters")
+  private String name;
 
-    @JsonProperty
-    @Length(max = 204, message = "This field must be less than 50 characters")
-    private String name;
+  @JsonProperty
+  private String pin;
 
-    @JsonProperty
-    private String pin;
+  @JsonProperty
+  private String registrationLock;
 
-    @JsonProperty
-    private String registrationLock;
+  @JsonProperty
+  private byte[] unidentifiedAccessKey;
 
-    @JsonProperty
-    private byte[] unidentifiedAccessKey;
+  @JsonProperty
+  private boolean unrestrictedUnidentifiedAccess;
 
-    @JsonProperty
-    private boolean unrestrictedUnidentifiedAccess;
+  @JsonProperty
+  private DeviceCapabilities capabilities;
 
-    @JsonProperty
-    private List<PaymentAddress> payments;
+  @JsonProperty
+  private boolean discoverableByUserLogin = true;
 
-    @JsonProperty
-    private DeviceCapabilities capabilities;
+  public AccountAttributes() {
+  }
 
-    @JsonProperty
-    private boolean discoverableByUserLogin = true;
+  @VisibleForTesting
+  public AccountAttributes(boolean fetchesMessages, int registrationId, String name, String pin, String registrationLock, boolean discoverableByPhoneNumber, final DeviceCapabilities capabilities) {
+    this.fetchesMessages = fetchesMessages;
+    this.registrationId = registrationId;
+    this.name = name;
+    this.pin = pin;
+    this.registrationLock = registrationLock;
+    this.discoverableByUserLogin = discoverableByUserLogin;
+    this.capabilities = capabilities;
+  }
 
-    public AccountAttributes() {
-    }
+  public boolean getFetchesMessages() {
+    return fetchesMessages;
+  }
 
-    @VisibleForTesting
-    public AccountAttributes(String signalingKey, boolean fetchesMessages, int registrationId, String pin) {
-	this(signalingKey, fetchesMessages, registrationId, null, pin, null, null, true, null);
-    }
+  public int getRegistrationId() {
+    return registrationId;
+  }
 
-    @VisibleForTesting
-    public AccountAttributes(String signalingKey, boolean fetchesMessages, int registrationId, String name, String pin, String registrationLock, List<PaymentAddress> payments, boolean discoverableByUserLogin, final DeviceCapabilities capabilities) {
-	this.signalingKey = signalingKey;
-	this.fetchesMessages = fetchesMessages;
-	this.registrationId = registrationId;
-	this.name = name;
-	this.pin = pin;
-	this.registrationLock = registrationLock;
-	this.payments = payments;
-	this.discoverableByUserLogin = discoverableByUserLogin;
-	this.capabilities = capabilities;
-    }
+  public String getName() {
+    return name;
+  }
 
-    public String getSignalingKey() {
-	return signalingKey;
-    }
+  public String getPin() {
+    return pin;
+  }
 
-    public boolean getFetchesMessages() {
-	return fetchesMessages;
-    }
+  public String getRegistrationLock() {
+    return registrationLock;
+  }
 
-    public int getRegistrationId() {
-	return registrationId;
-    }
+  public byte[] getUnidentifiedAccessKey() {
+    return unidentifiedAccessKey;
+  }
 
-    public String getName() {
-	return name;
-    }
+  public boolean isUnrestrictedUnidentifiedAccess() {
+    return unrestrictedUnidentifiedAccess;
+  }
 
-    public String getPin() {
-	return pin;
-    }
+  public DeviceCapabilities getCapabilities() {
+    return capabilities;
+  }
 
-    public String getRegistrationLock() {
-	return registrationLock;
-    }
-
-    public byte[] getUnidentifiedAccessKey() {
-	return unidentifiedAccessKey;
-    }
-
-    public boolean isUnrestrictedUnidentifiedAccess() {
-	return unrestrictedUnidentifiedAccess;
-    }
-
-    public DeviceCapabilities getCapabilities() {
-	return capabilities;
-    }
-
-    public List<PaymentAddress> getPayments() {
-	return payments;
-    }
-
-    public boolean isDiscoverableByUserLogin() {
-	return discoverableByUserLogin;
-    }
+  public boolean isDiscoverableByUserLogin() {
+    return discoverableByUserLogin;
+  }
 }

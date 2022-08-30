@@ -1,12 +1,15 @@
 package su.sres.shadowserver.configuration.dynamic;
 
+import java.time.Duration;
+
 import com.fasterxml.jackson.annotation.JsonProperty;
 import su.sres.shadowserver.configuration.RateLimitsConfiguration.RateLimitConfiguration;
+import su.sres.shadowserver.configuration.RateLimitsConfiguration.CardinalityRateLimitConfiguration;
 
 public class DynamicRateLimitsConfiguration {
 
   @JsonProperty
-  private RateLimitConfiguration unsealedSenderNumber = new RateLimitConfiguration(60, 1.0 / 60);
+  private CardinalityRateLimitConfiguration unsealedSenderUserLogin = new CardinalityRateLimitConfiguration(100, Duration.ofDays(1), Duration.ofDays(1));
 
   @JsonProperty
   private RateLimitConfiguration unsealedSenderIp = new RateLimitConfiguration(120, 2.0 / 60);
@@ -15,7 +18,7 @@ public class DynamicRateLimitsConfiguration {
     return unsealedSenderIp;
   }
 
-  public RateLimitConfiguration getUnsealedSenderNumber() {
-    return unsealedSenderNumber;
+  public CardinalityRateLimitConfiguration getUnsealedSenderUserLogin() {
+    return unsealedSenderUserLogin;
   }
 }

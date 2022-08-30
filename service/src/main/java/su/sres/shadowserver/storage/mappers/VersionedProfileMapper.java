@@ -17,11 +17,13 @@ public class VersionedProfileMapper implements RowMapper<VersionedProfile> {
 
   @Override
   public VersionedProfile map(ResultSet resultSet, StatementContext ctx) throws SQLException {
-    return new VersionedProfile(resultSet.getString(Profiles.VERSION),
-                                resultSet.getString(Profiles.NAME),
-                                resultSet.getString(Profiles.AVATAR),
-                                resultSet.getString(Profiles.ABOUT_EMOJI),
-                                resultSet.getString(Profiles.ABOUT),
-                                resultSet.getBytes(Profiles.COMMITMENT));
+    return new VersionedProfile(
+        resultSet.getString(Profiles.VERSION),
+        resultSet.getString(Profiles.NAME),
+        resultSet.getString(Profiles.AVATAR),
+        resultSet.getString(Profiles.ABOUT_EMOJI),
+        resultSet.getString(Profiles.ABOUT),
+        resultSet.getString(Profiles.PAYMENT_ADDRESS),
+        resultSet.getBytes(Profiles.COMMITMENT));
   }
-} 
+}

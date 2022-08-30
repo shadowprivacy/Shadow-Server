@@ -21,20 +21,22 @@ import static com.codahale.metrics.MetricRegistry.name;
 public class PushFeedbackProcessor extends AccountDatabaseCrawlerListener {
 
   private final MetricRegistry metricRegistry = SharedMetricRegistries.getOrCreate(Constants.METRICS_NAME);
-  private final Meter          expired        = metricRegistry.meter(name(getClass(), "unregistered", "expired"));
-  private final Meter          recovered      = metricRegistry.meter(name(getClass(), "unregistered", "recovered"));
+  private final Meter expired = metricRegistry.meter(name(getClass(), "unregistered", "expired"));
+  private final Meter recovered = metricRegistry.meter(name(getClass(), "unregistered", "recovered"));
 
   private final AccountsManager accountsManager;
-  
+
   public PushFeedbackProcessor(AccountsManager accountsManager) {
-    this.accountsManager = accountsManager;    
+    this.accountsManager = accountsManager;
   }
 
   @Override
-  public void onCrawlStart() {}
+  public void onCrawlStart() {
+  }
 
   @Override
-  public void onCrawlEnd(Optional<UUID> toUuid) {}
+  public void onCrawlEnd(Optional<UUID> toUuid) {
+  }
 
   @Override
   protected void onCrawlChunk(Optional<UUID> fromUuid, List<Account> chunkAccounts) {
@@ -43,9 +45,17 @@ public class PushFeedbackProcessor extends AccountDatabaseCrawlerListener {
 
       for (Device device : account.getDevices()) {
         if (device.getUninstalledFeedbackTimestamp() != 0 &&
-            device.getUninstalledFeedbackTimestamp() + TimeUnit.DAYS.toMillis(2) <= Util.todayInMillis())
-        {
+            device.getUninstalledFeedbackTimestamp() + TimeUnit.DAYS.toMillis(2) <= Util.todayInMillis()) {
           if (device.getLastSeen() + TimeUnit.DAYS.toMillis(2) <= Util.todayInMillis()) {
+            if (!Util.isEmpty(device.getApnId())) {
+              if (device.getId() == 1) {
+                device.setUserAgent("OWI");
+              } else {
+                device.setUserAgent("OWP");
+              }
+            } else if (!Util.isEmpty(device.getGcmId())) {
+              device.setUserAgent("OWA");
+            }
             device.setGcmId(null);
             device.setApnId(null);
             device.setVoipApnId(null);
@@ -62,8 +72,8 @@ public class PushFeedbackProcessor extends AccountDatabaseCrawlerListener {
 
       if (update) {
         accountsManager.update(account);
-        
+
       }
     }
-  }  
+  }
 }

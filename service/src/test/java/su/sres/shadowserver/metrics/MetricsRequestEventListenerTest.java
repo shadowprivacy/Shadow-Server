@@ -51,6 +51,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -162,7 +163,8 @@ public class MetricsRequestEventListenerTest {
 
 	when(session.getUpgradeRequest()).thenReturn(request);
 	when(session.getRemote()).thenReturn(remoteEndpoint);
-	when(request.getHeader("User-Agent")).thenReturn("Signal-Android 4.53.7 (Android 8.1)");
+	when(request.getHeader("User-Agent")).thenReturn("Shadow-Android 4.53.7 (Android 8.1)");
+	when(request.getHeaders()).thenReturn(Map.of("User-Agent", List.of("Signal-Android 4.53.7 (Android 8.1)")));
 
 	final ArgumentCaptor<Iterable<Tag>> tagCaptor = ArgumentCaptor.forClass(Iterable.class);
 	when(meterRegistry.counter(eq(MetricsRequestEventListener.REQUEST_COUNTER_NAME), any(Iterable.class))).thenReturn(counter);

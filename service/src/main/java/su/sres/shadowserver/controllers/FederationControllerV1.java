@@ -36,8 +36,6 @@ import java.util.Optional;
 import io.dropwizard.auth.Auth;
 import su.sres.shadowserver.entities.AccountCount;
 import su.sres.shadowserver.entities.AttachmentUri;
-import su.sres.shadowserver.entities.ClientContact;
-import su.sres.shadowserver.entities.ClientContacts;
 import su.sres.shadowserver.entities.IncomingMessageList;
 import su.sres.shadowserver.federation.FederatedPeer;
 import su.sres.shadowserver.federation.NonLimitedAccount;

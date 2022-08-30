@@ -21,7 +21,7 @@ See <http://www.wassenaar.org/> for more information.
 License
 ---------------------
 Original software:
-Copyright 2013-2020 Signal Messenger, LLC
+Copyright 2013-2021 Signal Messenger, LLC
 
 Modified software:
 Copyright 2019-2022 Anton Alipov, sole trader

@@ -4,15 +4,24 @@
  */
 package su.sres.gcm.server;
 
+import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
+import static com.github.tomakehurst.wiremock.client.WireMock.any;
+import static com.github.tomakehurst.wiremock.client.WireMock.anyRequestedFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.anyUrl;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.ok;
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.verify;
+import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options;
+
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import okhttp3.mockwebserver.MockResponse;
-import okhttp3.mockwebserver.RecordedRequest;
-import okhttp3.mockwebserver.MockWebServer;
+import com.github.tomakehurst.wiremock.client.CountMatchingStrategy;
+import com.github.tomakehurst.wiremock.junit.WireMockRule;
 
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 
@@ -30,8 +39,8 @@ import static su.sres.gcm.server.util.JsonHelpers.jsonFixture;
 public class SenderTest {
 
   @Rule
-  public MockWebServer server = new MockWebServer();
-  
+  public WireMockRule wireMock = new WireMockRule(options().dynamicPort().dynamicHttpsPort());
+
   private static final ObjectMapper mapper = new ObjectMapper();
 
   static {
@@ -40,14 +49,15 @@ public class SenderTest {
     mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
   }
 
-  @Test  
+  @Test
   public void testSuccess() throws InterruptedException, ExecutionException, TimeoutException, IOException {
-    MockResponse successResponse = new MockResponse().setResponseCode(200)
-                                                     .setBody(fixture("fixtures/response-success.json"));
-    server.enqueue(successResponse);
+    wireMock.stubFor(any(anyUrl())
+        .willReturn(aResponse()
+            .withStatus(200)
+            .withBody(fixture("fixtures/response-success.json"))));
 
-    Sender sender = new Sender("foobarbaz", mapper, 10, server.url("/gcm/send").toString());
- 
+    Sender sender = new Sender("foobarbaz", mapper, 10, "http://localhost:" + wireMock.port() + "/gcm/send");
+
     CompletableFuture<Result> future = sender.send(Message.newBuilder().withDestination("1").build());
 
     Result result = future.get(10, TimeUnit.SECONDS);
@@ -58,21 +68,20 @@ public class SenderTest {
     assertEquals(result.getMessageId(), "1:08");
     assertNull(result.getError());
     assertNull(result.getCanonicalRegistrationId());
-    
-    RecordedRequest request = server.takeRequest();
-    assertEquals(request.getPath(), "/gcm/send");
-    assertEquals(request.getBody().readUtf8(), jsonFixture("fixtures/message-minimal.json"));
-    assertEquals(request.getHeader("Authorization"), "key=foobarbaz");
-    assertEquals(request.getHeader("Content-Type"), "application/json");
-    assertEquals(server.getRequestCount(), 1);
+
+    verify(1, postRequestedFor(urlEqualTo("/gcm/send"))
+        .withHeader("Authorization", equalTo("key=foobarbaz"))
+        .withHeader("Content-Type", equalTo("application/json"))
+        .withRequestBody(equalTo(jsonFixture("fixtures/message-minimal.json"))));
   }
 
-  @Test  
+  @Test
   public void testBadApiKey() throws InterruptedException, TimeoutException {
-    MockResponse unauthorizedResponse = new MockResponse().setResponseCode(401);
-    server.enqueue(unauthorizedResponse);
+    wireMock.stubFor(any(anyUrl())
+        .willReturn(aResponse()
+            .withStatus(401)));
 
-    Sender sender = new Sender("foobar", mapper, 10, server.url("/gcm/send").toString());
+    Sender sender = new Sender("foobar", mapper, 10, "http://localhost:" + wireMock.port() + "/gcm/send");
 
     CompletableFuture<Result> future = sender.send(Message.newBuilder().withDestination("1").build());
 
@@ -83,16 +92,17 @@ public class SenderTest {
       assertTrue(ee.getCause() instanceof AuthenticationFailedException);
     }
 
-    assertEquals(server.getRequestCount(), 1);
+    verify(1, anyRequestedFor(anyUrl()));
   }
 
-  @Test  
+  @Test
   public void testBadRequest() throws TimeoutException, InterruptedException {
-    MockResponse malformed = new MockResponse().setResponseCode(400);
-    server.enqueue(malformed);
+    wireMock.stubFor(any(anyUrl())
+        .willReturn(aResponse()
+            .withStatus(400)));
 
-    Sender sender = new Sender("foobarbaz", mapper, 10, server.url("/gcm/send").toString());
- 
+    Sender sender = new Sender("foobarbaz", mapper, 10, "http://localhost:" + wireMock.port() + "/gcm/send");
+
     CompletableFuture<Result> future = sender.send(Message.newBuilder().withDestination("1").build());
 
     try {
@@ -102,17 +112,16 @@ public class SenderTest {
       assertTrue(e.getCause() instanceof InvalidRequestException);
     }
 
-    assertEquals(server.getRequestCount(), 1);
+    verify(1, anyRequestedFor(anyUrl()));
   }
-  
-  @Test  
-  public void testServerError() throws TimeoutException, InterruptedException {
-    MockResponse error = new MockResponse().setResponseCode(503);
-    server.enqueue(error);
-    server.enqueue(error);
-    server.enqueue(error);
 
-    Sender sender = new Sender("foobarbaz", mapper, 3, server.url("/gcm/send").toString());
+  @Test
+  public void testServerError() throws TimeoutException, InterruptedException {
+    wireMock.stubFor(any(anyUrl())
+        .willReturn(aResponse()
+            .withStatus(503)));
+
+    Sender sender = new Sender("foobarbaz", mapper, 3, "http://localhost:" + wireMock.port() + "/gcm/send");
 
     CompletableFuture<Result> future = sender.send(Message.newBuilder().withDestination("1").build());
 
@@ -123,28 +132,27 @@ public class SenderTest {
       assertTrue(ee.getCause() instanceof ServerFailedException);
     }
 
-    assertEquals(server.getRequestCount(), 3);
+    verify(3, anyRequestedFor(anyUrl()));
   }
 
-  @Test  
+  @Test
   public void testServerErrorRecovery() throws InterruptedException, ExecutionException, TimeoutException {
-    MockResponse success = new MockResponse().setResponseCode(200)
-                                             .setBody(fixture("fixtures/response-success.json"));
+    wireMock.stubFor(any(anyUrl()).willReturn(aResponse().withStatus(503)));
 
-    MockResponse error = new MockResponse().setResponseCode(503);
-
-    server.enqueue(error);
-    server.enqueue(error);
-    server.enqueue(error);
-    server.enqueue(success);
-
-    Sender sender = new Sender("foobarbaz", mapper, 4, server.url("/gcm/send").toString());
+    Sender sender = new Sender("foobarbaz", mapper, 4, "http://localhost:" + wireMock.port() + "/gcm/send");
 
     CompletableFuture<Result> future = sender.send(Message.newBuilder().withDestination("1").build());
 
+    // up to three failures can happen, with 100ms exponential backoff
+    // if we end up using the fourth, and finaly try, it would be after ~700 ms
+    CompletableFuture.delayedExecutor(300, TimeUnit.MILLISECONDS).execute(() -> wireMock.stubFor(any(anyUrl())
+        .willReturn(aResponse()
+            .withStatus(200)
+            .withBody(fixture("fixtures/response-success.json")))));
+
     Result result = future.get(10, TimeUnit.SECONDS);
 
-    assertEquals(server.getRequestCount(), 4);
+    verify(new CountMatchingStrategy(CountMatchingStrategy.GREATER_THAN, 1), anyRequestedFor(anyUrl()));
     assertTrue(result.isSuccess());
     assertFalse(result.isThrottled());
     assertFalse(result.isUnregistered());
@@ -154,18 +162,14 @@ public class SenderTest {
   }
 
   @Test
-  @Ignore
-  public void testNetworkError() throws TimeoutException, InterruptedException, IOException {
-    MockResponse response = new MockResponse().setResponseCode(200)
-                                              .setBody(fixture("fixtures/response-success.json"));
+  public void testNetworkError() throws TimeoutException, InterruptedException {
 
-    server.enqueue(response);
-    server.enqueue(response);
-    server.enqueue(response);
+    wireMock.stubFor(any(anyUrl())
+        .willReturn(ok()));
 
-    Sender sender = new Sender("foobarbaz", mapper ,2, server.url("/gcm/send").toString());
-   
-    server.shutdown();
+    Sender sender = new Sender("foobarbaz", mapper, 2, "http://localhost:" + wireMock.port() + "/gcm/send");
+
+    wireMock.stop();
 
     CompletableFuture<Result> future = sender.send(Message.newBuilder().withDestination("1").build());
 
@@ -176,19 +180,17 @@ public class SenderTest {
     }
   }
 
-  @Test  
+  @Test
   public void testNotRegistered() throws InterruptedException, ExecutionException, TimeoutException {
-    MockResponse response = new MockResponse().setResponseCode(200)
-                                              .setBody(fixture("fixtures/response-not-registered.json"));
+    wireMock.stubFor(any(anyUrl()).willReturn(aResponse().withStatus(200)
+        .withBody(fixture("fixtures/response-not-registered.json"))));
 
-    server.enqueue(response);
-
-    Sender sender = new Sender("foobarbaz", mapper,2, server.url("/gcm/send").toString());
+    Sender sender = new Sender("foobarbaz", mapper, 2, "http://localhost:" + wireMock.port() + "/gcm/send");
 
     CompletableFuture<Result> future = sender.send(Message.newBuilder()
-                                                         .withDestination("2")
-                                                         .withDataPart("message", "new message!")
-                                                         .build());
+        .withDestination("2")
+        .withDataPart("message", "new message!")
+        .build());
 
     Result result = future.get(10, TimeUnit.SECONDS);
 

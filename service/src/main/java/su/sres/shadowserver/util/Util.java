@@ -57,15 +57,7 @@ public class Util {
 			return matcher.group(1);
 		else
 			return "0";
-	}
-
-	public static String getNumberPrefix(String number) {
-		String countryCode = getCountryCode(number);
-		int remaining = number.length() - (1 + countryCode.length());
-		int prefixLength = Math.min(4, remaining);
-
-		return number.substring(0, 1 + countryCode.length() + prefixLength);
-	}
+	}	
 
 	public static String encodeFormParams(Map<String, String> params) {
 		try {

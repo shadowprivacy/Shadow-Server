@@ -38,7 +38,7 @@ public class ClientPresenceManagerTest extends AbstractRedisClusterTest {
 
 	getRedisCluster().useCluster(connection -> {
 	    connection.sync().flushall();
-	    connection.sync().masters().commands().configSet("notify-keyspace-events", "K$z");
+	    connection.sync().upstream().commands().configSet("notify-keyspace-events", "K$z");
 	});
 
 	presenceRenewalExecutorService = Executors.newSingleThreadScheduledExecutor();
@@ -189,7 +189,7 @@ public class ClientPresenceManagerTest extends AbstractRedisClusterTest {
 	    addClientPresence(missingPeerId);
 	}
 
-	clientPresenceManager.getPubSubConnection().usePubSubConnection(connection -> connection.sync().masters().commands().subscribe(ClientPresenceManager.getManagerPresenceChannel(presentPeerId)));
+	clientPresenceManager.getPubSubConnection().usePubSubConnection(connection -> connection.sync().upstream().commands().subscribe(ClientPresenceManager.getManagerPresenceChannel(presentPeerId)));
 
 	clientPresenceManager.pruneMissingPeers();
 

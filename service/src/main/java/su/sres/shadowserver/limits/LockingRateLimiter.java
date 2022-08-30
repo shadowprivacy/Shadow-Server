@@ -12,6 +12,9 @@ import com.codahale.metrics.SharedMetricRegistries;
 import io.lettuce.core.SetArgs;
 
 import static com.codahale.metrics.MetricRegistry.name;
+
+import java.time.Duration;
+
 import su.sres.shadowserver.controllers.RateLimitExceededException;
 import su.sres.shadowserver.redis.FaultTolerantRedisCluster;
 import su.sres.shadowserver.util.Constants;
@@ -31,7 +34,7 @@ public class LockingRateLimiter extends RateLimiter {
     public void validate(String key, int amount) throws RateLimitExceededException {
 	if (!acquireLock(key)) {
 	    meter.mark();
-	    throw new RateLimitExceededException("Locked");
+	    throw new RateLimitExceededException("Locked", Duration.ZERO);
 	}
 
 	try {

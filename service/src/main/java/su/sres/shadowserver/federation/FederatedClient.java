@@ -45,8 +45,6 @@ import io.dropwizard.client.JerseyClientConfiguration;
 import io.dropwizard.setup.Environment;
 import su.sres.shadowserver.entities.AccountCount;
 import su.sres.shadowserver.entities.AttachmentUri;
-import su.sres.shadowserver.entities.ClientContact;
-import su.sres.shadowserver.entities.ClientContacts;
 import su.sres.shadowserver.entities.IncomingMessageList;
 import su.sres.shadowserver.entities.PreKeyResponse;
 
@@ -123,22 +121,7 @@ public class FederatedClient {
       return 0;
     }
   }
-
-  public List<ClientContact> getUserTokens(int offset) {
-    try {
-      ClientContacts contacts = client.target(peer.getUrl())
-                                      .path(String.format(USER_TOKENS_PATH, offset))
-                                      .request()
-                                      .accept(MediaType.APPLICATION_JSON_TYPE)
-                                      .get(ClientContacts.class);
-
-      return contacts.getContacts();
-    } catch (ProcessingException e) {
-      logger.warn("User Tokens", e);
-      return null;
-    }
-  }
-
+  
   public void sendMessages(String source, long sourceDeviceId, String destination, IncomingMessageList messages)
       throws IOException
   {

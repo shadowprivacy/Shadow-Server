@@ -4,6 +4,15 @@
  */
 package su.sres.websocket;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
+
 import org.eclipse.jetty.websocket.api.Session;
 import org.eclipse.jetty.websocket.api.UpgradeRequest;
 import org.eclipse.jetty.websocket.servlet.ServletUpgradeRequest;
@@ -22,31 +31,23 @@ import java.security.Principal;
 import java.util.Optional;
 
 import io.dropwizard.jersey.DropwizardResourceConfig;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.when;
 
 public class WebSocketResourceProviderFactoryTest {
 
   @Test
   public void testUnauthorized() throws AuthenticationException, IOException {
-    ResourceConfig         jerseyEnvironment = new DropwizardResourceConfig();
-    WebSocketEnvironment   environment       = mock(WebSocketEnvironment.class  );
-    WebSocketAuthenticator authenticator     = mock(WebSocketAuthenticator.class);
-    ServletUpgradeRequest  request           = mock(ServletUpgradeRequest.class );
-    ServletUpgradeResponse response          = mock(ServletUpgradeResponse.class);
+    ResourceConfig jerseyEnvironment = new DropwizardResourceConfig();
+    WebSocketEnvironment environment = mock(WebSocketEnvironment.class);
+    WebSocketAuthenticator authenticator = mock(WebSocketAuthenticator.class);
+    ServletUpgradeRequest request = mock(ServletUpgradeRequest.class);
+    ServletUpgradeResponse response = mock(ServletUpgradeResponse.class);
 
     when(environment.getAuthenticator()).thenReturn(authenticator);
     when(authenticator.authenticate(eq(request))).thenReturn(new WebSocketAuthenticator.AuthenticationResult<>(Optional.empty(), true));
     when(environment.jersey()).thenReturn(jerseyEnvironment);
 
-    WebSocketResourceProviderFactory factory    = new WebSocketResourceProviderFactory(environment, Account.class);
-    Object                           connection = factory.createWebSocket(request, response);
+    WebSocketResourceProviderFactory factory = new WebSocketResourceProviderFactory(environment, Account.class);
+    Object connection = factory.createWebSocket(request, response);
 
     assertNull(connection);
     verify(response).sendForbidden(eq("Unauthorized"));
@@ -55,46 +56,46 @@ public class WebSocketResourceProviderFactoryTest {
 
   @Test
   public void testValidAuthorization() throws AuthenticationException, ServletException {
-    ResourceConfig         jerseyEnvironment = new DropwizardResourceConfig();
-    WebSocketEnvironment   environment       = mock(WebSocketEnvironment.class    );
-    WebSocketAuthenticator authenticator     = mock(WebSocketAuthenticator.class  );
-    ServletUpgradeRequest  request           = mock(ServletUpgradeRequest.class   );
-    ServletUpgradeResponse response          = mock(ServletUpgradeResponse.class  );
-    Session                session           = mock(Session.class                 );
-    Account                account           = new Account();
+    ResourceConfig jerseyEnvironment = new DropwizardResourceConfig();
+    WebSocketEnvironment environment = mock(WebSocketEnvironment.class);
+    WebSocketAuthenticator authenticator = mock(WebSocketAuthenticator.class);
+    ServletUpgradeRequest request = mock(ServletUpgradeRequest.class);
+    ServletUpgradeResponse response = mock(ServletUpgradeResponse.class);
+    Session session = mock(Session.class);
+    Account account = new Account();
 
     when(environment.getAuthenticator()).thenReturn(authenticator);
     when(authenticator.authenticate(eq(request))).thenReturn(new WebSocketAuthenticator.AuthenticationResult<>(Optional.of(account), true));
     when(environment.jersey()).thenReturn(jerseyEnvironment);
     when(session.getUpgradeRequest()).thenReturn(mock(UpgradeRequest.class));
 
-    WebSocketResourceProviderFactory factory    = new WebSocketResourceProviderFactory(environment, Account.class);
-    Object                           connection = factory.createWebSocket(request, response);
+    WebSocketResourceProviderFactory factory = new WebSocketResourceProviderFactory(environment, Account.class);
+    Object connection = factory.createWebSocket(request, response);
 
     assertNotNull(connection);
     verifyNoMoreInteractions(response);
     verify(authenticator).authenticate(eq(request));
 
-    ((WebSocketResourceProvider)connection).onWebSocketConnect(session);
+    ((WebSocketResourceProvider) connection).onWebSocketConnect(session);
 
     assertNotNull(((WebSocketResourceProvider) connection).getContext().getAuthenticated());
-    assertEquals(((WebSocketResourceProvider)connection).getContext().getAuthenticated(), account);
+    assertEquals(((WebSocketResourceProvider) connection).getContext().getAuthenticated(), account);
   }
 
   @Test
   public void testErrorAuthorization() throws AuthenticationException, ServletException, IOException {
-    ResourceConfig         jerseyEnvironment = new DropwizardResourceConfig();
-    WebSocketEnvironment   environment       = mock(WebSocketEnvironment.class    );
-    WebSocketAuthenticator authenticator     = mock(WebSocketAuthenticator.class  );
-    ServletUpgradeRequest  request           = mock(ServletUpgradeRequest.class   );
-    ServletUpgradeResponse response          = mock(ServletUpgradeResponse.class  );
+    ResourceConfig jerseyEnvironment = new DropwizardResourceConfig();
+    WebSocketEnvironment environment = mock(WebSocketEnvironment.class);
+    WebSocketAuthenticator authenticator = mock(WebSocketAuthenticator.class);
+    ServletUpgradeRequest request = mock(ServletUpgradeRequest.class);
+    ServletUpgradeResponse response = mock(ServletUpgradeResponse.class);
 
     when(environment.getAuthenticator()).thenReturn(authenticator);
     when(authenticator.authenticate(eq(request))).thenThrow(new AuthenticationException("database failure"));
     when(environment.jersey()).thenReturn(jerseyEnvironment);
 
-    WebSocketResourceProviderFactory factory    = new WebSocketResourceProviderFactory(environment, Account.class);
-    Object                           connection = factory.createWebSocket(request, response);
+    WebSocketResourceProviderFactory factory = new WebSocketResourceProviderFactory(environment, Account.class);
+    Object connection = factory.createWebSocket(request, response);
 
     assertNull(connection);
     verify(response).sendError(eq(500), eq("Failure"));
@@ -103,9 +104,9 @@ public class WebSocketResourceProviderFactoryTest {
 
   @Test
   public void testConfigure() {
-    ResourceConfig                   jerseyEnvironment = new DropwizardResourceConfig();
-    WebSocketEnvironment             environment       = mock(WebSocketEnvironment.class    );
-    WebSocketServletFactory          servletFactory    = mock(WebSocketServletFactory.class );
+    ResourceConfig jerseyEnvironment = new DropwizardResourceConfig();
+    WebSocketEnvironment environment = mock(WebSocketEnvironment.class);
+    WebSocketServletFactory servletFactory = mock(WebSocketServletFactory.class);
     when(environment.jersey()).thenReturn(jerseyEnvironment);
 
     WebSocketResourceProviderFactory factory = new WebSocketResourceProviderFactory(environment, Account.class);
@@ -113,7 +114,6 @@ public class WebSocketResourceProviderFactoryTest {
 
     verify(servletFactory).setCreator(eq(factory));
   }
-
 
   private static class Account implements Principal {
     @Override
@@ -126,6 +126,5 @@ public class WebSocketResourceProviderFactoryTest {
       return false;
     }
   }
-
 
 }

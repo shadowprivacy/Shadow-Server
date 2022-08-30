@@ -15,26 +15,20 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.stream.Collectors;
 
 import static com.codahale.metrics.MetricRegistry.name;
 import io.dropwizard.lifecycle.Managed;
 import io.lettuce.core.ScriptOutputType;
 import io.lettuce.core.cluster.SlotHash;
-import redis.clients.jedis.exceptions.JedisException;
 import su.sres.shadowserver.redis.ClusterLuaScript;
 import su.sres.shadowserver.redis.FaultTolerantRedisCluster;
-import su.sres.shadowserver.redis.LuaScript;
 import su.sres.shadowserver.redis.RedisException;
-import su.sres.shadowserver.redis.ReplicatedJedisPool;
 import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.storage.AccountsManager;
 import su.sres.shadowserver.storage.Device;
@@ -45,330 +39,239 @@ import su.sres.shadowserver.util.Util;
 
 public class ApnFallbackManager implements Managed {
 
-    private static final Logger logger = LoggerFactory.getLogger(ApnFallbackManager.class);
+  private static final Logger logger = LoggerFactory.getLogger(ApnFallbackManager.class);
 
-    private static final String SINGLETON_PENDING_NOTIFICATIONS_KEY = "PENDING_APN";
-    static final String NEXT_SLOT_TO_PERSIST_KEY = "pending_notification_next_slot";
+  private static final String PENDING_NOTIFICATIONS_KEY = "PENDING_APN";
+  static final String NEXT_SLOT_TO_PERSIST_KEY = "pending_notification_next_slot";
 
-    private static final MetricRegistry metricRegistry = SharedMetricRegistries.getOrCreate(Constants.METRICS_NAME);
-    private static final Meter delivered = metricRegistry.meter(name(ApnFallbackManager.class, "voip_delivered"));
-    private static final Meter sent = metricRegistry.meter(name(ApnFallbackManager.class, "voip_sent"));
-    private static final Meter retry = metricRegistry.meter(name(ApnFallbackManager.class, "voip_retry"));
-    private static final Meter evicted = metricRegistry.meter(name(ApnFallbackManager.class, "voip_evicted"));
-    private static final Meter singletonDestinations = metricRegistry.meter(name(ApnFallbackManager.class, "singleton_destinations"));
-    private static final Meter clusterDestinations = metricRegistry.meter(name(ApnFallbackManager.class, "cluster_destinations"));
+  private static final MetricRegistry metricRegistry = SharedMetricRegistries.getOrCreate(Constants.METRICS_NAME);
+  private static final Meter delivered = metricRegistry.meter(name(ApnFallbackManager.class, "voip_delivered"));
+  private static final Meter sent = metricRegistry.meter(name(ApnFallbackManager.class, "voip_sent"));
+  private static final Meter retry = metricRegistry.meter(name(ApnFallbackManager.class, "voip_retry"));
+  private static final Meter evicted = metricRegistry.meter(name(ApnFallbackManager.class, "voip_evicted"));
 
-    static {
-	metricRegistry.register(name(ApnFallbackManager.class, "voip_ratio"), new VoipRatioGauge(delivered, sent));
+  static {
+    metricRegistry.register(name(ApnFallbackManager.class, "voip_ratio"), new VoipRatioGauge(delivered, sent));
+  }
+
+  private final APNSender apnSender;
+  private final AccountsManager accountsManager;
+  private final FaultTolerantRedisCluster cluster;
+
+  private final ClusterLuaScript getScript;
+  private final ClusterLuaScript insertScript;
+  private final ClusterLuaScript removeScript;
+
+  private final Thread[] workerThreads = new Thread[WORKER_THREAD_COUNT];
+
+  private static final int WORKER_THREAD_COUNT = 4;
+
+  private final AtomicBoolean running = new AtomicBoolean(false);
+
+  class NotificationWorker implements Runnable {
+
+    @Override
+    public void run() {
+      while (running.get()) {
+        try {
+          final long entriesProcessed = processNextSlot();
+
+          if (entriesProcessed == 0) {
+            Util.sleep(1000);
+          }
+        } catch (Exception e) {
+          logger.warn("Exception while operating", e);
+        }
+      }
     }
 
-    private final APNSender apnSender;
-    private final AccountsManager accountsManager;
-    private final FaultTolerantRedisCluster cluster;
+    long processNextSlot() {
+      final int slot = getNextSlot();
 
-    private final LuaScript getSingletonScript;
-    private final LuaScript removeSingletonScript;
+      List<String> pendingDestinations;
+      long entriesProcessed = 0;
 
-    private final ClusterLuaScript getClusterScript;
-    private final ClusterLuaScript insertClusterScript;
-    private final ClusterLuaScript removeClusterScript;
+      do {
+        pendingDestinations = getPendingDestinations(slot, 100);
+        entriesProcessed += pendingDestinations.size();
 
-    private final Thread singletonWorkerThread;
-    private final Thread[] clusterWorkerThreads = new Thread[CLUSTER_WORKER_THREAD_COUNT];
+        for (final String uuidAndDevice : pendingDestinations) {
 
-    private static final int CLUSTER_WORKER_THREAD_COUNT = 4;
+          final Optional<Pair<String, Long>> separated = getSeparated(uuidAndDevice);
 
-    private final AtomicBoolean running = new AtomicBoolean(false);
+          final Optional<Account> maybeAccount = separated.map(Pair::first)
+              .map(UUID::fromString)
+              .flatMap(accountsManager::get);
 
-    private class SingletonCacheWorker implements Runnable {
+          final Optional<Device> maybeDevice = separated.map(Pair::second)
+              .flatMap(deviceId -> maybeAccount.flatMap(account -> account.getDevice(deviceId)));
 
-	@Override
-	public void run() {
-	    while (running.get()) {
-		try {
-		    for (final String numberAndDevice : getPendingDestinationsFromSingletonCache(100)) {
-			singletonDestinations.mark();
+          if (maybeAccount.isPresent() && maybeDevice.isPresent()) {
+            sendNotification(maybeAccount.get(), maybeDevice.get());
+          } else {
+            remove(uuidAndDevice);
+          }
+        }
+      } while (!pendingDestinations.isEmpty());
 
-			Optional<Pair<String, Long>> separated = getSeparated(numberAndDevice);
+      return entriesProcessed;
+    }
+  }
 
-			if (!separated.isPresent()) {
-			    removeFromSingleton(numberAndDevice);
-			    continue;
-			}
+  public ApnFallbackManager(FaultTolerantRedisCluster cluster,
+      APNSender apnSender,
+      AccountsManager accountsManager)
+      throws IOException {
+    this.apnSender = apnSender;
+    this.accountsManager = accountsManager;
+    this.cluster = cluster;
 
-			Optional<Account> account = accountsManager.get(separated.get().first());
+    this.getScript = ClusterLuaScript.fromResource(cluster, "lua/apn/get.lua", ScriptOutputType.MULTI);
+    this.insertScript = ClusterLuaScript.fromResource(cluster, "lua/apn/insert.lua", ScriptOutputType.VALUE);
+    this.removeScript = ClusterLuaScript.fromResource(cluster, "lua/apn/remove.lua", ScriptOutputType.INTEGER);
 
-			if (!account.isPresent()) {
-			    removeFromSingleton(numberAndDevice);
-			    continue;
-			}
+    for (int i = 0; i < this.workerThreads.length; i++) {
+      this.workerThreads[i] = new Thread(new NotificationWorker(), "ApnFallbackManagerWorker-" + i);
+    }
+  }
 
-			Optional<Device> device = account.get().getDevice(separated.get().second());
+  public void schedule(Account account, Device device) throws RedisException {
+    schedule(account, device, System.currentTimeMillis());
+  }
 
-			if (!device.isPresent()) {
-			    removeFromSingleton(numberAndDevice);
-			    continue;
-			}
+  @VisibleForTesting
+  void schedule(Account account, Device device, long timestamp) throws RedisException {
+    try {
+      sent.mark();
+      insert(account, device, timestamp + (15 * 1000), (15 * 1000));
+    } catch (io.lettuce.core.RedisException e) {
+      throw new RedisException(e);
+    }
+  }
 
-			sendNotification(account.get(), device.get());
-		    }
+  public void cancel(Account account, Device device) throws RedisException {
+    try {
+      if (remove(account, device)) {
+        delivered.mark();
+      }
+    } catch (io.lettuce.core.RedisException e) {
+      throw new RedisException(e);
+    }
+  }
 
-		} catch (Exception e) {
-		    logger.warn("Exception while operating", e);
-		}
+  @Override
+  public synchronized void start() {
+    running.set(true);
+    for (final Thread workerThread : workerThreads) {
+      workerThread.start();
+    }
+  }
 
-		Util.sleep(1000);
-	    }
-	}
+  @Override
+  public synchronized void stop() throws InterruptedException {
+    running.set(false);
+    for (final Thread workerThread : workerThreads) {
+      workerThread.join();
+    }
+  }
+
+  private void sendNotification(final Account account, final Device device) {
+    String apnId = device.getVoipApnId();
+
+    if (apnId == null) {
+      remove(account, device);
+      return;
     }
 
-    class ClusterCacheWorker implements Runnable {
+    long deviceLastSeen = device.getLastSeen();
 
-	@Override
-	public void run() {
-	    while (running.get()) {
-		try {
-		    final long entriesProcessed = processNextSlot();
-
-		    if (entriesProcessed == 0) {
-			Util.sleep(1000);
-		    }
-		} catch (Exception e) {
-		    logger.warn("Exception while operating", e);
-		}
-	    }
-	}
-
-	long processNextSlot() {
-	    final int slot = getNextSlot();
-
-	    List<String> pendingDestinations;
-	    long entriesProcessed = 0;
-
-	    do {
-		pendingDestinations = getPendingDestinationsFromClusterCache(slot, 100);
-		entriesProcessed += pendingDestinations.size();
-
-		for (final String uuidAndDevice : pendingDestinations) {
-		    clusterDestinations.mark();
-
-		    final Optional<Pair<String, Long>> separated = getSeparated(uuidAndDevice);
-
-		    final Optional<Account> maybeAccount = separated.map(Pair::first)
-			    .map(UUID::fromString)
-			    .flatMap(accountsManager::get);
-
-		    final Optional<Device> maybeDevice = separated.map(Pair::second)
-			    .flatMap(deviceId -> maybeAccount.flatMap(account -> account.getDevice(deviceId)));
-
-		    if (maybeAccount.isPresent() && maybeDevice.isPresent()) {
-			sendNotification(maybeAccount.get(), maybeDevice.get());
-		    } else {
-			removeFromCluster(uuidAndDevice);
-		    }
-		}
-	    } while (!pendingDestinations.isEmpty());
-
-	    return entriesProcessed;
-	}
+    if (deviceLastSeen < System.currentTimeMillis() - TimeUnit.DAYS.toMillis(7)) {
+      evicted.mark();
+      remove(account, device);
+      return;
     }
 
-    public ApnFallbackManager(ReplicatedJedisPool jedisPool,
-	    FaultTolerantRedisCluster cluster,
-	    APNSender apnSender,
-	    AccountsManager accountsManager)
-	    throws IOException {
-	this.apnSender = apnSender;
-	this.accountsManager = accountsManager;
-	this.cluster = cluster;
+    apnSender.sendMessage(new ApnMessage(apnId, account.getUserLogin(), device.getId(), true, Optional.empty()));
+    retry.mark();
+  }
 
-	this.getSingletonScript = LuaScript.fromResource(jedisPool, "lua/apn/get.lua");
-	this.removeSingletonScript = LuaScript.fromResource(jedisPool, "lua/apn/remove.lua");
+  @VisibleForTesting
+  static Optional<Pair<String, Long>> getSeparated(String encoded) {
+    try {
+      if (encoded == null)
+        return Optional.empty();
 
-	this.getClusterScript = ClusterLuaScript.fromResource(cluster, "lua/apn/get.lua", ScriptOutputType.MULTI);
-	this.insertClusterScript = ClusterLuaScript.fromResource(cluster, "lua/apn/insert.lua", ScriptOutputType.VALUE);
-	this.removeClusterScript = ClusterLuaScript.fromResource(cluster, "lua/apn/remove.lua", ScriptOutputType.INTEGER);
+      String[] parts = encoded.split(":");
 
-	this.singletonWorkerThread = new Thread(new SingletonCacheWorker(), "ApnFallbackManagerSingletonWorker");
+      if (parts.length != 2) {
+        logger.warn("Got strange encoded number: " + encoded);
+        return Optional.empty();
+      }
 
-	for (int i = 0; i < this.clusterWorkerThreads.length; i++) {
-	    this.clusterWorkerThreads[i] = new Thread(new ClusterCacheWorker(), "ApnFallbackManagerClusterWorker-" + i);
-	}
+      return Optional.of(new Pair<>(parts[0], Long.parseLong(parts[1])));
+    } catch (NumberFormatException e) {
+      logger.warn("Badly formatted: " + encoded, e);
+      return Optional.empty();
     }
+  }
 
-    public void schedule(Account account, Device device) throws RedisException {
-	schedule(account, device, System.currentTimeMillis());
-    }
+  private boolean remove(Account account, Device device) {
+    return remove(getEndpointKey(account, device));
+  }
 
-    @VisibleForTesting
-    void schedule(Account account, Device device, long timestamp) throws RedisException {
-	try {
-	    sent.mark();
-	    insert(account, device, timestamp + (15 * 1000), (15 * 1000));
-	} catch (io.lettuce.core.RedisException e) {
-	    throw new RedisException(e);
-	}
-    }
+  private boolean remove(final String endpoint) {
+    return (long) removeScript.execute(List.of(getPendingNotificationQueueKey(endpoint), endpoint),
+        Collections.emptyList()) > 0;
+  }
 
-    public void cancel(Account account, Device device) throws RedisException {
-	try {
-	    if (remove(account, device)) {
-		delivered.mark();
-	    }
-	} catch (JedisException | io.lettuce.core.RedisException e) {
-	    throw new RedisException(e);
-	}
+  @SuppressWarnings("unchecked")
+  @VisibleForTesting
+  List<String> getPendingDestinations(final int slot, final int limit) {
+    return (List<String>) getScript.execute(List.of(getPendingNotificationQueueKey(slot)),
+        List.of(String.valueOf(System.currentTimeMillis()), String.valueOf(limit)));
+  }
+
+  private void insert(final Account account, final Device device, final long timestamp, final long interval) {
+    final String endpoint = getEndpointKey(account, device);
+
+    insertScript.execute(List.of(getPendingNotificationQueueKey(endpoint), endpoint),
+        List.of(String.valueOf(timestamp),
+            String.valueOf(interval),
+            account.getUuid().toString(),
+            String.valueOf(device.getId())));
+  }
+
+  @VisibleForTesting
+  String getEndpointKey(final Account account, final Device device) {
+    return "apn_device::{" + account.getUuid() + "::" + device.getId() + "}";
+  }
+
+  private String getPendingNotificationQueueKey(final String endpoint) {
+    return getPendingNotificationQueueKey(SlotHash.getSlot(endpoint));
+  }
+
+  private String getPendingNotificationQueueKey(final int slot) {
+    return PENDING_NOTIFICATIONS_KEY + "::{" + RedisClusterUtil.getMinimalHashTag(slot) + "}";
+  }
+
+  private int getNextSlot() {
+    return (int) (cluster.withCluster(connection -> connection.sync().incr(NEXT_SLOT_TO_PERSIST_KEY)) % SlotHash.SLOT_COUNT);
+  }
+
+  private static class VoipRatioGauge extends RatioGauge {
+
+    private final Meter success;
+    private final Meter attempts;
+
+    private VoipRatioGauge(Meter success, Meter attempts) {
+      this.success = success;
+      this.attempts = attempts;
     }
 
     @Override
-    public synchronized void start() {
-	running.set(true);
-	singletonWorkerThread.start();
-
-	for (final Thread clusterWorkerThread : clusterWorkerThreads) {
-	    clusterWorkerThread.start();
-	}
+    protected Ratio getRatio() {
+      return RatioGauge.Ratio.of(success.getFiveMinuteRate(), attempts.getFiveMinuteRate());
     }
-
-    @Override
-    public synchronized void stop() throws InterruptedException {
-	running.set(false);
-	singletonWorkerThread.join();
-
-	for (final Thread clusterWorkerThread : clusterWorkerThreads) {
-	    clusterWorkerThread.join();
-	}
-    }
-
-    private void sendNotification(final Account account, final Device device) {
-	String apnId = device.getVoipApnId();
-
-	if (apnId == null) {
-	    remove(account, device);
-	    return;
-	}
-
-	long deviceLastSeen = device.getLastSeen();
-
-	if (deviceLastSeen < System.currentTimeMillis() - TimeUnit.DAYS.toMillis(90)) {
-	    evicted.mark();
-	    remove(account, device);
-	    return;
-	}
-
-	apnSender.sendMessage(new ApnMessage(apnId, account.getUserLogin(), device.getId(), true, Optional.empty()));
-	retry.mark();
-    }
-
-    @VisibleForTesting
-    static Optional<Pair<String, Long>> getSeparated(String encoded) {
-	try {
-	    if (encoded == null)
-		return Optional.empty();
-
-	    String[] parts = encoded.split(":");
-
-	    if (parts.length != 2) {
-		logger.warn("Got strange encoded number: " + encoded);
-		return Optional.empty();
-	    }
-
-	    return Optional.of(new Pair<>(parts[0], Long.parseLong(parts[1])));
-	} catch (NumberFormatException e) {
-	    logger.warn("Badly formatted: " + encoded, e);
-	    return Optional.empty();
-	}
-    }
-
-    private boolean remove(Account account, Device device) {
-	final boolean removedFromSingleton = removeFromSingleton(getSingletonEndpointKey(account, device));
-	final boolean removedFromCluster = removeFromCluster(getClusterEndpointKey(account, device));
-
-	return removedFromSingleton || removedFromCluster;
-    }
-
-    private boolean removeFromSingleton(String endpoint) {
-	if (!SINGLETON_PENDING_NOTIFICATIONS_KEY.equals(endpoint)) {
-	    List<byte[]> keys = Arrays.asList(SINGLETON_PENDING_NOTIFICATIONS_KEY.getBytes(), endpoint.getBytes());
-	    List<byte[]> args = Collections.emptyList();
-
-	    return ((long) removeSingletonScript.execute(keys, args)) > 0;
-	}
-
-	return false;
-    }
-
-    private boolean removeFromCluster(final String endpoint) {
-	final long removed = (long) removeClusterScript.execute(List.of(getClusterPendingNotificationQueueKey(endpoint), endpoint),
-		Collections.emptyList());
-
-	return removed > 0;
-
-    }
-
-    @SuppressWarnings("unchecked")
-    private List<String> getPendingDestinationsFromSingletonCache(final int limit) {
-	List<byte[]> keys = List.of(SINGLETON_PENDING_NOTIFICATIONS_KEY.getBytes());
-	List<byte[]> args = List.of(String.valueOf(System.currentTimeMillis()).getBytes(), String.valueOf(limit).getBytes());
-
-	return ((List<byte[]>) getSingletonScript.execute(keys, args))
-		.stream()
-		.map(bytes -> new String(bytes, StandardCharsets.UTF_8))
-		.collect(Collectors.toList());
-    }
-
-    @SuppressWarnings("unchecked")
-    @VisibleForTesting
-    List<String> getPendingDestinationsFromClusterCache(final int slot, final int limit) {
-	return (List<String>) getClusterScript.execute(List.of(getClusterPendingNotificationQueueKey(slot)),
-		List.of(String.valueOf(System.currentTimeMillis()), String.valueOf(limit)));
-    }
-
-    private void insert(final Account account, final Device device, final long timestamp, final long interval) {
-	final String endpoint = getClusterEndpointKey(account, device);
-
-	insertClusterScript.execute(List.of(getClusterPendingNotificationQueueKey(endpoint), endpoint),
-		List.of(String.valueOf(timestamp),
-			String.valueOf(interval),
-			account.getUuid().toString(),
-			String.valueOf(device.getId())));
-    }
-
-    private String getSingletonEndpointKey(final Account account, final Device device) {
-	return "apn_device::" + account.getUserLogin() + "::" + device.getId();
-    }
-
-    @VisibleForTesting
-    String getClusterEndpointKey(final Account account, final Device device) {
-	return "apn_device::{" + account.getUuid() + "::" + device.getId() + "}";
-    }
-
-    private String getClusterPendingNotificationQueueKey(final String endpoint) {
-	return getClusterPendingNotificationQueueKey(SlotHash.getSlot(endpoint));
-    }
-
-    private String getClusterPendingNotificationQueueKey(final int slot) {
-	return SINGLETON_PENDING_NOTIFICATIONS_KEY + "::{" + RedisClusterUtil.getMinimalHashTag(slot) + "}";
-    }
-
-    private int getNextSlot() {
-	return (int) (cluster.withCluster(connection -> connection.sync().incr(NEXT_SLOT_TO_PERSIST_KEY)) % SlotHash.SLOT_COUNT);
-    }
-
-    private static class VoipRatioGauge extends RatioGauge {
-
-	private final Meter success;
-	private final Meter attempts;
-
-	private VoipRatioGauge(Meter success, Meter attempts) {
-	    this.success = success;
-	    this.attempts = attempts;
-	}
-
-	@Override
-	protected Ratio getRatio() {
-	    return RatioGauge.Ratio.of(success.getFiveMinuteRate(), attempts.getFiveMinuteRate());
-	}
-    }
+  }
 
 }

@@ -10,10 +10,11 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
+import java.time.Duration;
 
 public class LeakyBucket {
 
-  private final int    bucketSize;
+  private final int bucketSize;
   private final double leakRatePerMillis;
 
   private int spaceRemaining;
@@ -24,14 +25,14 @@ public class LeakyBucket {
   }
 
   private LeakyBucket(int bucketSize, double leakRatePerMillis, int spaceRemaining, long lastUpdateTimeMillis) {
-    this.bucketSize           = bucketSize;
-    this.leakRatePerMillis    = leakRatePerMillis;
-    this.spaceRemaining       = spaceRemaining;
+    this.bucketSize = bucketSize;
+    this.leakRatePerMillis = leakRatePerMillis;
+    this.spaceRemaining = spaceRemaining;
     this.lastUpdateTimeMillis = lastUpdateTimeMillis;
   }
 
   public boolean add(int amount) {
-    this.spaceRemaining       = getUpdatedSpaceRemaining();
+    this.spaceRemaining = getUpdatedSpaceRemaining();
     this.lastUpdateTimeMillis = System.currentTimeMillis();
 
     if (this.spaceRemaining >= amount) {
@@ -46,7 +47,20 @@ public class LeakyBucket {
     long elapsedTime = System.currentTimeMillis() - this.lastUpdateTimeMillis;
 
     return Math.min(this.bucketSize,
-                    (int)Math.floor(this.spaceRemaining + (elapsedTime * this.leakRatePerMillis)));
+        (int) Math.floor(this.spaceRemaining + (elapsedTime * this.leakRatePerMillis)));
+  }
+
+  public Duration getTimeUntilSpaceAvailable(int amount) {
+    int currentSpaceRemaining = getUpdatedSpaceRemaining();
+    if (currentSpaceRemaining >= amount) {
+      return Duration.ZERO;
+    } else if (amount > this.bucketSize) {
+      // This shouldn't happen today but if so we should bubble this to the clients
+      // somehow
+      throw new IllegalArgumentException("Requested permits exceed maximum bucket size");
+    } else {
+      return Duration.ofMillis((long)Math.ceil((double)(amount - currentSpaceRemaining) / this.leakRatePerMillis));
+    }
   }
 
   public String serialize(ObjectMapper mapper) throws JsonProcessingException {
@@ -57,30 +71,30 @@ public class LeakyBucket {
     LeakyBucketEntity entity = mapper.readValue(serialized, LeakyBucketEntity.class);
 
     return new LeakyBucket(entity.bucketSize, entity.leakRatePerMillis,
-                           entity.spaceRemaining, entity.lastUpdateTimeMillis);
+        entity.spaceRemaining, entity.lastUpdateTimeMillis);
   }
 
   private static class LeakyBucketEntity {
     @JsonProperty
-    private int    bucketSize;
+    private int bucketSize;
 
     @JsonProperty
     private double leakRatePerMillis;
 
     @JsonProperty
-    private int    spaceRemaining;
+    private int spaceRemaining;
 
     @JsonProperty
-    private long   lastUpdateTimeMillis;
+    private long lastUpdateTimeMillis;
 
-    public LeakyBucketEntity() {}
+    public LeakyBucketEntity() {
+    }
 
     private LeakyBucketEntity(int bucketSize, double leakRatePerMillis,
-                              int spaceRemaining, long lastUpdateTimeMillis)
-    {
-      this.bucketSize           = bucketSize;
-      this.leakRatePerMillis    = leakRatePerMillis;
-      this.spaceRemaining       = spaceRemaining;
+        int spaceRemaining, long lastUpdateTimeMillis) {
+      this.bucketSize = bucketSize;
+      this.leakRatePerMillis = leakRatePerMillis;
+      this.spaceRemaining = spaceRemaining;
       this.lastUpdateTimeMillis = lastUpdateTimeMillis;
     }
   }

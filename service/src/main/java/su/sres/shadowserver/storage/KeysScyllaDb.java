@@ -25,179 +25,179 @@ import su.sres.shadowserver.util.UUIDUtil;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import static com.codahale.metrics.MetricRegistry.name;
 
-public class KeysScyllaDb extends AbstractScyllaDbStore implements PreKeyStore {
+public class KeysScyllaDb extends AbstractScyllaDbStore {
 
-    private final Table table;
+  private final Table table;
 
-    static final String KEY_ACCOUNT_UUID = "U";
-    static final String KEY_DEVICE_ID_KEY_ID = "DK";
-    static final String KEY_PUBLIC_KEY = "P";
+  static final String KEY_ACCOUNT_UUID = "U";
+  static final String KEY_DEVICE_ID_KEY_ID = "DK";
+  static final String KEY_PUBLIC_KEY = "P";
 
-    private static final Timer STORE_KEYS_TIMER = Metrics.timer(name(KeysScyllaDb.class, "storeKeys"));
-    private static final Timer TAKE_KEY_FOR_DEVICE_TIMER = Metrics.timer(name(KeysScyllaDb.class, "takeKeyForDevice"));
-    private static final Timer TAKE_KEYS_FOR_ACCOUNT_TIMER = Metrics.timer(name(KeysScyllaDb.class, "takeKeyForAccount"));
-    private static final Timer GET_KEY_COUNT_TIMER = Metrics.timer(name(KeysScyllaDb.class, "getKeyCount"));
-    private static final Timer DELETE_KEYS_FOR_DEVICE_TIMER = Metrics.timer(name(KeysScyllaDb.class, "deleteKeysForDevice"));
-    private static final Timer DELETE_KEYS_FOR_ACCOUNT_TIMER = Metrics.timer(name(KeysScyllaDb.class, "deleteKeysForAccount"));
-    private static final DistributionSummary CONTESTED_KEY_DISTRIBUTION = Metrics.summary(name(KeysScyllaDb.class, "contestedKeys"));
+  private static final Timer STORE_KEYS_TIMER = Metrics.timer(name(KeysScyllaDb.class, "storeKeys"));
+  private static final Timer TAKE_KEY_FOR_DEVICE_TIMER = Metrics.timer(name(KeysScyllaDb.class, "takeKeyForDevice"));
+  private static final Timer TAKE_KEYS_FOR_ACCOUNT_TIMER = Metrics.timer(name(KeysScyllaDb.class, "takeKeyForAccount"));
+  private static final Timer GET_KEY_COUNT_TIMER = Metrics.timer(name(KeysScyllaDb.class, "getKeyCount"));
+  private static final Timer DELETE_KEYS_FOR_DEVICE_TIMER = Metrics.timer(name(KeysScyllaDb.class, "deleteKeysForDevice"));
+  private static final Timer DELETE_KEYS_FOR_ACCOUNT_TIMER = Metrics.timer(name(KeysScyllaDb.class, "deleteKeysForAccount"));
+  private static final DistributionSummary CONTESTED_KEY_DISTRIBUTION = Metrics.summary(name(KeysScyllaDb.class, "contestedKeys"));
+  private static final DistributionSummary KEY_COUNT_DISTRIBUTION        = Metrics.summary(name(KeysScyllaDb.class, "keyCount"));
 
-    public KeysScyllaDb(final DynamoDB scyllaDb, final String tableName) {
-	super(scyllaDb);
+  public KeysScyllaDb(final DynamoDB scyllaDb, final String tableName) {
+    super(scyllaDb);
 
-	this.table = scyllaDb.getTable(tableName);
-    }
+    this.table = scyllaDb.getTable(tableName);
+  }
 
-    @Override
-    public void store(final Account account, final long deviceId, final List<PreKey> keys) {
-	STORE_KEYS_TIMER.record(() -> {
-	    delete(account, deviceId);
+  public void store(final Account account, final long deviceId, final List<PreKey> keys) {
+    STORE_KEYS_TIMER.record(() -> {
+      delete(account, deviceId);
 
-	    writeInBatches(keys, batch -> {
-		final TableWriteItems items = new TableWriteItems(table.getTableName());
+      writeInBatches(keys, batch -> {
+        final TableWriteItems items = new TableWriteItems(table.getTableName());
 
-		for (final PreKey preKey : batch) {
-		    items.addItemToPut(getItemFromPreKey(account.getUuid(), deviceId, preKey));
-		}
+        for (final PreKey preKey : batch) {
+          items.addItemToPut(getItemFromPreKey(account.getUuid(), deviceId, preKey));
+        }
 
-		executeTableWriteItemsUntilComplete(items);
-	    });
-	});
-    }
+        executeTableWriteItemsUntilComplete(items);
+      });
+    });
+  }
 
-    @Override
-    public List<KeyRecord> take(final Account account, final long deviceId) {
-	return TAKE_KEY_FOR_DEVICE_TIMER.record(() -> {
-	    final byte[] partitionKey = getPartitionKey(account.getUuid());
+  public Optional<PreKey> take(final Account account, final long deviceId) {
+    return TAKE_KEY_FOR_DEVICE_TIMER.record(() -> {
+      final byte[] partitionKey = getPartitionKey(account.getUuid());
 
-	    final QuerySpec querySpec = new QuerySpec().withKeyConditionExpression("#uuid = :uuid AND begins_with (#sort, :sortprefix)")
-		    .withNameMap(Map.of("#uuid", KEY_ACCOUNT_UUID, "#sort", KEY_DEVICE_ID_KEY_ID))
-		    .withValueMap(Map.of(":uuid", partitionKey,
-			    ":sortprefix", getSortKeyPrefix(deviceId)))
-		    .withProjectionExpression(KEY_DEVICE_ID_KEY_ID)
-		    .withConsistentRead(false);
+      final QuerySpec querySpec = new QuerySpec().withKeyConditionExpression("#uuid = :uuid AND begins_with (#sort, :sortprefix)")
+          .withNameMap(Map.of("#uuid", KEY_ACCOUNT_UUID, "#sort", KEY_DEVICE_ID_KEY_ID))
+          .withValueMap(Map.of(":uuid", partitionKey,
+              ":sortprefix", getSortKeyPrefix(deviceId)))
+          .withProjectionExpression(KEY_DEVICE_ID_KEY_ID)
+          .withConsistentRead(false);
 
-	    int contestedKeys = 0;
+      int contestedKeys = 0;
 
-	    try {
-		for (final Item candidate : table.query(querySpec)) {
-		    final DeleteItemSpec deleteItemSpec = new DeleteItemSpec().withPrimaryKey(KEY_ACCOUNT_UUID, partitionKey, KEY_DEVICE_ID_KEY_ID, candidate.getBinary(KEY_DEVICE_ID_KEY_ID))
-			    .withReturnValues(ReturnValue.ALL_OLD);
+      try {
+        for (final Item candidate : table.query(querySpec)) {
+          final DeleteItemSpec deleteItemSpec = new DeleteItemSpec().withPrimaryKey(KEY_ACCOUNT_UUID, partitionKey, KEY_DEVICE_ID_KEY_ID, candidate.getBinary(KEY_DEVICE_ID_KEY_ID))
+              .withReturnValues(ReturnValue.ALL_OLD);
 
-		    final DeleteItemOutcome outcome = table.deleteItem(deleteItemSpec);
+          final DeleteItemOutcome outcome = table.deleteItem(deleteItemSpec);
 
-		    if (outcome.getItem() != null) {
-			final PreKey preKey = getPreKeyFromItem(outcome.getItem());
-			return List.of(new KeyRecord(-1, account.getUserLogin(), deviceId, preKey.getKeyId(), preKey.getPublicKey()));
-		    }
+          if (outcome.getItem() != null) {
+            return Optional.of(getPreKeyFromItem(outcome.getItem()));
+          }
 
-		    contestedKeys++;
-		}
+          contestedKeys++;
+        }
 
-		return Collections.emptyList();
-	    } finally {
-		CONTESTED_KEY_DISTRIBUTION.record(contestedKeys);
-	    }
-	});
-    }
+        return Optional.empty();
+      } finally {
+        CONTESTED_KEY_DISTRIBUTION.record(contestedKeys);
+      }
+    });
+  }
 
-    @Override
-    public List<KeyRecord> take(final Account account) {
-	return TAKE_KEYS_FOR_ACCOUNT_TIMER.record(() -> {
-	    final List<KeyRecord> keyRecords = new ArrayList<>();
+  public Map<Long, PreKey> take(final Account account) {
+    return TAKE_KEYS_FOR_ACCOUNT_TIMER.record(() -> {
+      final Map<Long, PreKey> preKeysByDeviceId = new HashMap<>();
 
-	    for (final Device device : account.getDevices()) {
-		keyRecords.addAll(take(account, device.getId()));
-	    }
+      for (final Device device : account.getDevices()) {
+        take(account, device.getId()).ifPresent(preKey -> preKeysByDeviceId.put(device.getId(), preKey));
+      }
 
-	    return keyRecords;
-	});
-    }
+      return preKeysByDeviceId;
+    });
+  }
 
-    @Override
-    public int getCount(final Account account, final long deviceId) {
-	return GET_KEY_COUNT_TIMER.record(() -> {
-	    final QuerySpec querySpec = new QuerySpec().withKeyConditionExpression("#uuid = :uuid AND begins_with (#sort, :sortprefix)")
-		    .withNameMap(Map.of("#uuid", KEY_ACCOUNT_UUID, "#sort", KEY_DEVICE_ID_KEY_ID))
-		    .withValueMap(Map.of(":uuid", getPartitionKey(account.getUuid()),
-			    ":sortprefix", getSortKeyPrefix(deviceId)))
-		    .withSelect(Select.COUNT)
-		    .withConsistentRead(false);
+  public int getCount(final Account account, final long deviceId) {
+    return GET_KEY_COUNT_TIMER.record(() -> {
+      final QuerySpec querySpec = new QuerySpec().withKeyConditionExpression("#uuid = :uuid AND begins_with (#sort, :sortprefix)")
+          .withNameMap(Map.of("#uuid", KEY_ACCOUNT_UUID, "#sort", KEY_DEVICE_ID_KEY_ID))
+          .withValueMap(Map.of(":uuid", getPartitionKey(account.getUuid()),
+              ":sortprefix", getSortKeyPrefix(deviceId)))
+          .withSelect(Select.COUNT)
+          .withConsistentRead(false);
 
-	    return (int) countItemsMatchingQuery(table, querySpec);
-	});
-    }
+      final int keyCount = (int)countItemsMatchingQuery(table, querySpec);
 
-    @Override
-    public void delete(final Account account) {
-	DELETE_KEYS_FOR_ACCOUNT_TIMER.record(() -> {
-	    final QuerySpec querySpec = new QuerySpec().withKeyConditionExpression("#uuid = :uuid")
-		    .withNameMap(Map.of("#uuid", KEY_ACCOUNT_UUID))
-		    .withValueMap(Map.of(":uuid", getPartitionKey(account.getUuid())))
-		    .withProjectionExpression(KEY_DEVICE_ID_KEY_ID)
-		    .withConsistentRead(true);
+      KEY_COUNT_DISTRIBUTION.record(keyCount);
+      return keyCount;
+    });
+  }
 
-	    deleteItemsForAccountMatchingQuery(account, querySpec);
-	});
-    }
+  public void delete(final Account account) {
+    DELETE_KEYS_FOR_ACCOUNT_TIMER.record(() -> {
+      final QuerySpec querySpec = new QuerySpec().withKeyConditionExpression("#uuid = :uuid")
+          .withNameMap(Map.of("#uuid", KEY_ACCOUNT_UUID))
+          .withValueMap(Map.of(":uuid", getPartitionKey(account.getUuid())))
+          .withProjectionExpression(KEY_DEVICE_ID_KEY_ID)
+          .withConsistentRead(true);
 
-    @VisibleForTesting
-    void delete(final Account account, final long deviceId) {
-	DELETE_KEYS_FOR_DEVICE_TIMER.record(() -> {
-	    final QuerySpec querySpec = new QuerySpec().withKeyConditionExpression("#uuid = :uuid AND begins_with (#sort, :sortprefix)")
-		    .withNameMap(Map.of("#uuid", KEY_ACCOUNT_UUID, "#sort", KEY_DEVICE_ID_KEY_ID))
-		    .withValueMap(Map.of(":uuid", getPartitionKey(account.getUuid()),
-			    ":sortprefix", getSortKeyPrefix(deviceId)))
-		    .withProjectionExpression(KEY_DEVICE_ID_KEY_ID)
-		    .withConsistentRead(true);
+      deleteItemsForAccountMatchingQuery(account, querySpec);
+    });
+  }
 
-	    deleteItemsForAccountMatchingQuery(account, querySpec);
-	});
-    }
+  @VisibleForTesting
+  void delete(final Account account, final long deviceId) {
+    DELETE_KEYS_FOR_DEVICE_TIMER.record(() -> {
+      final QuerySpec querySpec = new QuerySpec().withKeyConditionExpression("#uuid = :uuid AND begins_with (#sort, :sortprefix)")
+          .withNameMap(Map.of("#uuid", KEY_ACCOUNT_UUID, "#sort", KEY_DEVICE_ID_KEY_ID))
+          .withValueMap(Map.of(":uuid", getPartitionKey(account.getUuid()),
+              ":sortprefix", getSortKeyPrefix(deviceId)))
+          .withProjectionExpression(KEY_DEVICE_ID_KEY_ID)
+          .withConsistentRead(true);
 
-    private void deleteItemsForAccountMatchingQuery(final Account account, final QuerySpec querySpec) {
-	final byte[] partitionKey = getPartitionKey(account.getUuid());
-	writeInBatches(table.query(querySpec), batch -> {
-	    final TableWriteItems writeItems = new TableWriteItems(table.getTableName());
+      deleteItemsForAccountMatchingQuery(account, querySpec);
+    });
+  }
 
-	    for (final Item item : batch) {
-		writeItems.addPrimaryKeyToDelete(new PrimaryKey(KEY_ACCOUNT_UUID, partitionKey, KEY_DEVICE_ID_KEY_ID, item.getBinary(KEY_DEVICE_ID_KEY_ID)));
-	    }
+  private void deleteItemsForAccountMatchingQuery(final Account account, final QuerySpec querySpec) {
+    final byte[] partitionKey = getPartitionKey(account.getUuid());
+    writeInBatches(table.query(querySpec), batch -> {
+      final TableWriteItems writeItems = new TableWriteItems(table.getTableName());
 
-	    executeTableWriteItemsUntilComplete(writeItems);
-	});
-    }
+      for (final Item item : batch) {
+        writeItems.addPrimaryKeyToDelete(new PrimaryKey(KEY_ACCOUNT_UUID, partitionKey, KEY_DEVICE_ID_KEY_ID, item.getBinary(KEY_DEVICE_ID_KEY_ID)));
+      }
 
-    private static byte[] getPartitionKey(final UUID accountUuid) {
-	return UUIDUtil.toBytes(accountUuid);
-    }
+      executeTableWriteItemsUntilComplete(writeItems);
+    });
+  }
 
-    private static byte[] getSortKey(final long deviceId, final long keyId) {
-	final ByteBuffer byteBuffer = ByteBuffer.wrap(new byte[16]);
-	byteBuffer.putLong(deviceId);
-	byteBuffer.putLong(keyId);
-	return byteBuffer.array();
-    }
+  private static byte[] getPartitionKey(final UUID accountUuid) {
+    return UUIDUtil.toBytes(accountUuid);
+  }
 
-    private static byte[] getSortKeyPrefix(final long deviceId) {
-	final ByteBuffer byteBuffer = ByteBuffer.wrap(new byte[8]);
-	byteBuffer.putLong(deviceId);
-	return byteBuffer.array();
-    }
+  private static byte[] getSortKey(final long deviceId, final long keyId) {
+    final ByteBuffer byteBuffer = ByteBuffer.wrap(new byte[16]);
+    byteBuffer.putLong(deviceId);
+    byteBuffer.putLong(keyId);
+    return byteBuffer.array();
+  }
 
-    private Item getItemFromPreKey(final UUID accountUuid, final long deviceId, final PreKey preKey) {
-	return new Item().withBinary(KEY_ACCOUNT_UUID, getPartitionKey(accountUuid))
-		.withBinary(KEY_DEVICE_ID_KEY_ID, getSortKey(deviceId, preKey.getKeyId()))
-		.withString(KEY_PUBLIC_KEY, preKey.getPublicKey());
-    }
+  private static byte[] getSortKeyPrefix(final long deviceId) {
+    final ByteBuffer byteBuffer = ByteBuffer.wrap(new byte[8]);
+    byteBuffer.putLong(deviceId);
+    return byteBuffer.array();
+  }
 
-    private PreKey getPreKeyFromItem(final Item item) {
-	final long keyId = ByteBuffer.wrap(item.getBinary(KEY_DEVICE_ID_KEY_ID)).getLong(8);
-	return new PreKey(keyId, item.getString(KEY_PUBLIC_KEY));
-    }
+  private Item getItemFromPreKey(final UUID accountUuid, final long deviceId, final PreKey preKey) {
+    return new Item().withBinary(KEY_ACCOUNT_UUID, getPartitionKey(accountUuid))
+        .withBinary(KEY_DEVICE_ID_KEY_ID, getSortKey(deviceId, preKey.getKeyId()))
+        .withString(KEY_PUBLIC_KEY, preKey.getPublicKey());
+  }
+
+  private PreKey getPreKeyFromItem(final Item item) {
+    final long keyId = ByteBuffer.wrap(item.getBinary(KEY_DEVICE_ID_KEY_ID)).getLong(8);
+    return new PreKey(keyId, item.getString(KEY_PUBLIC_KEY));
+  }
 }
