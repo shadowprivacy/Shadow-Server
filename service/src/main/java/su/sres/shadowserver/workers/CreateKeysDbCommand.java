@@ -41,7 +41,7 @@ public class CreateKeysDbCommand extends EnvironmentCommand<WhisperServerConfigu
           throws Exception {
 
       }
-    }, "createkeysdb", "Creates the Alternator keysdb table with its associated index");
+    }, "createkeysdb", "Creates the Alternator keysdb table");
   }
 
   @Override
