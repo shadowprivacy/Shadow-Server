@@ -160,10 +160,7 @@ public class MessageController {
       throws RateLimitExceededException {
     if (source.isEmpty() && accessKey.isEmpty()) {
       throw new WebApplicationException(Response.Status.UNAUTHORIZED);
-    }
-
-    // remove after testing
-    if (source.isPresent()) logger.warn("Source is present #1");
+    }    
     
     if (source.isPresent() && !source.get().isFor(destinationName)) {
                   
@@ -193,14 +190,10 @@ public class MessageController {
 
     if (source.isPresent() && !source.get().isFor(destinationName)) {
       identifiedMeter.mark();
-      senderType = "identified";
-   // remove after testing
-      logger.warn("Sender is identified");
+      senderType = "identified";   
     } else if (source.isEmpty()) {
       unidentifiedMeter.mark();
-      senderType = "unidentified";
-      // remove after testing
-      logger.warn("Sender is unidentified");
+      senderType = "unidentified";      
     } else {
       senderType = "self";
     }
@@ -254,10 +247,7 @@ public class MessageController {
           .stream()
           .findFirst()
           .map(IncomingMessage::isOnline)
-          .orElse(messages.isOnline());
-      
-      //remove after testing
-      logger.warn("Online is: " + online);
+          .orElse(messages.isOnline());          
       
       final List<Tag> tags = List.of(UserAgentTagUtil.getPlatformTag(userAgent),
           Tag.of(EPHEMERAL_TAG_NAME, String.valueOf(online)),
@@ -281,9 +271,7 @@ public class MessageController {
         if (destinationDevice.isPresent()) {
 
           Metrics.counter(SENT_MESSAGE_COUNTER_NAME, tags).increment();
-
-          // remove after testing
-          logger.warn("Trying to send message...");
+          
           sendMessage(source, destination.get(), destinationDevice.get(), messages.getTimestamp(), online, incomingMessage);
         }
 
