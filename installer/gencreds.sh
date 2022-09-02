@@ -89,7 +89,7 @@ fi
 
 # Update config
 
-SHADOW_STORE_PASS_CONV=$(normalize_yaml $(preproc_cfg $SHADOW_STORE_PASS))
+SHADOW_STORE_PASS_CONV=$(preproc_sed $(normalize_yaml $(preproc_cfg $SHADOW_STORE_PASS)))
 sed -i "s/keyStorePassword\: your_main_store_password/keyStorePassword\: '${SHADOW_STORE_PASS_CONV}'/" ${SERVER_PATH}/config/shadow.yml
 
 # Export the Shadow server key and certificate to PKCS12
@@ -107,7 +107,7 @@ fi
 
 # Update config
 
-AUX_STORE_PASS_CONV=$(normalize_yaml $(preproc_cfg $AUX_STORE_PASS))
+AUX_STORE_PASS_CONV=$(preproc_sed $(normalize_yaml $(preproc_cfg $AUX_STORE_PASS)))
 sed -i "s/keyStorePassword\: your_aux_keystore_password/keyStorePassword\: '${AUX_STORE_PASS_CONV}'/" ${SERVER_PATH}/config/shadow.yml
 
 # Write the Minio key and certificate to auxiliary.keystore
@@ -124,7 +124,7 @@ update-ca-trust extract
 
 # Add the Shadow cert as trusted
 
-echo "We are going to add the Shadow server certificate to cacerts. Enter the cacerts password. (In case you never ever changed it, it's 'changeit') >>"
+echo "We are going to add the Shadow server certificate to cacerts. Enter the CURRENT cacerts password. (In case you never ever changed it, it's 'changeit') >>"
 read -r CACERTS_PASS
 
 if [ -z "$CACERTS_PASS" ]
@@ -136,7 +136,7 @@ keytool -importcert -file shadow_a.crt -alias shadow_a -cacerts -storepass "$CAC
 
 # Update config
 
-CACERTS_PASS_CONV=$(normalize_yaml $(preproc_cfg $CACERTS_PASS))
+CACERTS_PASS_CONV=$(preproc_sed $(normalize_yaml $(preproc_cfg $CACERTS_PASS)))
 sed -i "s/trustStorePassword\: changeit/trustStorePassword\: '${CACERTS_PASS_CONV}'/" ${SERVER_PATH}/config/shadow.yml
 
 # Remove files

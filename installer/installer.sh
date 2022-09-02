@@ -78,6 +78,8 @@ if [ $(check_app java) -ne 0 ]
 then 
     dnf -y install java-11-openjdk
     dnf -y install java-11-openjdk-devel
+    # we need this as long as Scylla depends upon Java 8
+    echo 1 | update-alternatives --config java
 else
     echo "Java already installed" 
     java -version
@@ -109,7 +111,32 @@ else
 fi
 
 
-# how can I check postgre is running? 
+# how can I check postgre is running?
+
+#ScyllaDB installation
+
+printf "\nInstalling ScyllaDB..."
+ 
+if [ $(check_app scylla) -ne 0 ] 
+then    
+    wget get.scylladb.com/server
+    sed -i 's/RPM_INSTALL_TOOL="yum"/RPM_INSTALL_TOOL="dnf"/' server
+    sed -i 's/"centos"|"rocky")/"centos"|"rocky"|"almalinux")/' server
+    chmod +x server 
+    ./server
+    sed -i "s/^# developer_mode: false/developer_mode: true/" /etc/scylla/scylla.yaml
+    sed -i "s/^# authorizer: AllowAllAuthorizer/authorizer: CassandraAuthorizer/" /etc/scylla/scylla.yaml
+    sed -i "s/^# authenticator: AllowAllAuthenticator/authenticator: PasswordAuthenticator/" /etc/scylla/scylla.yaml
+    echo "alternator_enforce_authorization: true" >> /etc/scylla/scylla.yaml
+    echo "alternator_port: 8083" >> /etc/scylla/scylla.yaml
+    echo "alternator_write_isolation: always_use_lwt" >> /etc/scylla/scylla.yaml
+    systemctl enable scylla-server
+    systemctl start scylla-server
+    rm -f server
+else
+    echo "Scylla already installed" 
+    scylla --version
+fi 
 
 #Redis installation
 
@@ -119,8 +146,11 @@ if [ $(check_app redis-server) -ne 0 ]
 then 
     dnf -y install epel-release
     dnf -y install redis
+    sed -i "s/^# cluster-enabled yes/cluster-enabled yes/" /etc/redis.conf
+    sed -i 's/^notify-keyspace-events ""/notify-keyspace-events K$lz/' /etc/redis.conf
     systemctl enable redis
     systemctl start redis
+    echo yes | redis-cli --cluster fix 127.0.0.1:6379
 else
     echo "Redis already installed" 
     redis-server --version
@@ -149,13 +179,11 @@ rm -f /var/lib/pgsql/sqltext
 echo "Creating databases..."
 
 su -c "psql -c \"CREATE DATABASE accountdb;\"" - postgres
-su -c "psql -c \"CREATE DATABASE messagedb;\"" - postgres
 su -c "psql -c \"CREATE DATABASE abusedb;\"" - postgres
 
 # Grant permissions on databases
 
 su -c "psql -c \"GRANT ALL privileges ON DATABASE accountdb TO ${PSQL_USER};\"" - postgres
-su -c "psql -c \"GRANT ALL privileges ON DATABASE messagedb TO ${PSQL_USER};\"" - postgres
 su -c "psql -c \"GRANT ALL privileges ON DATABASE abusedb TO ${PSQL_USER};\"" - postgres
 
 # Configure authentication
@@ -166,6 +194,51 @@ sed -i "/^# IPv4 local connections\:/a${NEW_LINE_POSTGRES}" /var/lib/pgsql/13/da
 # Restart postgres
 
 systemctl restart postgresql-13
+
+# Configuring Scylla access
+
+SCYLLA_USER=shadow
+
+printf "\n"
+
+echo "A ScyllaDB user named 'shadow' will be created. Please enter password for this new ScyllaDB user >>"
+
+read -r SCYLLA_PASSWORD 
+
+if [ -z "$SCYLLA_PASSWORD" ]
+then 
+    error_quit "Entered password is empty"
+fi
+
+SCYLLA_PASSWORD_CONV=$(normalize_sql $SCYLLA_PASSWORD)
+echo "CREATE ROLE ${SCYLLA_USER} WITH PASSWORD = '${SCYLLA_PASSWORD_CONV}';" > scyllatext
+cqlsh -u cassandra -p cassandra -f scyllatext
+cqlsh -u cassandra -p cassandra -e "SELECT salted_hash from system_auth.roles WHERE role='${SCYLLA_USER}';" > scyllatext1
+sed -n '4p' scyllatext1 > scyllatext2
+SALTED_HASH=$(sed -e 's/\s\(.*\)/\1/' scyllatext2)
+
+# Change the default Scylla superuser password
+
+read -p "Do you want to change the default superuser password of ScyllaDB (strongly recommended) [y/n]? >> " -n 1 -r
+if [[ $REPLY =~ ^[Yy]$ ]]
+then
+   printf "\nPlease enter the new password for the default ScyllaDB superuser 'cassandra' >>"
+   read -r CASSANDRA_PASSWORD 
+
+   if [ -z "$CASSANDRA_PASSWORD" ]
+       then 
+       error_quit "Entered password is empty"
+   fi
+   
+   CASSANDRA_PASSWORD_CONV=$(normalize_sql $CASSANDRA_PASSWORD)
+   echo "ALTER ROLE cassandra WITH PASSWORD = '${CASSANDRA_PASSWORD_CONV}';" > scyllatext
+   cqlsh -u cassandra -p cassandra -f scyllatext       
+fi
+
+# Cleanup
+
+systemctl restart scylla-server
+rm -f scyllatext scyllatext1 scyllatext2 
 
 # Create a Shadow user
 
@@ -208,9 +281,12 @@ fi
 
 # Update config
 
-PSQL_PASSWORD_CONV2=$(normalize_yaml $(preproc_cfg $PSQL_PASSWORD))
+PSQL_PASSWORD_CONV2=$(preproc_sed $(normalize_yaml $(preproc_cfg $PSQL_PASSWORD)))
 sed -i "s/password\: your_postgres_user_password/password\: '${PSQL_PASSWORD_CONV2}'/" ${SERVER_PATH}/config/shadow.yml
 sed -i "s|/home/shadow/shadowserver|${SERVER_PATH}|" ${SERVER_PATH}/config/shadow.yml
+
+SCYLLA_PASSWORD_CONV2=$(preproc_sed $(normalize_yaml $(preproc_cfg $SALTED_HASH)))
+sed -i "s/accessSecret: your_scylla_service_password/accessSecret\: '${SCYLLA_PASSWORD_CONV2}'/" ${SERVER_PATH}/config/shadow.yml
 
 printf "\n"
 
@@ -225,12 +301,17 @@ then
     read -p "Is that OK [y/n]? >> " -n 1 -r
     if [[ $REPLY =~ ^[Yy]$ ]]
     then
-    # Markup the databases
-    echo "Performing database markup..."
+    # Markup the Postgres databases
+    printf "\nPerforming PostgreSQL database markup..."
     
-    java -jar ShadowServer-${SHADOW_SERVER_VERSION}.jar accountdb migrate ${SERVER_PATH}/config/shadow.yml
-    java -jar ShadowServer-${SHADOW_SERVER_VERSION}.jar messagedb migrate ${SERVER_PATH}/config/shadow.yml
+    java -jar ShadowServer-${SHADOW_SERVER_VERSION}.jar accountdb migrate ${SERVER_PATH}/config/shadow.yml    
     java -jar ShadowServer-${SHADOW_SERVER_VERSION}.jar abusedb migrate ${SERVER_PATH}/config/shadow.yml
+    
+    # Markup the ScyllaDb tables
+    printf "\nPerforming ScyllaDB table markup..."
+    
+    java -jar ShadowServer-${SHADOW_SERVER_VERSION}.jar createmessagedb ${SERVER_PATH}/config/shadow.yml
+    java -jar ShadowServer-${SHADOW_SERVER_VERSION}.jar createkeysdb ${SERVER_PATH}/config/shadow.yml
     
     chown ${USER_SH} /var/log/shadow.log
     

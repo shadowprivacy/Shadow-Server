@@ -85,15 +85,15 @@ messageScyllaDb:              # ScyllaDB database configuration for messages dat
   region: us-east-1
   tableName:  messagedb
   endpoint: "http://localhost:8083/"
-  accessKey: scylla_shadow                                              # Scylla service access key
-  accessSecret: your_service_password                                   # Scylla service secret key configured when installing ScyllaDB
+  accessKey: shadow                                                     # Scylla service access key
+  accessSecret: your_scylla_service_password                            # Scylla service secret key configured when installing ScyllaDB
   
 keysScyllaDb:                 # ScyllaDB database configuration for keys database
   region: us-east-1
   tableName:  keysdb
   endpoint: "http://localhost:8083/"
-  accessKey: scylla_shadow                                              # Scylla service access key
-  accessSecret: your_service_password                                   # Scylla service secret key configured when installing ScyllaDB      
+  accessKey: shadow                                                     # Scylla service access key
+  accessSecret: your_scylla_service_password                            # Scylla service secret key configured when installing ScyllaDB      
 
 accountsDatabase:             # Postgres database configuration for accounts database  
   driverClass: org.postgresql.Driver  

@@ -35,3 +35,8 @@ function preproc_cfg
 {        
     echo $(sed 's/\\/\\\\/g' <<< "$1")
 }
+
+function preproc_sed
+{        
+    echo $(sed 's|/|\\/|g' <<< "$1")
+}

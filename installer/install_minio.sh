@@ -59,7 +59,7 @@ if [ -z "$MINIO_SERVICE_PASSWORD" ]
 
 MINIO_ADMIN_PASSWORD_CONV=$(normalize_bash $MINIO_ADMIN_PASSWORD)
 MINIO_SERVICE_PASSWORD_CONV=$(normalize_bash $MINIO_SERVICE_PASSWORD)
-MINIO_SERVICE_PASSWORD_CONV2=$(normalize_yaml $(preproc_cfg $MINIO_SERVICE_PASSWORD))
+MINIO_SERVICE_PASSWORD_CONV2=$(preproc_sed $(normalize_yaml $(preproc_cfg $MINIO_SERVICE_PASSWORD)))
 sed -i "s/accessSecret\: your_service_password/accessSecret\: '${MINIO_SERVICE_PASSWORD_CONV2}'/" ${SERVER_PATH}/config/shadow.yml
 
 echo "export MINIO_ACCESS_KEY=$MINIO_ADMIN_LOGIN" >> ${USER_PATH}/.bashrc

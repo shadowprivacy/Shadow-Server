@@ -41,10 +41,12 @@ cp /usr/local/etc/turnserver.conf.default /usr/local/etc/turnserver.conf
 read -p "Is your server behind NAT [y/n]?" -n 1 -r
 if [[ $REPLY =~ ^[Yy]$ ]]
 then
-    printf "\nEnter the outside IP address of your server >>"
+    printf "\n"
+    echo "Enter the outside IP address of your server >>"
     read NAT_SERVER_EXTERNAL_IP
     sed -i "s/^#external-ip=60.70.80.92\/172.17.19.102/external-ip=${NAT_SERVER_EXTERNAL_IP}/" /usr/local/etc/turnserver.conf
     
+    printf "\n"
     echo "Enter the inside IP address of your server >>"
     read NAT_SERVER_IP
     sed -i "s/^#listening-ip=172.17.19.101/listening-ip=${NAT_SERVER_IP}/" /usr/local/etc/turnserver.conf 
@@ -78,13 +80,13 @@ printf "\nEnter the shared secret for the TURN authorization (should match that 
     
 # Update config
     
-    TURN_AUTH_SECRET_CONV=$(normalize_turn $(preproc_cfg $TURN_AUTH_SECRET))
+    TURN_AUTH_SECRET_CONV=$(preproc_sed $(normalize_turn $(preproc_cfg $TURN_AUTH_SECRET)))
         
     sed -i "s/^#static-auth-secret=north/static-auth-secret=${TURN_AUTH_SECRET_CONV}/" /usr/local/etc/turnserver.conf
     
     if test -f ${SERVER_PATH}/config/shadow.yml
     then
-       TURN_AUTH_SECRET_CONV2=$(normalize_yaml $(preproc_cfg $TURN_AUTH_SECRET))        
+       TURN_AUTH_SECRET_CONV2=$(preproc_sed $(normalize_yaml $(preproc_cfg $TURN_AUTH_SECRET)))        
        sed -i "s/secret: your_turn_secret/secret\: '${TURN_AUTH_SECRET_CONV2}'/" ${SERVER_PATH}/config/shadow.yml
        sed -i "s/turn\:shadow.example.com/turn\:${SERVER_DOMAIN}/" ${SERVER_PATH}/config/shadow.yml
     fi
@@ -106,7 +108,7 @@ then
         error_quit "Entered password is empty"
     fi     
     
-    CLI_PASSWORD_CONV=$(normalize_turn $(preproc_cfg $CLI_PASSWORD))
+    CLI_PASSWORD_CONV=$(preproc_sed $(normalize_turn $(preproc_cfg $CLI_PASSWORD)))
     
     sed -i "s/^#cli-password=qwerty/cli-password=${CLI_PASSWORD_CONV}/" /usr/local/etc/turnserver.conf
     
