@@ -103,8 +103,7 @@ public class DeviceControllerTest {
 
   @Before
   public void setup() throws Exception {
-    when(rateLimiters.getSmsDestinationLimiter()).thenReturn(rateLimiter);
-    when(rateLimiters.getVoiceDestinationLimiter()).thenReturn(rateLimiter);
+    when(rateLimiters.getSmsDestinationLimiter()).thenReturn(rateLimiter);    
     when(rateLimiters.getVerifyLimiter()).thenReturn(rateLimiter);
     when(rateLimiters.getAllocateDeviceLimiter()).thenReturn(rateLimiter);
     when(rateLimiters.getVerifyDeviceLimiter()).thenReturn(rateLimiter);
