@@ -37,7 +37,6 @@ import javax.ws.rs.core.Response;
 import java.io.IOException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
-import java.util.List;
 import java.util.Optional;
 
 import io.dropwizard.auth.PolymorphicAuthValueFactoryProvider;

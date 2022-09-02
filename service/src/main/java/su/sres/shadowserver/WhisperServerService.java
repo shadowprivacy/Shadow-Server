@@ -10,7 +10,6 @@ import static com.codahale.metrics.MetricRegistry.name;
 import com.amazonaws.ClientConfiguration;
 import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.auth.BasicAWSCredentials;
-import com.amazonaws.auth.InstanceProfileCredentialsProvider;
 import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
 import com.amazonaws.services.dynamodbv2.document.DynamoDB;
@@ -68,8 +67,6 @@ import su.sres.shadowserver.auth.TurnTokenGenerator;
 import su.sres.shadowserver.configuration.MessageScyllaDbConfiguration;
 import su.sres.shadowserver.configuration.ScyllaDbConfiguration;
 import su.sres.shadowserver.configuration.dynamic.DynamicConfiguration;
-import su.sres.shadowserver.configuration.dynamic.DynamicRateLimitsConfiguration;
-import su.sres.shadowserver.configuration.dynamic.DynamicRemoteDeprecationConfiguration;
 import su.sres.shadowserver.controllers.*;
 import su.sres.shadowserver.currency.CurrencyConversionManager;
 import su.sres.shadowserver.currency.FixerClient;
@@ -97,7 +94,6 @@ import su.sres.shadowserver.metrics.MaxFileDescriptorGauge;
 import su.sres.shadowserver.metrics.MetricsApplicationEventListener;
 import su.sres.shadowserver.metrics.NetworkReceivedGauge;
 import su.sres.shadowserver.metrics.NetworkSentGauge;
-import su.sres.shadowserver.metrics.NstatCounters;
 import su.sres.shadowserver.metrics.OperatingSystemMemoryGauge;
 import su.sres.shadowserver.metrics.PushLatencyManager;
 import su.sres.shadowserver.metrics.TrafficSource;
@@ -332,7 +328,8 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     ClientResources messageCacheClientResources = ClientResources.builder().build();
     ClientResources presenceClientResources = ClientResources.builder().build();
     ClientResources metricsCacheClientResources = ClientResources.builder().build();
-    ClientResources pushSchedulerCacheClientResources = ClientResources.builder().ioThreadPoolSize(4).build();
+    // ClientResources pushSchedulerCacheClientResources =
+    // ClientResources.builder().ioThreadPoolSize(4).build();
 
     ConnectionEventLogger.logConnectionEvents(generalCacheClientResources);
     ConnectionEventLogger.logConnectionEvents(messageCacheClientResources);
@@ -355,7 +352,9 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     ScheduledExecutorService declinedMessageReceiptExecutor = environment.lifecycle().scheduledExecutorService(name(getClass(), "declined-receipt-%d")).threads(2).build();
     ScheduledExecutorService retrySchedulingExecutor = environment.lifecycle().scheduledExecutorService(name(getClass(), "retry-%d")).threads(2).build();
     ExecutorService keyspaceNotificationDispatchExecutor = environment.lifecycle().executorService(name(getClass(), "keyspaceNotification-%d")).maxThreads(16).workQueue(keyspaceNotificationDispatchQueue).build();
-    ExecutorService apnSenderExecutor = environment.lifecycle().executorService(name(getClass(), "apnSender-%d")).maxThreads(1).minThreads(1).build();
+    // ExecutorService apnSenderExecutor =
+    // environment.lifecycle().executorService(name(getClass(),
+    // "apnSender-%d")).maxThreads(1).minThreads(1).build();
     ExecutorService gcmSenderExecutor = environment.lifecycle().executorService(name(getClass(), "gcmSender-%d")).maxThreads(1).minThreads(1).build();
 
     ClientPresenceManager clientPresenceManager = new ClientPresenceManager(clientPresenceCluster, recurringJobExecutor, keyspaceNotificationDispatchExecutor);
@@ -431,7 +430,11 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     environment.lifecycle().manage(clientPresenceManager);
     environment.lifecycle().manage(currencyManager);
 
-    MinioClient minioClient = new MinioClient(config.getCdnConfiguration().getUri(), config.getCdnConfiguration().getAccessKey(), config.getCdnConfiguration().getAccessSecret());
+    MinioClient minioClient = MinioClient.builder()
+        .endpoint(config.getCdnConfiguration().getUri())
+        .credentials(config.getCdnConfiguration().getAccessKey(), config.getCdnConfiguration().getAccessSecret())
+        .build();
+
     PostPolicyGenerator profileCdnPolicyGenerator = new PostPolicyGenerator(config.getCdnConfiguration().getRegion(), config.getCdnConfiguration().getBucket(), config.getCdnConfiguration().getAccessKey());
     PolicySigner profileCdnPolicySigner = new PolicySigner(config.getCdnConfiguration().getAccessSecret(), config.getCdnConfiguration().getRegion());
 
