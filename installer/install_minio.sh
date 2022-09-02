@@ -62,8 +62,8 @@ MINIO_SERVICE_PASSWORD_CONV=$(normalize_bash $MINIO_SERVICE_PASSWORD)
 MINIO_SERVICE_PASSWORD_CONV2=$(preproc_sed $(normalize_yaml $(preproc_cfg $MINIO_SERVICE_PASSWORD)))
 sed -i "s/accessSecret\: your_service_password/accessSecret\: '${MINIO_SERVICE_PASSWORD_CONV2}'/" ${SERVER_PATH}/config/shadow.yml
 
-echo "export MINIO_ACCESS_KEY=$MINIO_ADMIN_LOGIN" >> ${USER_PATH}/.bashrc
-echo "export MINIO_SECRET_KEY=$(normalize_bash $MINIO_ADMIN_PASSWORD)" >> ${USER_PATH}/.bashrc
+echo "export MINIO_ROOT_USER=$MINIO_ADMIN_LOGIN" >> ${USER_PATH}/.bashrc
+echo "export MINIO_ROOT_PASSWORD=$(normalize_bash $MINIO_ADMIN_PASSWORD)" >> ${USER_PATH}/.bashrc
 echo "export MINIO_BROWSER=off" >> ${USER_PATH}/.bashrc
 
 echo "Copying credentials.."
@@ -93,8 +93,8 @@ restorecon -rv /usr/local/bin/
 
 echo "Creating Minio environment file..."
 
-echo "MINIO_ACCESS_KEY=$MINIO_ADMIN_LOGIN" > /etc/default/minio_env
-echo "MINIO_SECRET_KEY=$MINIO_ADMIN_PASSWORD_CONV" >> /etc/default/minio_env
+echo "MINIO_ROOT_USER=$MINIO_ADMIN_LOGIN" > /etc/default/minio_env
+echo "MINIO_ROOT_PASSWORD=$MINIO_ADMIN_PASSWORD_CONV" >> /etc/default/minio_env
 echo "MINIO_BROWSER=off" >> /etc/default/minio_env
 
 echo "Creating Minio service..."
