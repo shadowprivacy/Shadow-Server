@@ -16,14 +16,14 @@ import java.util.regex.Pattern;
 
 public class UserAgentUtil {
 
-    private static final Pattern STANDARD_UA_PATTERN = Pattern.compile("^Signal-(Android|Desktop|iOS)/([^ ]+)( (.+))?$", Pattern.CASE_INSENSITIVE);
+    private static final Pattern STANDARD_UA_PATTERN = Pattern.compile("^(Signal|Shadow)-(Android|Desktop|iOS)/([^ ]+)( (.+))?$", Pattern.CASE_INSENSITIVE);
 
     private static final Map<ClientPlatform, Pattern> LEGACY_PATTERNS_BY_PLATFORM = new EnumMap<>(ClientPlatform.class);
 
     static {
-	LEGACY_PATTERNS_BY_PLATFORM.put(ClientPlatform.ANDROID, Pattern.compile("^Signal-Android ([^ ]+)( (.+))?$", Pattern.CASE_INSENSITIVE));
-	LEGACY_PATTERNS_BY_PLATFORM.put(ClientPlatform.DESKTOP, Pattern.compile("^Signal Desktop (.+)$", Pattern.CASE_INSENSITIVE));
-	LEGACY_PATTERNS_BY_PLATFORM.put(ClientPlatform.IOS, Pattern.compile("^Signal/([^ ]+)( (.+))?$", Pattern.CASE_INSENSITIVE));
+	LEGACY_PATTERNS_BY_PLATFORM.put(ClientPlatform.ANDROID, Pattern.compile("^(Signal|Shadow)-Android ([^ ]+)( (.+))?$", Pattern.CASE_INSENSITIVE));
+	LEGACY_PATTERNS_BY_PLATFORM.put(ClientPlatform.DESKTOP, Pattern.compile("^(Signal|Shadow) Desktop (.+)$", Pattern.CASE_INSENSITIVE));
+	LEGACY_PATTERNS_BY_PLATFORM.put(ClientPlatform.IOS, Pattern.compile("^(Signal|Shadow)/([^ ]+)( (.+))?$", Pattern.CASE_INSENSITIVE));
     }
 
     public static UserAgent parseUserAgentString(final String userAgentString) throws UnrecognizedUserAgentException {
