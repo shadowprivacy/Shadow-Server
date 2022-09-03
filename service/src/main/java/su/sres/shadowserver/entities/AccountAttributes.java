@@ -49,7 +49,7 @@ public class AccountAttributes {
   }
 
   @VisibleForTesting
-  public AccountAttributes(boolean fetchesMessages, int registrationId, String name, String pin, String registrationLock, boolean discoverableByPhoneNumber, final DeviceCapabilities capabilities) {
+  public AccountAttributes(boolean fetchesMessages, int registrationId, String name, String pin, String registrationLock, boolean discoverableByUserLogin, final DeviceCapabilities capabilities) {
     this.fetchesMessages = fetchesMessages;
     this.registrationId = registrationId;
     this.name = name;
