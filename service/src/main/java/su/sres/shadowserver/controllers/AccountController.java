@@ -13,6 +13,10 @@ import com.codahale.metrics.annotation.Timed;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nullable;
+import javax.annotation.Resource;
+import javax.servlet.http.HttpServlet;
+import javax.servlet.http.HttpServletRequest;
 import javax.validation.Valid;
 import javax.ws.rs.Consumes;
 import javax.ws.rs.DELETE;
@@ -24,9 +28,12 @@ import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
 import javax.ws.rs.QueryParam;
 import javax.ws.rs.WebApplicationException;
+import javax.ws.rs.core.Context;
 import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.MediaType;
+import javax.ws.rs.core.Request;
 import javax.ws.rs.core.Response;
+import javax.ws.rs.ext.Provider;
 
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -83,6 +90,7 @@ import su.sres.shadowserver.storage.MessagesManager;
 import su.sres.shadowserver.storage.PendingAccountsManager;
 import su.sres.shadowserver.storage.UsernamesManager;
 import su.sres.shadowserver.util.Constants;
+import su.sres.shadowserver.util.ForwardedIpUtil;
 import su.sres.shadowserver.util.Hex;
 import su.sres.shadowserver.util.Util;
 
@@ -101,16 +109,16 @@ public class AccountController {
   private final Meter captchaRequiredMeter = metricRegistry.meter(name(AccountController.class, "captcha_required"));
   private final Meter captchaSuccessMeter = metricRegistry.meter(name(AccountController.class, "captcha_success"));
   private final Meter captchaFailureMeter = metricRegistry.meter(name(AccountController.class, "captcha_failure"));
-  
+
   private static final String PUSH_CHALLENGE_COUNTER_NAME = name(AccountController.class, "pushChallenge");
   private static final String ACCOUNT_CREATE_COUNTER_NAME = name(AccountController.class, "create");
   private static final String ACCOUNT_VERIFY_COUNTER_NAME = name(AccountController.class, "verify");
 
   private static final String CHALLENGE_PRESENT_TAG_NAME = "present";
   private static final String CHALLENGE_MATCH_TAG_NAME = "matches";
-  
+
   private static final String VERFICATION_TRANSPORT_TAG_NAME = "transport";
-  
+
   private final PendingAccountsManager pendingAccounts;
   private final AccountsManager accounts;
   private final UsernamesManager usernames;
@@ -191,29 +199,24 @@ public class AccountController {
   @GET
   @Path("/{transport}/code/{number}")
   public Response createAccount(@PathParam("transport") String transport, @PathParam("number") String userLogin,
-      // @HeaderParam("X-Forwarded-For") String forwardedFor,
+      @HeaderParam("X-Forwarded-For") Optional<String> forwardedFor,
       @HeaderParam("User-Agent") String userAgent,
       @QueryParam("client") Optional<String> client,
       @QueryParam("captcha") Optional<String> captcha,
-      @QueryParam("challenge") Optional<String> pushChallenge)
+      @QueryParam("challenge") Optional<String> pushChallenge,
+      @Context HttpServletRequest httpServletRequest) throws RateLimitExceededException, RetryLaterException {
 
-          throws RateLimitExceededException, RetryLaterException {
+    String requester;
 
     if (!Util.isValidUserLogin(userLogin)) {
       logger.info("Invalid user login: " + userLogin);
       throw new WebApplicationException(Response.status(400).build());
     }
 
-    // exclude the need for X-Forwarded-For
-    // TODO change fillers for real IP address
-    // String requester = ForwardedIpUtil.getMostRecentProxy(forwardedFor).orElseThrow();            
-
-    String forwardedFor = "127.0.0.66";
-    String requester = "127.0.0.66";
+    requester = forwardedFor.isPresent() ? ForwardedIpUtil.getMostRecentProxy(forwardedFor.get()).orElseThrow() : httpServletRequest.getRemoteAddr();
 
     Optional<StoredVerificationCode> storedVerificationCode = pendingAccounts.getCodeForUserLogin(userLogin);
-    CaptchaRequirement requirement = requiresCaptcha(userLogin, transport, forwardedFor, requester, captcha,
-        storedVerificationCode, pushChallenge);
+    CaptchaRequirement requirement = requiresCaptcha(userLogin, transport, forwardedFor, requester, captcha, storedVerificationCode, pushChallenge);
 
     if (requirement.isCaptchaRequired()) {
       captchaRequiredMeter.mark();
@@ -227,11 +230,11 @@ public class AccountController {
 
     try {
       switch (transport) {
-        case "sms":
-          rateLimiters.getSmsDestinationLimiter().validate(userLogin);
-          break;        
-        default:
-          throw new WebApplicationException(Response.status(422).build());
+      case "sms":
+        rateLimiters.getSmsDestinationLimiter().validate(userLogin);
+        break;
+      default:
+        throw new WebApplicationException(Response.status(422).build());
       }
     } catch (RateLimitExceededException e) {
       if (!e.getRetryDuration().isNegative()) {
@@ -240,10 +243,10 @@ public class AccountController {
         throw e;
       }
     }
-    
+
     {
       final List<Tag> tags = new ArrayList<>();
-      
+
       tags.add(Tag.of(VERFICATION_TRANSPORT_TAG_NAME, transport));
       tags.add(UserAgentTagUtil.getPlatformTag(userAgent));
 
@@ -260,8 +263,8 @@ public class AccountController {
   @Path("/code/{verification_code}")
   public AccountCreationResult verifyAccount(@PathParam("verification_code") String verificationCode,
       @HeaderParam("Authorization") String authorizationHeader,
-      @HeaderParam("X-Signal-Agent")  String signalAgent,
-      @HeaderParam("User-Agent")      String userAgent,
+      @HeaderParam("X-Signal-Agent") String signalAgent,
+      @HeaderParam("User-Agent") String userAgent,
       @QueryParam("transfer") Optional<Boolean> availableForTransfer, @Valid AccountAttributes accountAttributes)
       throws RateLimitExceededException {
     try {
@@ -334,9 +337,9 @@ public class AccountController {
       }
 
       Account account = createAccount(userLogin, password, signalAgent, accountAttributes);
-      
+
       {
-        final List<Tag> tags = new ArrayList<>();        
+        final List<Tag> tags = new ArrayList<>();
         tags.add(UserAgentTagUtil.getPlatformTag(userAgent));
 
         Metrics.counter(ACCOUNT_VERIFY_COUNTER_NAME, tags).increment();
@@ -585,7 +588,7 @@ public class AccountController {
     }
 
     account.setUnidentifiedAccessKey(attributes.getUnidentifiedAccessKey());
-    account.setUnrestrictedUnidentifiedAccess(attributes.isUnrestrictedUnidentifiedAccess());    
+    account.setUnrestrictedUnidentifiedAccess(attributes.isUnrestrictedUnidentifiedAccess());
     account.setDiscoverableByUserLogin(attributes.isDiscoverableByUserLogin());
 
     accounts.update(account);
@@ -634,11 +637,14 @@ public class AccountController {
     }
 
     return Response.ok().build();
-  } 
+  }
 
-  private CaptchaRequirement requiresCaptcha(String userLogin, String transport, String forwardedFor,
+  private CaptchaRequirement requiresCaptcha(String userLogin, String transport, Optional<String> forwardedFor,
       String requester, Optional<String> captchaToken, Optional<StoredVerificationCode> storedVerificationCode,
       Optional<String> pushChallenge) {
+
+    // this should be skipped, since the captcha token is absent; in case it's
+    // somehow present, the guy is rejected with 402
     if (captchaToken.isPresent()) {
       boolean validToken = recaptchaClient.verify(captchaToken.get(), requester);
 
@@ -647,14 +653,12 @@ public class AccountController {
         return new CaptchaRequirement(false, false);
       } else {
         captchaFailureMeter.mark();
-        // captcha off
-        return new CaptchaRequirement(false, false);
+        return new CaptchaRequirement(true, false);
       }
     }
 
     {
       final List<Tag> tags = new ArrayList<>();
-      
 
       try {
         if (pushChallenge.isPresent()) {
@@ -672,47 +676,32 @@ public class AccountController {
         } else {
           tags.add(Tag.of(CHALLENGE_PRESENT_TAG_NAME, "false"));
 
-          // captcha off
-          return new CaptchaRequirement(false, false);
+          // captcha off, proceed to check for abuse
+          // return new CaptchaRequirement(false, false);
         }
       } finally {
         Metrics.counter(PUSH_CHALLENGE_COUNTER_NAME, tags).increment();
       }
-    
     }
 
     List<AbusiveHostRule> abuseRules = abusiveHostRules.getAbusiveHostRulesFor(requester);
 
     for (AbusiveHostRule abuseRule : abuseRules) {
       if (abuseRule.isBlocked()) {
-        logger.info(
-            "Blocked host: " + transport + ", " + userLogin + ", " + requester + " (" + forwardedFor + ")");
+        logger.info("Blocked host: " + transport + ", " + userLogin + ", " + requester + " (" + forwardedFor.orElse("") + ")");
         blockedHostMeter.mark();
-// captcha off
-        // return new CaptchaRequirement(true, false);
-        return new CaptchaRequirement(false, false);
+        return new CaptchaRequirement(true, false);
+        // isCaptchaRequired = true will send 402 to this guy
       }
-
-// should always be empty, since we use E.164 numbers no more			
-      /*
-       * if (!abuseRule.getRegions().isEmpty()) { if
-       * (abuseRule.getRegions().stream().noneMatch(number::startsWith)) {
-       * logger.info("Restricted host: " + transport + ", " + number + ", " +
-       * requester + " (" + forwardedFor + ")"); filteredHostMeter.mark(); // captcha
-       * off // return new CaptchaRequirement(true, false); return new
-       * CaptchaRequirement(false, false); } }
-       */
     }
 
     try {
       rateLimiters.getSmsVoiceIpLimiter().validate(requester);
     } catch (RateLimitExceededException e) {
-      logger.info("Rate limited exceeded: " + transport + ", " + userLogin + ", " + requester + " ("
-          + forwardedFor + ")");
+      logger.info("Rate limited exceeded: " + transport + ", " + userLogin + ", " + requester + " (" + forwardedFor.orElse("") + ")");
       rateLimitedHostMeter.mark();
-      // captcha off
-      // return new CaptchaRequirement(true, true);
-      return new CaptchaRequirement(false, true);
+      return new CaptchaRequirement(true, true);
+      // send him 402 and consider for autoblock
     }
 
     return new CaptchaRequirement(false, false);
@@ -757,7 +746,7 @@ public class AccountController {
     account.setPin(accountAttributes.getPin());
 
     account.setUnidentifiedAccessKey(accountAttributes.getUnidentifiedAccessKey());
-    account.setUnrestrictedUnidentifiedAccess(accountAttributes.isUnrestrictedUnidentifiedAccess());    
+    account.setUnrestrictedUnidentifiedAccess(accountAttributes.isUnrestrictedUnidentifiedAccess());
     account.setDiscoverableByUserLogin(accountAttributes.isDiscoverableByUserLogin());
 
     if (accounts.create(account)) {
