@@ -8,7 +8,6 @@ package su.sres.shadowserver.controllers;
 import com.google.common.collect.ImmutableSet;
 import org.glassfish.jersey.test.grizzly.GrizzlyWebTestContainerFactory;
 import org.junit.ClassRule;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import javax.ws.rs.core.Response;
@@ -19,8 +18,6 @@ import io.dropwizard.auth.PolymorphicAuthValueFactoryProvider;
 import io.dropwizard.testing.junit.ResourceTestRule;
 
 import su.sres.shadowserver.auth.DisabledPermittedAccount;
-import su.sres.shadowserver.controllers.AttachmentControllerV1;
-import su.sres.shadowserver.controllers.AttachmentControllerV2;
 import su.sres.shadowserver.entities.AttachmentDescriptorV1;
 import su.sres.shadowserver.entities.AttachmentDescriptorV2;
 import su.sres.shadowserver.entities.AttachmentUri;
@@ -40,36 +37,38 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 public class AttachmentControllerTest {
-  
-//federation excluded, reserved for future use
-  //  private static FederatedClientManager   federatedClientManager = mock(FederatedClientManager.class  );
-  private static RateLimiters             rateLimiters           = mock(RateLimiters.class            );
-  private static RateLimiter              rateLimiter            = mock(RateLimiter.class             );
+
+  //federation excluded, reserved for future use
+  // private static FederatedClientManager federatedClientManager =
+  // mock(FederatedClientManager.class );
+  private static RateLimiters rateLimiters = mock(RateLimiters.class);
+  private static RateLimiter rateLimiter = mock(RateLimiter.class);
 
   static {
-    
-    when(rateLimiters.getAttachmentLimiter()).thenReturn(rateLimiter);  
+
+    when(rateLimiters.getAttachmentLimiter()).thenReturn(rateLimiter);
   }
 
   @ClassRule
   public static final ResourceTestRule resources = ResourceTestRule.builder()
-                                                                   .addProvider(AuthHelper.getAuthFilter())
-                                                                   .addProvider(new PolymorphicAuthValueFactoryProvider.Binder<>(ImmutableSet.of(Account.class, DisabledPermittedAccount.class)))
-                                                                   .setMapper(SystemMapper.getMapper())
-                                                                   .setTestContainerFactory(new GrizzlyWebTestContainerFactory())
-                                         //federation excluded, reserved for future use
-                                                         //          .addResource(new AttachmentController(rateLimiters, federatedClientManager, urlSigner))
-                                                                   .addResource(new AttachmentControllerV1(rateLimiters, "accessKey", "accessSecret", "attachment-bucket"))
-                                                                   .addResource(new AttachmentControllerV2(rateLimiters, "accessKey", "accessSecret", "us-east-1", "attachmentv2-bucket"))
-                                                                   .build();
+      .addProvider(AuthHelper.getAuthFilter())
+      .addProvider(new PolymorphicAuthValueFactoryProvider.Binder<>(ImmutableSet.of(Account.class, DisabledPermittedAccount.class)))
+      .setMapper(SystemMapper.getMapper())
+      .setTestContainerFactory(new GrizzlyWebTestContainerFactory())
+      // federation excluded, reserved for future use
+      // .addResource(new AttachmentController(rateLimiters, federatedClientManager,
+      // urlSigner))
+      .addResource(new AttachmentControllerV1(rateLimiters, "accessKey", "accessSecret", "attachment-bucket"))
+      .addResource(new AttachmentControllerV2(rateLimiters, "accessKey", "accessSecret", "us-east-1", "attachmentv2-bucket"))
+      .build();
 
   @Test
   public void testV2Form() throws IOException {
     AttachmentDescriptorV2 descriptor = resources.getJerseyTest()
-                                                 .target("/v2/attachments/form/upload")
-                                                 .request()
-                                                 .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
-                                                 .get(AttachmentDescriptorV2.class);
+        .target("/v2/attachments/form/upload")
+        .request()
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .get(AttachmentDescriptorV2.class);
 
     assertThat(descriptor.getKey()).isEqualTo(descriptor.getAttachmentIdString());
     assertThat(descriptor.getAcl()).isEqualTo("private");
@@ -87,28 +86,28 @@ public class AttachmentControllerTest {
     assertThat(descriptor.getDate()).isNotBlank();
     assertThat(descriptor.getPolicy()).isNotBlank();
     assertThat(descriptor.getSignature()).isNotBlank();
-    
+
     assertThat(new String(Base64.decode(descriptor.getPolicy()))).contains("[\"content-length-range\", 1, 104857600]");
   }
-  
+
   @Test
   public void testV2FormDisabled() {
     Response response = resources.getJerseyTest()
-                                 .target("/v2/attachments/form/upload")
-                                 .request()
-                                 .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.DISABLED_NUMBER, AuthHelper.DISABLED_PASSWORD))
-                                 .get();
+        .target("/v2/attachments/form/upload")
+        .request()
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.DISABLED_NUMBER, AuthHelper.DISABLED_PASSWORD))
+        .get();
 
     assertThat(response.getStatus()).isEqualTo(401);
   }
-  
+
   @Test
   public void testAcceleratedPut() {
-	  AttachmentDescriptorV1 descriptor = resources.getJerseyTest()
-              .target("/v1/attachments/")
-              .request()
-              .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
-              .get(AttachmentDescriptorV1.class);
+    AttachmentDescriptorV1 descriptor = resources.getJerseyTest()
+        .target("/v1/attachments/")
+        .request()
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .get(AttachmentDescriptorV1.class);
 
     assertThat(descriptor.getLocation()).startsWith("https://attachment-bucket.s3-accelerate.amazonaws.com");
     assertThat(descriptor.getId()).isGreaterThan(0);
@@ -116,40 +115,13 @@ public class AttachmentControllerTest {
   }
 
   @Test
-  @Ignore
-  public void testUnacceleratedPut() {
-	  AttachmentDescriptorV1 descriptor = resources.getJerseyTest()
-              .target("/v1/attachments/")
-              .request()
-              .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER_TWO, AuthHelper.VALID_PASSWORD_TWO))
-              .get(AttachmentDescriptorV1.class);
-
-    assertThat(descriptor.getLocation()).startsWith("https://s3.amazonaws.com");
-    assertThat(descriptor.getId()).isGreaterThan(0);
-    assertThat(descriptor.getIdString()).isNotBlank();
-  }
-
-  @Test
   public void testAcceleratedGet() throws MalformedURLException {
     AttachmentUri uri = resources.getJerseyTest()
-                                        .target("/v1/attachments/1234")
-                                        .request()
-                                        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
-                                        .get(AttachmentUri.class);
+        .target("/v1/attachments/1234")
+        .request()
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .get(AttachmentUri.class);
 
     assertThat(uri.getLocation().getHost()).isEqualTo("attachment-bucket.s3-accelerate.amazonaws.com");
   }
-
-  @Test
-  @Ignore
-  public void testUnacceleratedGet() throws MalformedURLException {
-    AttachmentUri uri = resources.getJerseyTest()
-                                 .target("/v1/attachments/1234")
-                                 .request()
-                                 .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER_TWO, AuthHelper.VALID_PASSWORD_TWO))
-                                 .get(AttachmentUri.class);
-
-    assertThat(uri.getLocation().getHost()).isEqualTo("s3.amazonaws.com");
-  }
-
 }

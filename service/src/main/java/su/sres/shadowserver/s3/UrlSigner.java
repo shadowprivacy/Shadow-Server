@@ -18,30 +18,24 @@ import java.util.Date;
 
 public class UrlSigner {
 
-  private static final long   DURATION = 60 * 60 * 1000;
+  private static final long DURATION = 60 * 60 * 1000;
 
   private final AWSCredentials credentials;
   private final String bucket;
 
   public UrlSigner(String accessKey, String accessSecret, String bucket) {
-	    this.credentials = new BasicAWSCredentials(accessKey, accessSecret);
-	    this.bucket      = bucket;
+    this.credentials = new BasicAWSCredentials(accessKey, accessSecret);
+    this.bucket = bucket;
   }
 
-  public URL getPreSignedUrl(long attachmentId, HttpMethod method, boolean unaccelerated) {
-    AmazonS3                    client  = new AmazonS3Client(credentials);
+  public URL getPreSignedUrl(long attachmentId, HttpMethod method) {
+    AmazonS3 client = new AmazonS3Client(credentials);
     GeneratePresignedUrlRequest request = new GeneratePresignedUrlRequest(bucket, String.valueOf(attachmentId), method);
-    
+
     request.setExpiration(new Date(System.currentTimeMillis() + DURATION));
     request.setContentType("application/octet-stream");
-
-    if (unaccelerated) {
-      client.setS3ClientOptions(S3ClientOptions.builder().setPathStyleAccess(true).build());
-    } else {
-      client.setS3ClientOptions(S3ClientOptions.builder().setAccelerateModeEnabled(true).build());
-    }
+    client.setS3ClientOptions(S3ClientOptions.builder().setAccelerateModeEnabled(true).build());
 
     return client.generatePresignedUrl(request);
   }
-
 }
