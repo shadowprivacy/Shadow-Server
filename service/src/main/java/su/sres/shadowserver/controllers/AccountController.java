@@ -657,9 +657,8 @@ public class AccountController {
           Optional<String> storedPushChallenge = storedVerificationCode.map(StoredVerificationCode::getPushCode);
 
           if (!pushChallenge.get().equals(storedPushChallenge.orElse(null))) {
-            tags.add(Tag.of(CHALLENGE_MATCH_TAG_NAME, "false"));
-            // captcha off
-            return new CaptchaRequirement(false, false);
+            tags.add(Tag.of(CHALLENGE_MATCH_TAG_NAME, "false"));             
+            return new CaptchaRequirement(true, false);
           } else {
             tags.add(Tag.of(CHALLENGE_MATCH_TAG_NAME, "true"));
           }
