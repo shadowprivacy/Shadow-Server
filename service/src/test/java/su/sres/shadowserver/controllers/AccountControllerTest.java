@@ -21,10 +21,9 @@ import static org.mockito.Mockito.when;
 import com.google.common.collect.ImmutableSet;
 import org.glassfish.jersey.test.grizzly.GrizzlyWebTestContainerFactory;
 
-import org.junit.Ignore;
-
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -77,6 +76,7 @@ import su.sres.shadowserver.storage.AbusiveHostRule;
 import su.sres.shadowserver.storage.AbusiveHostRules;
 import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.storage.AccountsManager;
+import su.sres.shadowserver.storage.DirectoryManager;
 import su.sres.shadowserver.storage.MessagesManager;
 import su.sres.shadowserver.storage.PendingAccountsManager;
 import su.sres.shadowserver.storage.UsernamesManager;
@@ -88,17 +88,15 @@ import su.sres.shadowserver.util.SystemMapper;
 class AccountControllerTest {
 
   private static final String SENDER = "richardroe";
-  private static final String SENDER_OLD = "+14151111111";
+  private static final String SENDER_OLD = "miketyson";
   private static final String SENDER_PIN = "+14153333333";
   private static final String SENDER_OVER_PIN = "+14154444444";
-  private static final String SENDER_OVER_PREFIX = "+14156666666";
-  private static final String SENDER_PREAUTH = "+14157777777";
+  private static final String SENDER_PREAUTH = "tysonfury";
   private static final String SENDER_REG_LOCK = "+14158888888";
-  private static final String SENDER_HAS_STORAGE = "miketyson";
+  private static final String SENDER_HAS_STORAGE = "canelo";
   private static final String SENDER_TRANSFER = "+14151111112";
 
   private static final String ABUSIVE_HOST = "192.168.1.1";
-  private static final String RESTRICTED_HOST = "192.168.1.2";
   private static final String NICE_HOST = "127.0.0.1";
   private static final String RATE_LIMITED_IP_HOST = "10.0.0.1";
   private static final String RATE_LIMITED_PREFIX_HOST = "10.0.0.2";
@@ -116,7 +114,6 @@ class AccountControllerTest {
   private static RateLimiter rateLimiter = mock(RateLimiter.class);
   private static RateLimiter pinLimiter = mock(RateLimiter.class);
   private static RateLimiter smsVoiceIpLimiter = mock(RateLimiter.class);
-  private static RateLimiter smsVoicePrefixLimiter = mock(RateLimiter.class);
   private static RateLimiter autoBlockLimiter = mock(RateLimiter.class);
   private static RateLimiter usernameSetLimiter = mock(RateLimiter.class);
 
@@ -130,6 +127,8 @@ class AccountControllerTest {
   private static GCMSender gcmSender = mock(GCMSender.class);
   // private static APNSender apnSender = mock(APNSender.class);
   private static UsernamesManager usernamesManager = mock(UsernamesManager.class);
+
+  private static DirectoryManager directoryManager = mock(DirectoryManager.class);
 
   private byte[] registration_lock_key = new byte[32];
 
@@ -161,7 +160,6 @@ class AccountControllerTest {
     when(rateLimiters.getVerifyLimiter()).thenReturn(rateLimiter);
     when(rateLimiters.getPinLimiter()).thenReturn(pinLimiter);
     when(rateLimiters.getSmsVoiceIpLimiter()).thenReturn(smsVoiceIpLimiter);
-    when(rateLimiters.getSmsVoicePrefixLimiter()).thenReturn(smsVoicePrefixLimiter);
     when(rateLimiters.getAutoBlockLimiter()).thenReturn(autoBlockLimiter);
     when(rateLimiters.getUsernameSetLimiter()).thenReturn(usernameSetLimiter);
 
@@ -182,7 +180,7 @@ class AccountControllerTest {
         .of(new StoredVerificationCode("1234", System.currentTimeMillis(), "1234-push", VERIFICATION_CODE_LIFETIME)));
     when(pendingAccountsManager.getCodeForUserLogin(SENDER_OLD))
         .thenReturn(Optional.of(new StoredVerificationCode("1234",
-            System.currentTimeMillis() - TimeUnit.MINUTES.toMillis(31), null, VERIFICATION_CODE_LIFETIME)));
+            System.currentTimeMillis() - TimeUnit.HOURS.toMillis(31), null, VERIFICATION_CODE_LIFETIME)));
     when(pendingAccountsManager.getCodeForUserLogin(SENDER_PIN)).thenReturn(Optional.of(
         new StoredVerificationCode("333333", System.currentTimeMillis(), null, VERIFICATION_CODE_LIFETIME)));
     when(pendingAccountsManager.getCodeForUserLogin(SENDER_REG_LOCK)).thenReturn(Optional.of(
@@ -206,13 +204,12 @@ class AccountControllerTest {
     when(accountsManager.get(eq(SENDER_HAS_STORAGE))).thenReturn(Optional.of(senderHasStorage));
     when(accountsManager.get(eq(SENDER_TRANSFER))).thenReturn(Optional.of(senderTransfer));
 
+    when(accountsManager.getDirectoryManager()).thenReturn(directoryManager);
+
     when(usernamesManager.put(eq(AuthHelper.VALID_UUID), eq("n00bkiller"))).thenReturn(true);
     when(usernamesManager.put(eq(AuthHelper.VALID_UUID), eq("takenusername"))).thenReturn(false);
 
-    when(abusiveHostRules.getAbusiveHostRulesFor(eq(ABUSIVE_HOST))).thenReturn(
-        Collections.singletonList(new AbusiveHostRule(ABUSIVE_HOST, true, Collections.emptyList())));
-    when(abusiveHostRules.getAbusiveHostRulesFor(eq(RESTRICTED_HOST))).thenReturn(Collections
-        .singletonList(new AbusiveHostRule(RESTRICTED_HOST, false, Collections.singletonList("+123"))));
+    when(abusiveHostRules.getAbusiveHostRulesFor(eq(ABUSIVE_HOST))).thenReturn(Collections.singletonList(new AbusiveHostRule(ABUSIVE_HOST, true, Collections.emptyList())));
     when(abusiveHostRules.getAbusiveHostRulesFor(eq(NICE_HOST))).thenReturn(Collections.emptyList());
 
     when(recaptchaClient.verify(eq(INVALID_CAPTCHA_TOKEN), anyString())).thenReturn(false);
@@ -223,7 +220,6 @@ class AccountControllerTest {
     doThrow(new RateLimitExceededException(RATE_LIMITED_PREFIX_HOST, Duration.ZERO)).when(autoBlockLimiter).validate(eq(RATE_LIMITED_PREFIX_HOST));
     doThrow(new RateLimitExceededException(RATE_LIMITED_IP_HOST, Duration.ZERO)).when(autoBlockLimiter).validate(eq(RATE_LIMITED_IP_HOST));
 
-    doThrow(new RateLimitExceededException(SENDER_OVER_PREFIX, Duration.ZERO)).when(smsVoicePrefixLimiter).validate(SENDER_OVER_PREFIX.substring(0, 4 + 2));
     doThrow(new RateLimitExceededException(RATE_LIMITED_IP_HOST, Duration.ZERO)).when(smsVoiceIpLimiter).validate(RATE_LIMITED_IP_HOST);
     doThrow(new RateLimitExceededException(RATE_LIMITED_HOST2, Duration.ZERO)).when(smsVoiceIpLimiter).validate(RATE_LIMITED_HOST2);
   }
@@ -238,7 +234,6 @@ class AccountControllerTest {
         rateLimiter,
         pinLimiter,
         smsVoiceIpLimiter,
-        smsVoicePrefixLimiter,
         autoBlockLimiter,
         usernameSetLimiter,
         storedMessages,
@@ -271,7 +266,8 @@ class AccountControllerTest {
   }
 
   @Test
-  @Ignore
+  @Disabled
+  // until we support iOS
   void testGetApnPreauth() throws Exception {
     Response response = resources.getJerseyTest().target("/v1/accounts/apn/preauth/mytoken/richardroe").request()
         .get();
@@ -291,7 +287,6 @@ class AccountControllerTest {
   }
 
   @Test
-  @Ignore
   void testSendCode() throws Exception {
     Response response = resources.getJerseyTest().target(String.format("/v1/accounts/sms/code/%s", SENDER))
         .queryParam("challenge", "1234-push")
@@ -299,12 +294,10 @@ class AccountControllerTest {
 
     assertThat(response.getStatus()).isEqualTo(200);
 
-//    verify(smsSender).deliverSmsVerification(eq(SENDER), eq(Optional.empty()), anyString());
     verify(abusiveHostRules).getAbusiveHostRulesFor(eq(NICE_HOST));
   }
 
   @Test
-  @Ignore
   void testSendCodeWithValidPreauth() throws Exception {
     Response response = resources.getJerseyTest().target(String.format("/v1/accounts/sms/code/%s", SENDER_PREAUTH))
         .queryParam("challenge", "validchallenge").request().header("X-Forwarded-For", NICE_HOST).get();
@@ -315,7 +308,6 @@ class AccountControllerTest {
   }
 
   @Test
-  @Ignore
   void testSendCodeWithInvalidPreauth() throws Exception {
     Response response = resources.getJerseyTest().target(String.format("/v1/accounts/sms/code/%s", SENDER_PREAUTH))
         .queryParam("challenge", "invalidchallenge").request().header("X-Forwarded-For", NICE_HOST).get();
@@ -326,7 +318,7 @@ class AccountControllerTest {
   }
 
   @Test
-  @Ignore
+  @Disabled
   void testSendCodeWithNoPreauth() throws Exception {
     Response response = resources.getJerseyTest().target(String.format("/v1/accounts/sms/code/%s", SENDER_PREAUTH))
         .request().header("X-Forwarded-For", NICE_HOST).get();
@@ -351,7 +343,6 @@ class AccountControllerTest {
   }
 
   @Test
-  @Ignore
   void testSendAbusiveHost() {
     Response response = resources.getJerseyTest().target(String.format("/v1/accounts/sms/code/%s", SENDER))
         .queryParam("challenge", "1234-push")
@@ -363,7 +354,6 @@ class AccountControllerTest {
   }
 
   @Test
-  @Ignore
   void testSendAbusiveHostWithValidCaptcha() throws IOException {
     Response response = resources.getJerseyTest().target(String.format("/v1/accounts/sms/code/%s", SENDER))
         .queryParam("captcha", VALID_CAPTCHA_TOKEN).request().header("X-Forwarded-For", ABUSIVE_HOST).get();
@@ -376,7 +366,8 @@ class AccountControllerTest {
   }
 
   @Test
-  @Ignore
+  // this one will not produce 402 as long as we have isCaptchaRequired hardcoded
+  // to false; also, we hardcode the requester
   void testSendAbusiveHostWithInvalidCaptcha() {
     Response response = resources.getJerseyTest().target(String.format("/v1/accounts/sms/code/%s", SENDER))
         .queryParam("captcha", INVALID_CAPTCHA_TOKEN).request().header("X-Forwarded-For", ABUSIVE_HOST).get();
@@ -385,11 +376,9 @@ class AccountControllerTest {
 
     verifyNoMoreInteractions(abusiveHostRules);
     verify(recaptchaClient).verify(eq(INVALID_CAPTCHA_TOKEN), eq(ABUSIVE_HOST));
-
   }
 
   @Test
-  @Ignore
   void testSendRateLimitedHostAutoBlock() {
     Response response = resources.getJerseyTest().target(String.format("/v1/accounts/sms/code/%s", SENDER))
         .queryParam("challenge", "1234-push")
@@ -402,28 +391,9 @@ class AccountControllerTest {
     verifyNoMoreInteractions(abusiveHostRules);
 
     verifyNoMoreInteractions(recaptchaClient);
-//    verifyNoMoreInteractions(smsSender);
   }
 
   @Test
-  @Ignore
-  void testSendRateLimitedPrefixAutoBlock() {
-    Response response = resources.getJerseyTest()
-        .target(String.format("/v1/accounts/sms/code/%s", SENDER_OVER_PREFIX)).queryParam("challenge", "1234-push")
-        .request()
-        .header("X-Forwarded-For", RATE_LIMITED_PREFIX_HOST).get();
-
-    assertThat(response.getStatus()).isEqualTo(402);
-
-    verify(abusiveHostRules).getAbusiveHostRulesFor(eq(RATE_LIMITED_PREFIX_HOST));
-    verify(abusiveHostRules).setBlockedHost(eq(RATE_LIMITED_PREFIX_HOST), eq("Auto-Block"));
-    verifyNoMoreInteractions(abusiveHostRules);
-
-    verifyNoMoreInteractions(recaptchaClient);
-  }
-
-  @Test
-  @Ignore
   void testSendRateLimitedHostNoAutoBlock() {
     Response response = resources.getJerseyTest().target(String.format("/v1/accounts/sms/code/%s", SENDER))
         .queryParam("challenge", "1234-push")
@@ -438,7 +408,6 @@ class AccountControllerTest {
   }
 
   @Test
-  @Ignore
   void testSendMultipleHost() {
     Response response = resources.getJerseyTest().target(String.format("/v1/accounts/sms/code/%s", SENDER))
         .queryParam("challenge", "1234-push")
@@ -452,35 +421,10 @@ class AccountControllerTest {
   }
 
   @Test
-  @Ignore
-  void testSendRestrictedHostOut() {
-    Response response = resources.getJerseyTest().target(String.format("/v1/accounts/sms/code/%s", SENDER))
-        .queryParam("challenge", "1234-push")
-        .request().header("X-Forwarded-For", RESTRICTED_HOST).get();
-
-    assertThat(response.getStatus()).isEqualTo(402);
-
-    verify(abusiveHostRules).getAbusiveHostRulesFor(eq(RESTRICTED_HOST));
-  }
-
-  @Test
-  void testSendRestrictedIn() throws Exception {
-    final String userLogin = "johndoe";
-    final String challenge = "challenge";
-
-    when(pendingAccountsManager.getCodeForUserLogin(userLogin)).thenReturn(Optional.of(new StoredVerificationCode("123456", System.currentTimeMillis(), challenge, VERIFICATION_CODE_LIFETIME)));
-    Response response = resources.getJerseyTest().target(String.format("/v1/accounts/sms/code/%s", userLogin))
-        .queryParam("challenge", challenge)
-        .request().header("X-Forwarded-For", RESTRICTED_HOST).get();
-
-    assertThat(response.getStatus()).isEqualTo(200);
-  }
-
-  @Test
-  @Ignore
   void testVerifyCode() throws Exception {
     AccountCreationResult result = resources.getJerseyTest().target(String.format("/v1/accounts/code/%s", "1234"))
-        .request().header("Authorization", AuthHelper.getAuthHeader(SENDER, "bar"))
+        .request()
+        .header("Authorization", AuthHelper.getAuthHeader(SENDER, "bar"))
         .put(Entity.entity(new AccountAttributes(false, 2222, null, null, null, true, null),
             MediaType.APPLICATION_JSON_TYPE), AccountCreationResult.class);
 
@@ -514,7 +458,6 @@ class AccountControllerTest {
   }
 
   @Test
-  @Ignore
   void testVerifySupportsStorage() throws Exception {
     AccountCreationResult result = resources.getJerseyTest().target(String.format("/v1/accounts/code/%s", "666666"))
         .request().header("Authorization", AuthHelper.getAuthHeader(SENDER_HAS_STORAGE, "bar"))
@@ -528,7 +471,6 @@ class AccountControllerTest {
   }
 
   @Test
-  @Ignore
   void testVerifyCodeOld() throws Exception {
     Response response = resources.getJerseyTest().target(String.format("/v1/accounts/code/%s", "1234")).request()
         .header("Authorization", AuthHelper.getAuthHeader(SENDER_OLD, "bar")).put(Entity.entity(new AccountAttributes(false, 2222, null, null, null, true, null), MediaType.APPLICATION_JSON_TYPE));
@@ -549,7 +491,6 @@ class AccountControllerTest {
   }
 
   @Test
-  @Ignore
   void testVerifyPin() throws Exception {
     AccountCreationResult result = resources.getJerseyTest().target(String.format("/v1/accounts/code/%s", "333333"))
         .request().header("Authorization", AuthHelper.getAuthHeader(SENDER_PIN, "bar"))
@@ -562,7 +503,6 @@ class AccountControllerTest {
   }
 
   @Test
-  @Ignore
   void testVerifyRegistrationLock() throws Exception {
     AccountCreationResult result = resources.getJerseyTest().target(String.format("/v1/accounts/code/%s", "666666"))
         .request().header("Authorization", AuthHelper.getAuthHeader(SENDER_REG_LOCK, "bar"))
@@ -601,7 +541,7 @@ class AccountControllerTest {
     Response response = resources.getJerseyTest().target(String.format("/v1/accounts/code/%s", "333333")).request()
         .header("Authorization", AuthHelper.getAuthHeader(SENDER_PIN, "bar")).put(Entity.entity(new AccountAttributes(false, 3333, null, null, null, true, null), MediaType.APPLICATION_JSON_TYPE));
 
-    assertThat(response.getStatus()).isEqualTo(423);    
+    assertThat(response.getStatus()).isEqualTo(423);
 
     verifyNoMoreInteractions(pinLimiter);
   }
@@ -631,7 +571,6 @@ class AccountControllerTest {
   }
 
   @Test
-  @Ignore
   void testVerifyOldPin() throws Exception {
     try {
       when(senderPinAccount.getLastSeen()).thenReturn(System.currentTimeMillis() - TimeUnit.DAYS.toMillis(7));
