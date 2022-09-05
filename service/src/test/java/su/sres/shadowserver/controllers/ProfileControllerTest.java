@@ -96,7 +96,7 @@ public class ProfileControllerTest {
               ImmutableSet.of(Account.class, DisabledPermittedAccount.class)))
           .setMapper(SystemMapper.getMapper()).setTestContainerFactory(new GrizzlyWebTestContainerFactory())
           .addResource(new ProfileController(rateLimiters, accountsManager, profilesManager, usernamesManager,
-              minioClient, postPolicyGenerator, policySigner, "profilesBucket", zkProfileOperations,
+              minioClient, postPolicyGenerator, policySigner, "profiles", zkProfileOperations,
               true))
           .build();
     } catch (final Exception e) {
@@ -177,7 +177,7 @@ public class ProfileControllerTest {
     verify(rateLimiter, times(1)).validate(eq(AuthHelper.VALID_NUMBER));
   }
 
-  @Test  
+  @Test
   public void testProfileGetByNumber() throws RateLimitExceededException {
     Profile profile = resources.getJerseyTest().target("/v1/profile/" + AuthHelper.VALID_NUMBER_TWO).request()
         .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
