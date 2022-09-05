@@ -13,9 +13,6 @@ import com.codahale.metrics.annotation.Timed;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.annotation.Nullable;
-import javax.annotation.Resource;
-import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.validation.Valid;
 import javax.ws.rs.Consumes;
@@ -31,9 +28,7 @@ import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.MediaType;
-import javax.ws.rs.core.Request;
 import javax.ws.rs.core.Response;
-import javax.ws.rs.ext.Provider;
 
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -101,11 +96,8 @@ public class AccountController {
   private final Logger logger = LoggerFactory.getLogger(AccountController.class);
   private final MetricRegistry metricRegistry = SharedMetricRegistries.getOrCreate(Constants.METRICS_NAME);
   private final Meter newUserMeter = metricRegistry.meter(name(AccountController.class, "brand_new_user"));
-  private final Meter blockedHostMeter = metricRegistry.meter(name(AccountController.class, "blocked_host"));
-  private final Meter filteredHostMeter = metricRegistry.meter(name(AccountController.class, "filtered_host"));
-  private final Meter rateLimitedHostMeter = metricRegistry.meter(name(AccountController.class, "rate_limited_host"));
-  private final Meter rateLimitedPrefixMeter = metricRegistry
-      .meter(name(AccountController.class, "rate_limited_prefix"));
+  private final Meter blockedHostMeter = metricRegistry.meter(name(AccountController.class, "blocked_host"));  
+  private final Meter rateLimitedHostMeter = metricRegistry.meter(name(AccountController.class, "rate_limited_host"));  
   private final Meter captchaRequiredMeter = metricRegistry.meter(name(AccountController.class, "captcha_required"));
   private final Meter captchaSuccessMeter = metricRegistry.meter(name(AccountController.class, "captcha_success"));
   private final Meter captchaFailureMeter = metricRegistry.meter(name(AccountController.class, "captcha_failure"));
@@ -124,7 +116,6 @@ public class AccountController {
   private final UsernamesManager usernames;
   private final AbusiveHostRules abusiveHostRules;
   private final RateLimiters rateLimiters;
-
   private final MessagesManager messagesManager;
   private final TurnTokenGenerator turnTokenGenerator;
   private final Map<String, Integer> testDevices;
@@ -145,7 +136,6 @@ public class AccountController {
     this.usernames = usernames;
     this.abusiveHostRules = abusiveHostRules;
     this.rateLimiters = rateLimiters;
-
     this.messagesManager = messagesManager;
     this.testDevices = testDevices;
     this.turnTokenGenerator = turnTokenGenerator;

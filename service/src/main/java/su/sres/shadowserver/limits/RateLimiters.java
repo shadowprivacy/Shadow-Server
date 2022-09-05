@@ -12,13 +12,11 @@ import su.sres.shadowserver.configuration.RateLimitsConfiguration.CardinalityRat
 import su.sres.shadowserver.configuration.RateLimitsConfiguration.RateLimitConfiguration;
 import su.sres.shadowserver.configuration.dynamic.DynamicRateLimitsConfiguration;
 import su.sres.shadowserver.redis.FaultTolerantRedisCluster;
-import su.sres.shadowserver.redis.ReplicatedJedisPool;
 
 public class RateLimiters {
 
   private final RateLimiter smsDestinationLimiter;
   private final RateLimiter smsVoiceIpLimiter;
-  private final RateLimiter smsVoicePrefixLimiter;
   private final RateLimiter autoBlockLimiter;
   private final RateLimiter verifyLimiter;
   private final RateLimiter pinLimiter;
@@ -55,14 +53,11 @@ public class RateLimiters {
     this.dynamicConfig = dynamicConfig;
 
     this.smsDestinationLimiter = new RateLimiter(cacheCluster, "smsDestination",
-        config.getSmsDestination().getBucketSize(), config.getSmsDestination().getLeakRatePerMinute()); 
+        config.getSmsDestination().getBucketSize(), config.getSmsDestination().getLeakRatePerMinute());
 
     this.smsVoiceIpLimiter = new RateLimiter(cacheCluster, "smsVoiceIp",
         config.getSmsVoiceIp().getBucketSize(),
         config.getSmsVoiceIp().getLeakRatePerMinute());
-
-    this.smsVoicePrefixLimiter = new RateLimiter(cacheCluster, "smsVoicePrefix",
-        config.getSmsVoicePrefix().getBucketSize(), config.getSmsVoicePrefix().getLeakRatePerMinute());
 
     this.autoBlockLimiter = new RateLimiter(cacheCluster, "autoBlock",
         config.getAutoBlock().getBucketSize(),
@@ -183,13 +178,9 @@ public class RateLimiters {
     return smsVoiceIpLimiter;
   }
 
-  public RateLimiter getSmsVoicePrefixLimiter() {
-    return smsVoicePrefixLimiter;
-  }
-
   public RateLimiter getAutoBlockLimiter() {
     return autoBlockLimiter;
-  }  
+  }
 
   public RateLimiter getVerifyLimiter() {
     return verifyLimiter;
@@ -252,5 +243,5 @@ public class RateLimiters {
     return new RateLimiter(cacheCluster, name,
         configuration.getBucketSize(),
         configuration.getLeakRatePerMinute());
-  }  
+  }
 }
