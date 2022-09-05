@@ -54,9 +54,7 @@ public class UrlSigner {
         .method(method)
         .expiry(DURATION, TimeUnit.MILLISECONDS)
         .extraHeaders(extraHeaders)
-        .build();    
-    
-    System.out.println(client.getPresignedObjectUrl(args));
+        .build();       
     
     return new URL(client.getPresignedObjectUrl(args));        
   }
