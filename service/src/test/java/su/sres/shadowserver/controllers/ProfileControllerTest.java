@@ -389,7 +389,7 @@ public class ProfileControllerTest {
     verify(profilesManager, times(1)).get(eq(AuthHelper.VALID_UUID_TWO), eq("validversion"));
     verify(profilesManager, times(1)).set(eq(AuthHelper.VALID_UUID_TWO), profileArgumentCaptor.capture());
     verify(minioClient, times(1)).removeObject(
-        RemoveObjectArgs.builder().bucket(eq("profilesBucket")).object(eq("validavatar")).build());
+        RemoveObjectArgs.builder().bucket(eq("profiles")).object(eq("validavatar")).build());
 
     assertThat(profileArgumentCaptor.getValue().getCommitment()).isEqualTo(commitment.serialize());
     assertThat(profileArgumentCaptor.getValue().getVersion()).isEqualTo("validversion");
@@ -415,7 +415,7 @@ public class ProfileControllerTest {
 
     verify(profilesManager, times(1)).get(eq(AuthHelper.VALID_UUID_TWO), eq("validversion"));
     verify(profilesManager, times(1)).set(eq(AuthHelper.VALID_UUID_TWO), profileArgumentCaptor.capture());
-    verify(minioClient, times(1)).removeObject(RemoveObjectArgs.builder().bucket(eq("profilesBucket")).object(eq("validavatar")).build());
+    verify(minioClient, times(1)).removeObject(RemoveObjectArgs.builder().bucket(eq("profiles")).object(eq("validavatar")).build());
 
     assertThat(profileArgumentCaptor.getValue().getCommitment()).isEqualTo(commitment.serialize());
     assertThat(profileArgumentCaptor.getValue().getVersion()).isEqualTo("validversion");
