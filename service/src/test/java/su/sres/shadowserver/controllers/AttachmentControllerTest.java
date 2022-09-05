@@ -38,7 +38,7 @@ import static org.mockito.Mockito.when;
 
 public class AttachmentControllerTest {
 
-  //federation excluded, reserved for future use
+  // federation excluded, reserved for future use
   // private static FederatedClientManager federatedClientManager =
   // mock(FederatedClientManager.class );
   private static RateLimiters rateLimiters = mock(RateLimiters.class);
@@ -99,28 +99,28 @@ public class AttachmentControllerTest {
         .get();
 
     assertThat(response.getStatus()).isEqualTo(401);
-  }  
-  
+  }
+
   @Test
   public void testUnacceleratedPut() {
-      AttachmentDescriptorV1 descriptor = resources.getJerseyTest()
-              .target("/v1/attachments/")
-              .request()
-              .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER_TWO, AuthHelper.VALID_PASSWORD_TWO))
-              .get(AttachmentDescriptorV1.class);
+    AttachmentDescriptorV1 descriptor = resources.getJerseyTest()
+        .target("/v1/attachments/")
+        .request()
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER_TWO, AuthHelper.VALID_PASSWORD_TWO))
+        .get(AttachmentDescriptorV1.class);
 
     assertThat(descriptor.getLocation()).startsWith("https://minio.example.com");
     assertThat(descriptor.getId()).isGreaterThan(0);
     assertThat(descriptor.getIdString()).isNotBlank();
   }
-  
+
   @Test
   public void testUnacceleratedGet() throws MalformedURLException {
     AttachmentUri uri = resources.getJerseyTest()
-                                 .target("/v1/attachments/1234")
-                                 .request()
-                                 .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER_TWO, AuthHelper.VALID_PASSWORD_TWO))
-                                 .get(AttachmentUri.class);
+        .target("/v1/attachments/1234")
+        .request()
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER_TWO, AuthHelper.VALID_PASSWORD_TWO))
+        .get(AttachmentUri.class);
 
     assertThat(uri.getLocation().getHost()).isEqualTo("minio.example.com");
   }

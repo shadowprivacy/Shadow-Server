@@ -28,7 +28,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class UrlSignerTest {
 
   @Test
-  public void testTransferAcceleration() throws InvalidKeyException, ErrorResponseException, IllegalArgumentException, InsufficientDataException, InternalException, InvalidBucketNameException, InvalidExpiresRangeException, InvalidResponseException, NoSuchAlgorithmException, XmlParserException, ServerException, IOException {
+  public void testTransferUnaccelerated() throws InvalidKeyException, ErrorResponseException, IllegalArgumentException, InsufficientDataException, InternalException, InvalidBucketNameException, InvalidExpiresRangeException, InvalidResponseException, NoSuchAlgorithmException, XmlParserException, ServerException, IOException {
     UrlSigner signer = new UrlSigner("foo", "bar", "attachments-test", "https://minio.example.com");
     URL url = signer.getPreSignedUrl(1234, Method.GET);
 
