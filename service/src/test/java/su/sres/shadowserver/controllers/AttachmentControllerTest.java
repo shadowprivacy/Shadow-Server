@@ -58,7 +58,7 @@ public class AttachmentControllerTest {
       // federation excluded, reserved for future use
       // .addResource(new AttachmentController(rateLimiters, federatedClientManager,
       // urlSigner))
-      .addResource(new AttachmentControllerV1(rateLimiters, "accessKey", "accessSecret", "attachment-bucket"))
+      .addResource(new AttachmentControllerV1(rateLimiters, "accessKey", "accessSecret", "attachment-bucket", "https://minio.example.com"))
       .addResource(new AttachmentControllerV2(rateLimiters, "accessKey", "accessSecret", "us-east-1", "attachmentv2-bucket"))
       .build();
 
@@ -99,29 +99,29 @@ public class AttachmentControllerTest {
         .get();
 
     assertThat(response.getStatus()).isEqualTo(401);
-  }
-
+  }  
+  
   @Test
-  public void testAcceleratedPut() {
-    AttachmentDescriptorV1 descriptor = resources.getJerseyTest()
-        .target("/v1/attachments/")
-        .request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
-        .get(AttachmentDescriptorV1.class);
+  public void testUnacceleratedPut() {
+      AttachmentDescriptorV1 descriptor = resources.getJerseyTest()
+              .target("/v1/attachments/")
+              .request()
+              .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER_TWO, AuthHelper.VALID_PASSWORD_TWO))
+              .get(AttachmentDescriptorV1.class);
 
-    assertThat(descriptor.getLocation()).startsWith("https://attachment-bucket.s3-accelerate.amazonaws.com");
+    assertThat(descriptor.getLocation()).startsWith("https://minio.example.com");
     assertThat(descriptor.getId()).isGreaterThan(0);
     assertThat(descriptor.getIdString()).isNotBlank();
   }
-
+  
   @Test
-  public void testAcceleratedGet() throws MalformedURLException {
+  public void testUnacceleratedGet() throws MalformedURLException {
     AttachmentUri uri = resources.getJerseyTest()
-        .target("/v1/attachments/1234")
-        .request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
-        .get(AttachmentUri.class);
+                                 .target("/v1/attachments/1234")
+                                 .request()
+                                 .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER_TWO, AuthHelper.VALID_PASSWORD_TWO))
+                                 .get(AttachmentUri.class);
 
-    assertThat(uri.getLocation().getHost()).isEqualTo("attachment-bucket.s3-accelerate.amazonaws.com");
+    assertThat(uri.getLocation().getHost()).isEqualTo("minio.example.com");
   }
 }

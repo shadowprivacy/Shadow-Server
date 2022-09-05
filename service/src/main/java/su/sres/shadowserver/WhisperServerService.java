@@ -453,7 +453,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
      * = new MessageController(rateLimiters, pushSender, receiptSender,
      * accountsManager, messagesManager, federatedClientManager, null);
      */
-    AttachmentControllerV1 attachmentControllerV1 = new AttachmentControllerV1(rateLimiters, config.getAwsAttachmentsConfiguration().getAccessKey(), config.getAwsAttachmentsConfiguration().getAccessSecret(), config.getAwsAttachmentsConfiguration().getBucket());
+    AttachmentControllerV1 attachmentControllerV1 = new AttachmentControllerV1(rateLimiters, config.getAwsAttachmentsConfiguration().getAccessKey(), config.getAwsAttachmentsConfiguration().getAccessSecret(), config.getAwsAttachmentsConfiguration().getBucket(), config.getAwsAttachmentsConfiguration().getUri());
     AttachmentControllerV2 attachmentControllerV2 = new AttachmentControllerV2(rateLimiters, config.getAwsAttachmentsConfiguration().getAccessKey(), config.getAwsAttachmentsConfiguration().getAccessSecret(), config.getAwsAttachmentsConfiguration().getRegion(),
         config.getAwsAttachmentsConfiguration().getBucket());
     DebugLogController debugLogController = new DebugLogController(rateLimiters, config.getDebugLogsConfiguration().getAccessKey(), config.getDebugLogsConfiguration().getAccessSecret(), config.getDebugLogsConfiguration().getRegion(), config.getDebugLogsConfiguration().getBucket());

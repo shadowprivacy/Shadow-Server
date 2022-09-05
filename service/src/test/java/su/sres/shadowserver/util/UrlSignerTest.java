@@ -5,32 +5,33 @@
  */
 package su.sres.shadowserver.util;
 
-import com.amazonaws.HttpMethod;
-
+import io.minio.errors.ErrorResponseException;
+import io.minio.errors.InsufficientDataException;
+import io.minio.errors.InternalException;
+import io.minio.errors.InvalidBucketNameException;
+import io.minio.errors.InvalidExpiresRangeException;
+import io.minio.errors.InvalidResponseException;
+import io.minio.errors.ServerException;
+import io.minio.errors.XmlParserException;
+import io.minio.http.Method;
 import su.sres.shadowserver.s3.UrlSigner;
 
 import org.junit.Test;
 
+import java.io.IOException;
 import java.net.URL;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class UrlSignerTest {
 
   @Test
-  public void testTransferAcceleration() {
-	  UrlSigner signer = new UrlSigner("foo", "bar", "attachments-test");
-    URL url = signer.getPreSignedUrl(1234, HttpMethod.GET);
+  public void testTransferAcceleration() throws InvalidKeyException, ErrorResponseException, IllegalArgumentException, InsufficientDataException, InternalException, InvalidBucketNameException, InvalidExpiresRangeException, InvalidResponseException, NoSuchAlgorithmException, XmlParserException, ServerException, IOException {
+    UrlSigner signer = new UrlSigner("foo", "bar", "attachments-test", "https://minio.example.com");
+    URL url = signer.getPreSignedUrl(1234, Method.GET);
 
-    assertThat(url).hasHost("attachments-test.s3-accelerate.amazonaws.com");
+    assertThat(url).hasHost("minio.example.com");
   }
-
-  @Test
-  public void testTransferUnaccelerated() {
-	  UrlSigner signer = new UrlSigner("foo", "bar", "attachments-test");
-    URL url = signer.getPreSignedUrl(1234, HttpMethod.GET);
-
-    assertThat(url).hasHost("s3.amazonaws.com");
-  }
-
 }

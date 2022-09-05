@@ -2,6 +2,7 @@ push:                         # FCM push server configuration
   queueSize:                                                            # Size of the push pending queue (can be left empty)
 
 awsAttachments:               # private cloud access configuration for attachments
+  uri: "https://localhost:9000"                                         # Minio URL as seen by the Shadow server
   accessKey: minio_shadow                                               # Minio service access key
   accessSecret: your_service_password                                   # Minio service secret key configured when installing Minio  
   bucket: attachments
