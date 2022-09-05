@@ -28,7 +28,7 @@ public class AwsAttachmentsConfiguration {
   
   @NotEmpty
   @JsonProperty
-  private String endpoint;
+  private String uri;
 
   public String getAccessKey() {
     return accessKey;
@@ -47,6 +47,6 @@ public class AwsAttachmentsConfiguration {
   }
   
   public String getUri() {
-    return endpoint;
+    return uri;
   }
 }
