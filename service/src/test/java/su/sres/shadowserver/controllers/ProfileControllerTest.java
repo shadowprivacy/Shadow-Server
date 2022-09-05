@@ -21,7 +21,7 @@ import com.google.common.collect.ImmutableSet;
 
 import org.apache.commons.lang3.RandomStringUtils;
 import org.glassfish.jersey.test.grizzly.GrizzlyWebTestContainerFactory;
-import org.junit.Before;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatcher;
@@ -104,7 +104,7 @@ public class ProfileControllerTest {
     }
   }
 
-  @Before
+  @BeforeEach
   public void setup() throws Exception {
 
     reset(minioClient);
@@ -150,7 +150,7 @@ public class ProfileControllerTest {
 
     when(profilesManager.get(eq(AuthHelper.VALID_UUID), eq("someversion"))).thenReturn(Optional.empty());
     when(profilesManager.get(eq(AuthHelper.VALID_UUID_TWO), eq("validversion"))).thenReturn(Optional.of(new VersionedProfile(
-        "validversion", "validname", "profiles/validavatar", "emoji", "about", null, "validcommitmnet".getBytes())));
+        "validversion", "validname", "validavatar", "emoji", "about", null, "validcommitmnet".getBytes())));
 
     clearInvocations(rateLimiter);
     clearInvocations(accountsManager);
@@ -177,7 +177,7 @@ public class ProfileControllerTest {
     verify(rateLimiter, times(1)).validate(eq(AuthHelper.VALID_NUMBER));
   }
 
-  @Test
+  @Test  
   public void testProfileGetByNumber() throws RateLimitExceededException {
     Profile profile = resources.getJerseyTest().target("/v1/profile/" + AuthHelper.VALID_NUMBER_TWO).request()
         .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
