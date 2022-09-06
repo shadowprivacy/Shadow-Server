@@ -13,7 +13,6 @@ import org.jdbi.v3.core.HandleConsumer;
 import org.jdbi.v3.core.Jdbi;
 import org.jdbi.v3.core.transaction.TransactionException;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import su.sres.shadowserver.configuration.CircuitBreakerConfiguration;
@@ -56,7 +55,6 @@ public class AccountsTest {
     this.accounts = new Accounts(faultTolerantDatabase);
   }
 
-  @Ignore //
   @Test
   public void testStore() throws SQLException, IOException {
     Device device = generateDevice(1);
@@ -70,7 +68,6 @@ public class AccountsTest {
     verifyStoredState(statement, "johndoe", account.getUuid(), account);
   }
 
-  @Ignore //
   @Test
   public void testStoreMulti() throws SQLException, IOException {
     Set<Device> devices = new HashSet<>();
@@ -87,7 +84,6 @@ public class AccountsTest {
     verifyStoredState(statement, "johndoe", account.getUuid(), account);
   }
 
-  @Ignore //
   @Test
   public void testRetrieve() {
     Set<Device> devicesFirst = new HashSet<>();
@@ -129,7 +125,6 @@ public class AccountsTest {
     verifyStoredState("+14152221111", uuidSecond, retrievedSecond.get(), accountSecond);
   }
 
-  @Ignore //
   @Test
   public void testOverwrite() throws Exception {
     Device device = generateDevice(1);
@@ -152,7 +147,6 @@ public class AccountsTest {
     verifyStoredState(statement, "johndoe", firstUuid, account);
   }
 
-  @Ignore //
   @Test
   public void testUpdate() {
     Device device = generateDevice(1);
@@ -177,7 +171,6 @@ public class AccountsTest {
     verifyStoredState("johndoe", account.getUuid(), retrieved.get(), account);
   }
 
-  @Ignore //
   @Test
   public void testRetrieveFrom() {
     List<Account> users = new ArrayList<>();
@@ -231,7 +224,6 @@ public class AccountsTest {
     verifyStoredState(retainedAccount.getUserLogin(), retainedAccount.getUuid(), accounts.get(retainedAccount.getUuid()).get(), retainedAccount);
   }
 
-  @Ignore //
   @Test
   public void testVacuum() {
     Device device = generateDevice(1);
@@ -248,7 +240,6 @@ public class AccountsTest {
     verifyStoredState("johndoe", account.getUuid(), retrieved.get(), account);
   }
 
-  @Ignore //
   @Test
   public void testMissing() {
     Device device = generateDevice(1);
@@ -265,7 +256,6 @@ public class AccountsTest {
     assertThat(retrieved.isPresent()).isFalse();
   }
 
-  @Ignore //
   @Test
   public void testBreaker() throws InterruptedException {
     Jdbi jdbi = mock(Jdbi.class);
