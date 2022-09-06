@@ -385,11 +385,11 @@ public class ProfileControllerTest {
             null, true), MediaType.APPLICATION_JSON_TYPE), ProfileAvatarUploadAttributes.class);
 
     ArgumentCaptor<VersionedProfile> profileArgumentCaptor = ArgumentCaptor.forClass(VersionedProfile.class);
-
+    ArgumentCaptor<RemoveObjectArgs> argsCaptor = ArgumentCaptor.forClass(RemoveObjectArgs.class);
+    
     verify(profilesManager, times(1)).get(eq(AuthHelper.VALID_UUID_TWO), eq("validversion"));
     verify(profilesManager, times(1)).set(eq(AuthHelper.VALID_UUID_TWO), profileArgumentCaptor.capture());
-    verify(minioClient, times(1)).removeObject(
-        RemoveObjectArgs.builder().bucket(eq("profilesBucket")).object(eq("validavatar")).build());
+    verify(minioClient, times(1)).removeObject(argsCaptor.capture());
 
     assertThat(profileArgumentCaptor.getValue().getCommitment()).isEqualTo(commitment.serialize());
     assertThat(profileArgumentCaptor.getValue().getVersion()).isEqualTo("validversion");
@@ -397,6 +397,9 @@ public class ProfileControllerTest {
         "123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678");
     assertThat(profileArgumentCaptor.getValue().getAboutEmoji()).isNull();
     assertThat(profileArgumentCaptor.getValue().getAbout()).isNull();
+    
+    assertThat(argsCaptor.getValue().bucket()).isEqualTo("profiles");
+    assertThat(argsCaptor.getValue().object()).isEqualTo("validavatar");
   }
 
   @Test
@@ -412,16 +415,19 @@ public class ProfileControllerTest {
         .put(Entity.entity(new CreateProfileRequest(commitment, "validversion", name, null, null, null, true), MediaType.APPLICATION_JSON_TYPE), ProfileAvatarUploadAttributes.class);
 
     ArgumentCaptor<VersionedProfile> profileArgumentCaptor = ArgumentCaptor.forClass(VersionedProfile.class);
+    ArgumentCaptor<RemoveObjectArgs> argsCaptor = ArgumentCaptor.forClass(RemoveObjectArgs.class);
 
     verify(profilesManager, times(1)).get(eq(AuthHelper.VALID_UUID_TWO), eq("validversion"));
     verify(profilesManager, times(1)).set(eq(AuthHelper.VALID_UUID_TWO), profileArgumentCaptor.capture());
-    verify(minioClient, times(1)).removeObject(RemoveObjectArgs.builder().bucket(eq("profilesBucket")).object(eq("validavatar")).build());
+    verify(minioClient, times(1)).removeObject(argsCaptor.capture());
 
     assertThat(profileArgumentCaptor.getValue().getCommitment()).isEqualTo(commitment.serialize());
     assertThat(profileArgumentCaptor.getValue().getVersion()).isEqualTo("validversion");
     assertThat(profileArgumentCaptor.getValue().getName()).isEqualTo(name);
     assertThat(profileArgumentCaptor.getValue().getAboutEmoji()).isNull();
     assertThat(profileArgumentCaptor.getValue().getAbout()).isNull();
+    assertThat(argsCaptor.getValue().bucket()).isEqualTo("profiles");
+    assertThat(argsCaptor.getValue().object()).isEqualTo("validavatar");
   }
 
   @Test
