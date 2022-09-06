@@ -81,7 +81,7 @@ public class ActiveUserCounterTest {
 	when(noDeviceAccount.getMasterDevice()).thenReturn(Optional.ofNullable(null));
 	when(noDeviceAccount.getUserLogin()).thenReturn(ACCOUNT_NUMBER_NODEVICE);
 
-	when(commands.get(any(String.class))).thenReturn("{\"fromNumber\":\"+\",\"platforms\":{},\"countries\":{}}");
+	when(commands.get(any(String.class))).thenReturn("{\"fromNumber\":\"+\",\"platforms\":{}}");
 	when(metricsFactory.getReporters()).thenReturn(ImmutableList.of());
     }
 
