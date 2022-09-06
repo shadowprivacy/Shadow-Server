@@ -128,7 +128,7 @@ public class ActiveUserCounterTest {
 	activeUserCounter.timeAndProcessCrawlChunk(Optional.of(UUID_IOS), Arrays.asList(iosAccount));
 
 	verify(iosAccount, times(1)).getMasterDevice();
-	verify(iosAccount, times(1)).getUserLogin();
+	// verify(iosAccount, times(1)).getUserLogin();
 
 	verify(iosDevice, times(1)).getLastSeen();
 	verify(iosDevice, times(1)).getApnId();
@@ -137,7 +137,7 @@ public class ActiveUserCounterTest {
 	verify(cacheCluster, times(1)).withCluster(any());
 	verify(cacheCluster, times(1)).useCluster(any());
 	verify(commands, times(1)).get(any(String.class));
-	verify(commands, times(1)).set(any(String.class), eq("{\"fromUuid\":\"" + UUID_IOS.toString() + "\",\"platforms\":{\"ios\":[1,1,1,1,1]},\"countries\":{\"1\":[1,1,1,1,1]}}"));
+	verify(commands, times(1)).set(any(String.class), eq("{\"fromUuid\":\"" + UUID_IOS.toString() + "\",\"platforms\":{\"ios\":[1,1,1,1,1]}}"));
 
 	verify(metricsFactory, times(0)).getReporters();
 
@@ -161,7 +161,7 @@ public class ActiveUserCounterTest {
 	verify(cacheCluster, times(1)).withCluster(any());
 	verify(cacheCluster, times(1)).useCluster(any());
 	verify(commands, times(1)).get(eq(TALLY_KEY));
-	verify(commands, times(1)).set(any(String.class), eq("{\"fromUuid\":\"" + UUID_NODEVICE + "\",\"platforms\":{},\"countries\":{}}"));
+	verify(commands, times(1)).set(any(String.class), eq("{\"fromUuid\":\"" + UUID_NODEVICE + "\",\"platforms\":{}}"));
 
 	verify(metricsFactory, times(0)).getReporters();
 
@@ -182,9 +182,9 @@ public class ActiveUserCounterTest {
 		Arrays.asList(iosAccount, androidAccount, noDeviceAccount));
 
 	verify(iosAccount, times(1)).getMasterDevice();
-	verify(iosAccount, times(1)).getUserLogin();
+	// verify(iosAccount, times(1)).getUserLogin();
 	verify(androidAccount, times(1)).getMasterDevice();
-	verify(androidAccount, times(1)).getUserLogin();
+	// verify(androidAccount, times(1)).getUserLogin();
 	verify(noDeviceAccount, times(1)).getMasterDevice();
 
 	verify(iosDevice, times(1)).getLastSeen();
@@ -198,7 +198,7 @@ public class ActiveUserCounterTest {
 	verify(cacheCluster, times(1)).withCluster(any());
 	verify(cacheCluster, times(1)).useCluster(any());
 	verify(commands, times(1)).get(eq(TALLY_KEY));
-	verify(commands, times(1)).set(any(String.class), eq("{\"fromUuid\":\"" + UUID_IOS + "\",\"platforms\":{\"android\":[0,0,0,1,1],\"ios\":[1,1,1,1,1]},\"countries\":{\"55\":[0,0,0,1,1],\"1\":[1,1,1,1,1]}}"));
+	verify(commands, times(1)).set(any(String.class), eq("{\"fromUuid\":\"" + UUID_IOS + "\",\"platforms\":{\"android\":[0,0,0,1,1],\"ios\":[1,1,1,1,1]}}"));
 
 	verify(metricsFactory, times(0)).getReporters();
 

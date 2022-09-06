@@ -15,7 +15,6 @@ import io.dropwizard.metrics.ReporterFactory;
 import su.sres.shadowserver.entities.ActiveUserTally;
 import su.sres.shadowserver.redis.FaultTolerantRedisCluster;
 import su.sres.shadowserver.util.SystemMapper;
-import su.sres.shadowserver.util.Util;
 
 import java.io.IOException;
 import java.util.HashMap;
