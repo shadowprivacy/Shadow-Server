@@ -53,7 +53,7 @@ public class CertificateController {
     @Produces(MediaType.APPLICATION_JSON)
     @Path("/delivery")
     public DeliveryCertificate getDeliveryCertificate(@Auth Account account,
-	    @QueryParam("includeUserLogin") Optional<Boolean> includeUserLogin)
+	    @QueryParam("includeE164") Optional<Boolean> includeUserLogin)
 	    throws IOException, InvalidKeyException {
 	if (account.getAuthenticatedDevice().isEmpty()) {
 	    throw new AssertionError();
