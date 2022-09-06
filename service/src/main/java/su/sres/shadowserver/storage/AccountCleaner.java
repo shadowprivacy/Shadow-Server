@@ -23,63 +23,64 @@ import java.util.concurrent.TimeUnit;
 import static com.codahale.metrics.MetricRegistry.name;
 
 public class AccountCleaner extends AccountDatabaseCrawlerListener {
-    private static final MetricRegistry metricRegistry = SharedMetricRegistries.getOrCreate(Constants.METRICS_NAME);
-    private static final Meter expiredAccountsMeter = metricRegistry.meter(name(AccountCleaner.class, "expiredAccounts"));
-    private static final Histogram deletableAccountHistogram = metricRegistry.histogram(name(AccountCleaner.class, "deletableAccountsPerChunk"));
+  private static final MetricRegistry metricRegistry = SharedMetricRegistries.getOrCreate(Constants.METRICS_NAME);
+  private static final Meter expiredAccountsMeter = metricRegistry.meter(name(AccountCleaner.class, "expiredAccounts"));
+  private static final Histogram deletableAccountHistogram = metricRegistry.histogram(name(AccountCleaner.class, "deletableAccountsPerChunk"));
 
-    @VisibleForTesting
-    public static final int MAX_ACCOUNT_UPDATES_PER_CHUNK = 40;
+  @VisibleForTesting
+  public static final int MAX_ACCOUNT_UPDATES_PER_CHUNK = 40;
 
-    private final AccountsManager accountsManager;
+  private final AccountsManager accountsManager;
 
-    public AccountCleaner(AccountsManager accountsManager) {
-	this.accountsManager = accountsManager;
+  public AccountCleaner(AccountsManager accountsManager) {
+    this.accountsManager = accountsManager;
+  }
+
+  @Override
+  public void onCrawlStart() {
+  }
+
+  @Override
+  public void onCrawlEnd(Optional<UUID> fromUuid) {
+  }
+
+  @Override
+  protected void onCrawlChunk(Optional<UUID> fromUuid, List<Account> chunkAccounts) {
+
+    int accountUpdateCount = 0;
+    int deletableAccountCount = 0;
+    HashSet<Account> accountsToDelete = new HashSet<Account>();
+    for (Account account : chunkAccounts) {
+      if (isExpired(account)) {
+        deletableAccountCount++;
+      }
+      if (needsExplicitRemoval(account)) {
+        expiredAccountsMeter.mark();
+
+        if (accountUpdateCount < MAX_ACCOUNT_UPDATES_PER_CHUNK) {
+          accountsToDelete.add(account);
+          accountUpdateCount++;          
+        }
+      }
     }
 
-    @Override
-    public void onCrawlStart() {
-    }
+    if (!accountsToDelete.isEmpty())
+      accountsManager.delete(accountsToDelete, AccountsManager.DeletionReason.EXPIRED);
 
-    @Override
-    public void onCrawlEnd(Optional<UUID> fromUuid) {
-    }
+    deletableAccountHistogram.update(deletableAccountCount);
+  }
 
-    @Override
-    protected void onCrawlChunk(Optional<UUID> fromUuid, List<Account> chunkAccounts) {
+  private boolean needsExplicitRemoval(Account account) {
+    return account.getMasterDevice().isPresent() && hasPushToken(account.getMasterDevice().get()) && isExpired(account);
+  }
 
-	int accountUpdateCount = 0;
-	int deletableAccountCount = 0;
-	HashSet<Account> accountsToDelete = new HashSet<Account>();
-	for (Account account : chunkAccounts) {
-	    if (isExpired(account)) {
-		deletableAccountCount++;
-	    }
-	    if (needsExplicitRemoval(account)) {
-		expiredAccountsMeter.mark();
+  private boolean hasPushToken(Device device) {
+    return !Util.isEmpty(device.getGcmId()) || !Util.isEmpty(device.getApnId())
+        || !Util.isEmpty(device.getVoipApnId()) || device.getFetchesMessages();
+  }
 
-		if (accountUpdateCount < MAX_ACCOUNT_UPDATES_PER_CHUNK) {
-		    accountsToDelete.add(account);
-		    accountUpdateCount++;
-		}
-	    }
-	}
-
-	if (!accountsToDelete.isEmpty()) accountsManager.delete(accountsToDelete, AccountsManager.DeletionReason.EXPIRED);
-
-	deletableAccountHistogram.update(deletableAccountCount);
-    }
-
-    private boolean needsExplicitRemoval(Account account) {
-	return account.getMasterDevice().isPresent() && hasPushToken(account.getMasterDevice().get()) && isExpired(account);
-    }
-
-    private boolean hasPushToken(Device device) {
-	return !Util.isEmpty(device.getGcmId()) || !Util.isEmpty(device.getApnId())
-		|| !Util.isEmpty(device.getVoipApnId()) || device.getFetchesMessages();
-    }
-
-    private boolean isExpired(Account account) {
-	return account.getLastSeen() + TimeUnit.DAYS.toMillis(365) < System.currentTimeMillis();
-    }
+  private boolean isExpired(Account account) {
+    return account.getLastSeen() + TimeUnit.DAYS.toMillis(365) < System.currentTimeMillis();
+  }
 
 }
