@@ -414,5 +414,9 @@
       </column>
     </addColumn>
   </changeSet>
+  
+  <changeSet id="25" author="2A">
+    <sql>ALTER TABLE remote_config ALTER COLUMN uuids TYPE UUID[] USING array[uuids]::UUID[];</sql>
+  </changeSet>
 
 </databaseChangeLog>
