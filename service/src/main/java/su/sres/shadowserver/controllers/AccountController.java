@@ -96,8 +96,8 @@ public class AccountController {
   private final Logger logger = LoggerFactory.getLogger(AccountController.class);
   private final MetricRegistry metricRegistry = SharedMetricRegistries.getOrCreate(Constants.METRICS_NAME);
   private final Meter newUserMeter = metricRegistry.meter(name(AccountController.class, "brand_new_user"));
-  private final Meter blockedHostMeter = metricRegistry.meter(name(AccountController.class, "blocked_host"));  
-  private final Meter rateLimitedHostMeter = metricRegistry.meter(name(AccountController.class, "rate_limited_host"));  
+  private final Meter blockedHostMeter = metricRegistry.meter(name(AccountController.class, "blocked_host"));
+  private final Meter rateLimitedHostMeter = metricRegistry.meter(name(AccountController.class, "rate_limited_host"));
   private final Meter captchaRequiredMeter = metricRegistry.meter(name(AccountController.class, "captcha_required"));
   private final Meter captchaSuccessMeter = metricRegistry.meter(name(AccountController.class, "captcha_success"));
   private final Meter captchaFailureMeter = metricRegistry.meter(name(AccountController.class, "captcha_failure"));
@@ -271,7 +271,7 @@ public class AccountController {
 
       Optional<StoredVerificationCode> storedVerificationCode = pendingAccounts.getCodeForUserLogin(userLogin);
 
-      if (storedVerificationCode.isEmpty() || !storedVerificationCode.get().isValid(verificationCode)) {
+      if (storedVerificationCode.isEmpty() || !storedVerificationCode.get().isValid(verificationCode, localParametersConfiguration.getVerificationCodeLifetime())) {
         throw new WebApplicationException(Response.status(403).build());
       }
 
@@ -657,7 +657,7 @@ public class AccountController {
           Optional<String> storedPushChallenge = storedVerificationCode.map(StoredVerificationCode::getPushCode);
 
           if (!pushChallenge.get().equals(storedPushChallenge.orElse(null))) {
-            tags.add(Tag.of(CHALLENGE_MATCH_TAG_NAME, "false"));             
+            tags.add(Tag.of(CHALLENGE_MATCH_TAG_NAME, "false"));
             return new CaptchaRequirement(true, false);
           } else {
             tags.add(Tag.of(CHALLENGE_MATCH_TAG_NAME, "true"));

@@ -129,8 +129,7 @@ public class DeviceController {
     VerificationCode verificationCode = generateVerificationCode();
     StoredVerificationCode storedVerificationCode = new StoredVerificationCode(verificationCode.getVerificationCode(),
         System.currentTimeMillis(),
-        null,
-        verificationCodeLifetime);
+        null);
 
     pendingDevices.store(account.getUserLogin(), storedVerificationCode);
 
@@ -159,7 +158,7 @@ public class DeviceController {
 
       Optional<StoredVerificationCode> storedVerificationCode = pendingDevices.getCodeForUserLogin(userLogin);
 
-      if (!storedVerificationCode.isPresent() || !storedVerificationCode.get().isValid(verificationCode)) {
+      if (!storedVerificationCode.isPresent() || !storedVerificationCode.get().isValid(verificationCode, verificationCodeLifetime)) {
         throw new WebApplicationException(Response.status(403).build());
       }
 

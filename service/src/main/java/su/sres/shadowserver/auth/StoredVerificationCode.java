@@ -18,21 +18,18 @@ public class StoredVerificationCode {
   private String code;
 
   @JsonProperty
-  private long   timestamp;
-  
+  private long timestamp;
+
   @JsonProperty
   private String pushCode;
-  
-  @JsonProperty
-  private int lifetime;
-    
-  public StoredVerificationCode() {}
 
-  public StoredVerificationCode(String code, long timestamp, String pushCode, int lifetime) {
-    this.code      = code;
+  public StoredVerificationCode() {
+  }
+
+  public StoredVerificationCode(String code, long timestamp, String pushCode) {
+    this.code = code;
     this.timestamp = timestamp;
-    this.pushCode  = pushCode;
-    this.lifetime =  lifetime; 
+    this.pushCode = pushCode;
   }
 
   public String getCode() {
@@ -42,30 +39,27 @@ public class StoredVerificationCode {
   public long getTimestamp() {
     return timestamp;
   }
-  
+
   public String getPushCode() {
-	    return pushCode;
-	  }
-  
-  public int getLifetime() {
-	    return lifetime;
-	  }
- 
-  // this is for storing the push code into the already existing entry during pre-auth
-  public void setPushCode(String inputPushCode) {
-	  pushCode = inputPushCode;
+    return pushCode;
   }
 
-  public boolean isValid(String theirCodeString) {
-	  if (timestamp + TimeUnit.HOURS.toMillis(lifetime) < System.currentTimeMillis()) {
-	      return false;
-	    }
+  // this is for storing the push code into the already existing entry during
+  // pre-auth
+  public void setPushCode(String inputPushCode) {
+    pushCode = inputPushCode;
+  }
 
-	    if (Util.isEmpty(code) || Util.isEmpty(theirCodeString)) {
+  public boolean isValid(String theirCodeString, int lifetime) {
+    if (timestamp + TimeUnit.HOURS.toMillis(lifetime) < System.currentTimeMillis()) {
       return false;
     }
 
-    byte[] ourCode   = code.getBytes();
+    if (Util.isEmpty(code) || Util.isEmpty(theirCodeString)) {
+      return false;
+    }
+
+    byte[] ourCode = code.getBytes();
     byte[] theirCode = theirCodeString.getBytes();
 
     return MessageDigest.isEqual(ourCode, theirCode);

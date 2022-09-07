@@ -224,8 +224,7 @@ public class CreatePendingAccountCommand extends EnvironmentCommand<WhisperServe
           VerificationCode verificationCode = generateVerificationCode(user);
           StoredVerificationCode storedVerificationCode = new StoredVerificationCode(verificationCode.getVerificationCode(),
               System.currentTimeMillis(),
-              null,
-              configuration.getLocalParametersConfiguration().getVerificationCodeLifetime());
+              null);
           pendingAccountsManager.store(user, storedVerificationCode);
 
           logger.warn("Added new user " + user + " to pending accounts with code " + storedVerificationCode.getCode());
@@ -237,8 +236,7 @@ public class CreatePendingAccountCommand extends EnvironmentCommand<WhisperServe
           VerificationCode verificationCode = generateVerificationCode(user);
           StoredVerificationCode storedVerificationCode = new StoredVerificationCode(verificationCode.getVerificationCode(),
               System.currentTimeMillis(),
-              null,
-              configuration.getLocalParametersConfiguration().getVerificationCodeLifetime());
+              null);
           pendingAccountsManager.store(user, storedVerificationCode);
 
           logger.warn("Added existing inactive user " + user + " to pending accounts with code " + storedVerificationCode.getCode());
