@@ -8,7 +8,6 @@ package su.sres.shadowserver.controllers;
 import com.google.common.collect.ImmutableSet;
 import org.glassfish.jersey.test.grizzly.GrizzlyWebTestContainerFactory;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -28,7 +27,6 @@ import junitparams.JUnitParamsRunner;
 import junitparams.Parameters;
 import su.sres.shadowserver.auth.DisabledPermittedAccount;
 import su.sres.shadowserver.auth.StoredVerificationCode;
-import su.sres.shadowserver.controllers.DeviceController;
 import su.sres.shadowserver.entities.AccountAttributes;
 import su.sres.shadowserver.entities.DeviceResponse;
 import su.sres.shadowserver.limits.RateLimiter;
@@ -103,7 +101,7 @@ public class DeviceControllerTest {
 
   @Before
   public void setup() throws Exception {
-    when(rateLimiters.getSmsDestinationLimiter()).thenReturn(rateLimiter);    
+    when(rateLimiters.getSmsDestinationLimiter()).thenReturn(rateLimiter);
     when(rateLimiters.getVerifyLimiter()).thenReturn(rateLimiter);
     when(rateLimiters.getAllocateDeviceLimiter()).thenReturn(rateLimiter);
     when(rateLimiters.getVerifyDeviceLimiter()).thenReturn(rateLimiter);
@@ -123,7 +121,7 @@ public class DeviceControllerTest {
     when(account.isGv1MigrationSupported()).thenReturn(true);
 
     when(pendingDevicesManager.getCodeForUserLogin(AuthHelper.VALID_NUMBER)).thenReturn(Optional.of(new StoredVerificationCode("5678901", System.currentTimeMillis(), null, VERIFICATION_CODE_LIFETIME)));
-    when(pendingDevicesManager.getCodeForUserLogin(AuthHelper.VALID_NUMBER_TWO)).thenReturn(Optional.of(new StoredVerificationCode("1112223", System.currentTimeMillis() - TimeUnit.MINUTES.toMillis(31), null, VERIFICATION_CODE_LIFETIME)));
+    when(pendingDevicesManager.getCodeForUserLogin(AuthHelper.VALID_NUMBER_TWO)).thenReturn(Optional.of(new StoredVerificationCode("1112223", System.currentTimeMillis() - TimeUnit.HOURS.toMillis(50), null, VERIFICATION_CODE_LIFETIME)));
     when(accountsManager.get(AuthHelper.VALID_NUMBER)).thenReturn(Optional.of(account));
     when(accountsManager.get(AuthHelper.VALID_NUMBER_TWO)).thenReturn(Optional.of(maxedAccount));
   }
@@ -187,7 +185,6 @@ public class DeviceControllerTest {
   }
 
   @Test
-  @Ignore
   public void oldDeviceRegisterTest() throws Exception {
     Response response = resources.getJerseyTest()
         .target("/v1/devices/1112223")
