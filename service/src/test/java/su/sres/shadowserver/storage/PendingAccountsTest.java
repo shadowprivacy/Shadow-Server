@@ -10,13 +10,10 @@ import com.opentable.db.postgres.junit.EmbeddedPostgresRules;
 import com.opentable.db.postgres.junit.PreparedDbRule;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import su.sres.shadowserver.auth.StoredVerificationCode;
 import su.sres.shadowserver.configuration.CircuitBreakerConfiguration;
-import su.sres.shadowserver.storage.FaultTolerantDatabase;
-import su.sres.shadowserver.storage.PendingAccounts;
 
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -34,16 +31,15 @@ public class PendingAccountsTest {
 
   @Before
   public void setupAccountsDao() {
-	  this.pendingAccounts = new PendingAccounts(new FaultTolerantDatabase("pending_accounts-test", Jdbi.create(db.getTestDatabase()), new CircuitBreakerConfiguration()));
+    this.pendingAccounts = new PendingAccounts(new FaultTolerantDatabase("pending_accounts-test", Jdbi.create(db.getTestDatabase()), new CircuitBreakerConfiguration()));
   }
 
-  @Ignore //
   @Test
   public void testStore() throws SQLException {
-	  pendingAccounts.insert("+14151112222", "1234", 1111, null);
+    pendingAccounts.insert("alice", "1234", 1111, null);
 
     PreparedStatement statement = db.getTestDatabase().getConnection().prepareStatement("SELECT * FROM pending_accounts WHERE number = ?");
-    statement.setString(1, "+14151112222");
+    statement.setString(1, "alice");
 
     ResultSet resultSet = statement.executeQuery();
 
@@ -58,13 +54,12 @@ public class PendingAccountsTest {
     assertThat(resultSet.next()).isFalse();
   }
 
-  @Ignore //
   @Test
   public void testStoreWithPushChallenge() throws SQLException {
-    pendingAccounts.insert("+14151112222", null, 1111,  "112233");
+    pendingAccounts.insert("alice", null, 1111, "112233");
 
     PreparedStatement statement = db.getTestDatabase().getConnection().prepareStatement("SELECT * FROM pending_accounts WHERE number = ?");
-    statement.setString(1, "+14151112222");
+    statement.setString(1, "alice");
 
     ResultSet resultSet = statement.executeQuery();
 
@@ -80,58 +75,54 @@ public class PendingAccountsTest {
   }
 
   @Test
-  @Ignore
   public void testRetrieve() throws Exception {
-	  pendingAccounts.insert("+14151112222", "4321", 2222, null);
-	    pendingAccounts.insert("+14151113333", "1212", 5555, null);
+    pendingAccounts.insert("alice", "4321", 2222, null);
+    pendingAccounts.insert("bob", "1212", 5555, null);
 
-	    Optional<StoredVerificationCode> verificationCode = pendingAccounts.getCodeForUserLogin("+14151112222");
+    Optional<StoredVerificationCode> verificationCode = pendingAccounts.getCodeForUserLogin("alice");
 
-	    assertThat(verificationCode.isPresent()).isTrue();
-	    assertThat(verificationCode.get().getCode()).isEqualTo("4321");
-	    assertThat(verificationCode.get().getTimestamp()).isEqualTo(2222);
+    assertThat(verificationCode.isPresent()).isTrue();
+    assertThat(verificationCode.get().getCode()).isEqualTo("4321");
+    assertThat(verificationCode.get().getTimestamp()).isEqualTo(2222);
 
-	    Optional<StoredVerificationCode> missingCode = pendingAccounts.getCodeForUserLogin("+11111111111");
-	    assertThat(missingCode.isPresent()).isFalse();
+    Optional<StoredVerificationCode> missingCode = pendingAccounts.getCodeForUserLogin("kat");
+    assertThat(missingCode.isPresent()).isFalse();
   }
 
   @Test
-  @Ignore
   public void testRetrieveWithPushChallenge() throws Exception {
-	    pendingAccounts.insert("+14151112222", "4321", 2222, "bar");
-	    pendingAccounts.insert("+14151113333", "1212", 5555, "bang");
+    pendingAccounts.insert("alice", "4321", 2222, "bar");
+    pendingAccounts.insert("bob", "1212", 5555, "bang");
 
-    Optional<StoredVerificationCode> verificationCode = pendingAccounts.getCodeForUserLogin("+14151112222");
+    Optional<StoredVerificationCode> verificationCode = pendingAccounts.getCodeForUserLogin("alice");
 
     assertThat(verificationCode.isPresent()).isTrue();
     assertThat(verificationCode.get().getCode()).isEqualTo("4321");
     assertThat(verificationCode.get().getTimestamp()).isEqualTo(2222);
     assertThat(verificationCode.get().getPushCode()).isEqualTo("bar");
 
-    Optional<StoredVerificationCode> missingCode = pendingAccounts.getCodeForUserLogin("+11111111111");
+    Optional<StoredVerificationCode> missingCode = pendingAccounts.getCodeForUserLogin("kat");
     assertThat(missingCode.isPresent()).isFalse();
   }
 
   @Test
-  @Ignore
   public void testOverwrite() throws Exception {
-	  pendingAccounts.insert("+14151112222", "4321", 2222, null);
-	    pendingAccounts.insert("+14151112222", "4444", 3333, null);
+    pendingAccounts.insert("alice", "4321", 2222, null);
+    pendingAccounts.insert("alice", "4444", 3333, null);
 
-    Optional<StoredVerificationCode> verificationCode = pendingAccounts.getCodeForUserLogin("+14151112222");
+    Optional<StoredVerificationCode> verificationCode = pendingAccounts.getCodeForUserLogin("alice");
 
     assertThat(verificationCode.isPresent()).isTrue();
     assertThat(verificationCode.get().getCode()).isEqualTo("4444");
     assertThat(verificationCode.get().getTimestamp()).isEqualTo(3333);
   }
-  
-  @Test
-  @Ignore
-  public void testOverwriteWithPushToken() throws Exception {
-    pendingAccounts.insert("+14151112222", "4321", 2222, "bar");
-    pendingAccounts.insert("+14151112222", "4444", 3333, "bang");
 
-    Optional<StoredVerificationCode> verificationCode = pendingAccounts.getCodeForUserLogin("+14151112222");
+  @Test
+  public void testOverwriteWithPushToken() throws Exception {
+    pendingAccounts.insert("alice", "4321", 2222, "bar");
+    pendingAccounts.insert("alice", "4444", 3333, "bang");
+
+    Optional<StoredVerificationCode> verificationCode = pendingAccounts.getCodeForUserLogin("alice");
 
     assertThat(verificationCode.isPresent()).isTrue();
     assertThat(verificationCode.get().getCode()).isEqualTo("4444");
@@ -140,13 +131,12 @@ public class PendingAccountsTest {
   }
 
   @Test
-  @Ignore
   public void testVacuum() {
-	  pendingAccounts.insert("+14151112222", "4321", 2222, null);
-	    pendingAccounts.insert("+14151112222", "4444", 3333, null);
+    pendingAccounts.insert("alice", "4321", 2222, null);
+    pendingAccounts.insert("alice", "4444", 3333, null);
     pendingAccounts.vacuum();
 
-    Optional<StoredVerificationCode> verificationCode = pendingAccounts.getCodeForUserLogin("+14151112222");
+    Optional<StoredVerificationCode> verificationCode = pendingAccounts.getCodeForUserLogin("alice");
 
     assertThat(verificationCode.isPresent()).isTrue();
     assertThat(verificationCode.get().getCode()).isEqualTo("4444");
@@ -154,28 +144,25 @@ public class PendingAccountsTest {
   }
 
   @Test
-  @Ignore
   public void testRemove() {
-	  pendingAccounts.insert("+14151112222", "4321", 2222, "bar");
-	    pendingAccounts.insert("+14151113333", "1212", 5555, null);
+    pendingAccounts.insert("alice", "4321", 2222, "bar");
+    pendingAccounts.insert("bob", "1212", 5555, null);
 
-    Optional<StoredVerificationCode> verificationCode = pendingAccounts.getCodeForUserLogin("+14151112222");
+    Optional<StoredVerificationCode> verificationCode = pendingAccounts.getCodeForUserLogin("alice");
 
     assertThat(verificationCode.isPresent()).isTrue();
     assertThat(verificationCode.get().getCode()).isEqualTo("4321");
     assertThat(verificationCode.get().getTimestamp()).isEqualTo(2222);
 
-    pendingAccounts.remove("+14151112222");
+    pendingAccounts.remove("alice");
 
-    verificationCode = pendingAccounts.getCodeForUserLogin("+14151112222");
+    verificationCode = pendingAccounts.getCodeForUserLogin("alice");
     assertThat(verificationCode.isPresent()).isFalse();
 
-    verificationCode = pendingAccounts.getCodeForUserLogin("+14151113333");
+    verificationCode = pendingAccounts.getCodeForUserLogin("bob");
     assertThat(verificationCode.isPresent()).isTrue();
     assertThat(verificationCode.get().getCode()).isEqualTo("1212");
     assertThat(verificationCode.get().getTimestamp()).isEqualTo(5555);
     assertThat(verificationCode.get().getPushCode()).isNull();
   }
-
-
 }
