@@ -10,23 +10,12 @@ import com.opentable.db.postgres.junit.EmbeddedPostgresRules;
 import com.opentable.db.postgres.junit.PreparedDbRule;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import su.sres.shadowserver.configuration.CircuitBreakerConfiguration;
-import su.sres.shadowserver.storage.FaultTolerantDatabase;
-import su.sres.shadowserver.storage.ReservedUsernames;
-import su.sres.shadowserver.storage.Usernames;
-
-import java.io.IOException;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.Optional;
 import java.util.UUID;
 
 import static junit.framework.TestCase.assertTrue;
-import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 import static org.junit.Assert.assertFalse;
 
 public class ReservedUsernamesTest {
@@ -39,20 +28,18 @@ public class ReservedUsernamesTest {
   @Before
   public void setupAccountsDao() {
     FaultTolerantDatabase faultTolerantDatabase = new FaultTolerantDatabase("reservedUsernamesTest",
-                                                                            Jdbi.create(db.getTestDatabase()),
-                                                                            new CircuitBreakerConfiguration());
+        Jdbi.create(db.getTestDatabase()),
+        new CircuitBreakerConfiguration());
 
     this.reserved = new ReservedUsernames(faultTolerantDatabase);
   }
 
-  @Ignore //
   @Test
   public void testReservedRegexp() {
-    UUID   reservedFor = UUID.randomUUID();
-    String username    = ".*myusername.*";
+    UUID reservedFor = UUID.randomUUID();
+    String username = ".*myusername.*";
 
     reserved.setReserved(username, reservedFor);
-
 
     assertTrue(reserved.isReserved("myusername", UUID.randomUUID()));
     assertFalse(reserved.isReserved("myusername", reservedFor));
@@ -62,11 +49,10 @@ public class ReservedUsernamesTest {
     assertTrue(reserved.isReserved("somemyusernamesome", UUID.randomUUID()));
   }
 
-  @Ignore //
   @Test
   public void testReservedLiteral() {
-    UUID   reservedFor = UUID.randomUUID();
-    String username    = "^foobar$";
+    UUID reservedFor = UUID.randomUUID();
+    String username = "^foobar$";
 
     reserved.setReserved(username, reservedFor);
 
