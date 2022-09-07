@@ -10,12 +10,9 @@ import com.opentable.db.postgres.junit.EmbeddedPostgresRules;
 import com.opentable.db.postgres.junit.PreparedDbRule;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import su.sres.shadowserver.configuration.CircuitBreakerConfiguration;
-import su.sres.shadowserver.storage.FaultTolerantDatabase;
-import su.sres.shadowserver.storage.Usernames;
 
 import java.io.IOException;
 import java.sql.PreparedStatement;
@@ -38,16 +35,15 @@ public class UsernamesTest {
   @Before
   public void setupAccountsDao() {
     FaultTolerantDatabase faultTolerantDatabase = new FaultTolerantDatabase("usernamesTest",
-                                                                            Jdbi.create(db.getTestDatabase()),
-                                                                            new CircuitBreakerConfiguration());
+        Jdbi.create(db.getTestDatabase()),
+        new CircuitBreakerConfiguration());
 
     this.usernames = new Usernames(faultTolerantDatabase);
   }
 
-  @Ignore //
   @Test
   public void testPut() throws SQLException, IOException {
-    UUID   uuid     = UUID.randomUUID();
+    UUID uuid = UUID.randomUUID();
     String username = "myusername";
 
     assertTrue(usernames.put(uuid, username));
@@ -56,7 +52,6 @@ public class UsernamesTest {
     verifyStoredState(statement, uuid, username);
   }
 
-  @Ignore //
   @Test
   public void testPutChange() throws SQLException, IOException {
     UUID uuid = UUID.randomUUID();
@@ -73,7 +68,6 @@ public class UsernamesTest {
     verifyStoredState(statement, uuid, secondUsername);
   }
 
-  @Ignore //
   @Test
   public void testPutConflict() throws SQLException {
     UUID firstUuid = UUID.randomUUID();
@@ -94,10 +88,9 @@ public class UsernamesTest {
     assertThat(resultSet.next()).isFalse();
   }
 
-  @Ignore //
   @Test
   public void testGetByUuid() {
-    UUID   uuid     = UUID.randomUUID();
+    UUID uuid = UUID.randomUUID();
     String username = "myusername";
 
     assertTrue(usernames.put(uuid, username));
@@ -108,17 +101,15 @@ public class UsernamesTest {
     assertThat(retrieved.get()).isEqualTo(username);
   }
 
-  @Ignore //
   @Test
   public void testGetByUuidMissing() {
     Optional<String> retrieved = usernames.get(UUID.randomUUID());
     assertFalse(retrieved.isPresent());
   }
 
-  @Ignore //
   @Test
   public void testGetByUsername() {
-    UUID   uuid     = UUID.randomUUID();
+    UUID uuid = UUID.randomUUID();
     String username = "myusername";
 
     assertTrue(usernames.put(uuid, username));
@@ -129,7 +120,6 @@ public class UsernamesTest {
     assertThat(retrieved.get()).isEqualTo(uuid);
   }
 
-  @Ignore //
   @Test
   public void testGetByUsernameMissing() {
     Optional<UUID> retrieved = usernames.get("myusername");
@@ -137,11 +127,9 @@ public class UsernamesTest {
     assertFalse(retrieved.isPresent());
   }
 
-
-  @Ignore //
   @Test
   public void testDelete() {
-    UUID   uuid     = UUID.randomUUID();
+    UUID uuid = UUID.randomUUID();
     String username = "myusername";
 
     assertTrue(usernames.put(uuid, username));
@@ -157,8 +145,7 @@ public class UsernamesTest {
   }
 
   private void verifyStoredState(PreparedStatement statement, UUID uuid, String expectedUsername)
-      throws SQLException, IOException
-  {
+      throws SQLException, IOException {
     statement.setObject(1, uuid);
 
     ResultSet resultSet = statement.executeQuery();
@@ -173,6 +160,4 @@ public class UsernamesTest {
 
     assertThat(resultSet.next()).isFalse();
   }
-
-
 }
