@@ -10,13 +10,9 @@ import com.opentable.db.postgres.junit.EmbeddedPostgresRules;
 import com.opentable.db.postgres.junit.PreparedDbRule;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import su.sres.shadowserver.configuration.CircuitBreakerConfiguration;
-import su.sres.shadowserver.storage.FaultTolerantDatabase;
-import su.sres.shadowserver.storage.Profiles;
-import su.sres.shadowserver.storage.VersionedProfile;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -39,7 +35,6 @@ public class ProfilesTest {
     this.profiles = new Profiles(faultTolerantDatabase);
   }
 
-  @Ignore //
   @Test
   public void testSetGet() {
     UUID uuid = UUID.randomUUID();
@@ -74,7 +69,6 @@ public class ProfilesTest {
     assertThat(retrieved.get().getAboutEmoji()).isEqualTo(profile.getAboutEmoji());
   }
 
-  @Ignore //
   @Test
   public void testSetReplace() {
     UUID uuid = UUID.randomUUID();
@@ -107,7 +101,6 @@ public class ProfilesTest {
     assertThat(retrieved.get().getAvatar()).isEqualTo(updated.getAvatar());
   }
 
-  @Ignore //
   @Test
   public void testMultipleVersions() {
     UUID uuid = UUID.randomUUID();
@@ -138,7 +131,6 @@ public class ProfilesTest {
     assertThat(retrieved.get().getAboutEmoji()).isEqualTo(profileTwo.getAboutEmoji());
   }
 
-  @Ignore //
   @Test
   public void testMissing() {
     UUID uuid = UUID.randomUUID();
@@ -150,7 +142,6 @@ public class ProfilesTest {
     assertThat(retrieved.isPresent()).isFalse();
   }
 
-  @Ignore //
   @Test
   public void testDelete() {
     UUID uuid = UUID.randomUUID();
@@ -171,5 +162,4 @@ public class ProfilesTest {
 
     assertThat(retrieved.isPresent()).isFalse();
   }
-
 }
