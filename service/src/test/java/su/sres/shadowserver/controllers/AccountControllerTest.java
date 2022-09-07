@@ -89,12 +89,12 @@ class AccountControllerTest {
 
   private static final String SENDER = "richardroe";
   private static final String SENDER_OLD = "miketyson";
-  private static final String SENDER_PIN = "+14153333333";
-  private static final String SENDER_OVER_PIN = "+14154444444";
+  private static final String SENDER_PIN = "pat";
+  private static final String SENDER_OVER_PIN = "kat";
   private static final String SENDER_PREAUTH = "tysonfury";
   private static final String SENDER_REG_LOCK = "+14158888888";
   private static final String SENDER_HAS_STORAGE = "canelo";
-  private static final String SENDER_TRANSFER = "+14151111112";
+  private static final String SENDER_TRANSFER = "sam";
 
   private static final String ABUSIVE_HOST = "192.168.1.1";
   private static final String NICE_HOST = "127.0.0.1";
@@ -104,8 +104,8 @@ class AccountControllerTest {
 
   private static final String VALID_CAPTCHA_TOKEN = "valid_token";
   private static final String INVALID_CAPTCHA_TOKEN = "invalid_token";
-
-  private static final int VERIFICATION_CODE_LIFETIME = 24;
+  
+  private static final int VERIFICATION_CODE_LIFETIME = 48;
 
   private static PendingAccountsManager pendingAccountsManager = mock(PendingAccountsManager.class);
   private static AccountsManager accountsManager = mock(AccountsManager.class);
@@ -132,7 +132,7 @@ class AccountControllerTest {
 
   private byte[] registration_lock_key = new byte[32];
 
-  private static LocalParametersConfiguration localParametersConfiguration = new LocalParametersConfiguration();
+  private static LocalParametersConfiguration localParametersConfiguration = mock(LocalParametersConfiguration.class);
   private static ServiceConfiguration serviceConfiguration = new ServiceConfiguration();
 
   private static final ResourceExtension resources = ResourceExtension.builder()
@@ -177,23 +177,23 @@ class AccountControllerTest {
     when(senderRegLockAccount.getLastSeen()).thenReturn(System.currentTimeMillis());
 
     when(pendingAccountsManager.getCodeForUserLogin(SENDER)).thenReturn(Optional
-        .of(new StoredVerificationCode("1234", System.currentTimeMillis(), "1234-push", VERIFICATION_CODE_LIFETIME)));
+        .of(new StoredVerificationCode("1234", System.currentTimeMillis(), "1234-push")));
     when(pendingAccountsManager.getCodeForUserLogin(SENDER_OLD))
         .thenReturn(Optional.of(new StoredVerificationCode("1234",
-            System.currentTimeMillis() - TimeUnit.HOURS.toMillis(31), null, VERIFICATION_CODE_LIFETIME)));
+            System.currentTimeMillis() - TimeUnit.HOURS.toMillis(50), null)));
     when(pendingAccountsManager.getCodeForUserLogin(SENDER_PIN)).thenReturn(Optional.of(
-        new StoredVerificationCode("333333", System.currentTimeMillis(), null, VERIFICATION_CODE_LIFETIME)));
+        new StoredVerificationCode("333333", System.currentTimeMillis(), null)));
     when(pendingAccountsManager.getCodeForUserLogin(SENDER_REG_LOCK)).thenReturn(Optional.of(
-        new StoredVerificationCode("666666", System.currentTimeMillis(), null, VERIFICATION_CODE_LIFETIME)));
+        new StoredVerificationCode("666666", System.currentTimeMillis(), null)));
     when(pendingAccountsManager.getCodeForUserLogin(SENDER_OVER_PIN)).thenReturn(Optional.of(
-        new StoredVerificationCode("444444", System.currentTimeMillis(), null, VERIFICATION_CODE_LIFETIME)));
+        new StoredVerificationCode("444444", System.currentTimeMillis(), null)));
     when(pendingAccountsManager.getCodeForUserLogin(SENDER_PREAUTH))
         .thenReturn(Optional.of(new StoredVerificationCode("555555", System.currentTimeMillis(),
-            "validchallenge", VERIFICATION_CODE_LIFETIME)));
+            "validchallenge")));
     when(pendingAccountsManager.getCodeForUserLogin(SENDER_HAS_STORAGE)).thenReturn(Optional.of(
-        new StoredVerificationCode("666666", System.currentTimeMillis(), null, VERIFICATION_CODE_LIFETIME)));
+        new StoredVerificationCode("666666", System.currentTimeMillis(), null)));
     when(pendingAccountsManager.getCodeForUserLogin(SENDER_TRANSFER)).thenReturn(Optional
-        .of(new StoredVerificationCode("1234", System.currentTimeMillis(), null, VERIFICATION_CODE_LIFETIME)));
+        .of(new StoredVerificationCode("1234", System.currentTimeMillis(), null)));
 
     when(accountsManager.get(eq(SENDER_PIN))).thenReturn(Optional.of(senderPinAccount));
     when(accountsManager.get(eq(SENDER_REG_LOCK))).thenReturn(Optional.of(senderRegLockAccount));
@@ -214,6 +214,8 @@ class AccountControllerTest {
 
     when(recaptchaClient.verify(eq(INVALID_CAPTCHA_TOKEN), anyString())).thenReturn(false);
     when(recaptchaClient.verify(eq(VALID_CAPTCHA_TOKEN), anyString())).thenReturn(true);
+    
+    when(localParametersConfiguration.getVerificationCodeLifetime()).thenReturn(VERIFICATION_CODE_LIFETIME);
 
     doThrow(new RateLimitExceededException(SENDER_OVER_PIN, Duration.ZERO)).when(pinLimiter).validate(eq(SENDER_OVER_PIN));
 
