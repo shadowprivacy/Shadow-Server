@@ -10,13 +10,9 @@ import com.opentable.db.postgres.junit.EmbeddedPostgresRules;
 import com.opentable.db.postgres.junit.PreparedDbRule;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import su.sres.shadowserver.configuration.CircuitBreakerConfiguration;
-import su.sres.shadowserver.storage.AbusiveHostRule;
-import su.sres.shadowserver.storage.AbusiveHostRules;
-import su.sres.shadowserver.storage.FaultTolerantDatabase;
 
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -35,10 +31,9 @@ public class AbusiveHostRulesTest {
 
   @Before
   public void setup() {
-	  this.abusiveHostRules = new AbusiveHostRules(new FaultTolerantDatabase("abusive_hosts-test", Jdbi.create(db.getTestDatabase()), new CircuitBreakerConfiguration()));
+    this.abusiveHostRules = new AbusiveHostRules(new FaultTolerantDatabase("abusive_hosts-test", Jdbi.create(db.getTestDatabase()), new CircuitBreakerConfiguration()));
   }
 
-  @Ignore //
   @Test
   public void testBlockedHost() throws SQLException {
     PreparedStatement statement = db.getTestDatabase().getConnection().prepareStatement("INSERT INTO abusive_host_rules (host, blocked) VALUES (?::INET, ?)");
@@ -53,7 +48,6 @@ public class AbusiveHostRulesTest {
     assertThat(rules.get(0).isBlocked()).isTrue();
   }
 
-  @Ignore //
   @Test
   public void testBlockedCidr() throws SQLException {
     PreparedStatement statement = db.getTestDatabase().getConnection().prepareStatement("INSERT INTO abusive_host_rules (host, blocked) VALUES (?::INET, ?)");
@@ -68,7 +62,6 @@ public class AbusiveHostRulesTest {
     assertThat(rules.get(0).isBlocked()).isTrue();
   }
 
-  @Ignore //
   @Test
   public void testUnblocked() throws SQLException {
     PreparedStatement statement = db.getTestDatabase().getConnection().prepareStatement("INSERT INTO abusive_host_rules (host, blocked) VALUES (?::INET, ?)");
@@ -80,7 +73,6 @@ public class AbusiveHostRulesTest {
     assertThat(rules.isEmpty()).isTrue();
   }
 
-  @Ignore //
   @Test
   public void testRestricted() throws SQLException {
     PreparedStatement statement = db.getTestDatabase().getConnection().prepareStatement("INSERT INTO abusive_host_rules (host, blocked, regions) VALUES (?::INET, ?, ?)");
@@ -94,8 +86,7 @@ public class AbusiveHostRulesTest {
     assertThat(rules.get(0).isBlocked()).isFalse();
     assertThat(rules.get(0).getRegions()).isEqualTo(Arrays.asList("+1", "+49"));
   }
-  
-  @Ignore //
+
   @Test
   public void testInsertBlocked() throws Exception {
     abusiveHostRules.setBlockedHost("172.17.0.1", "Testing one two");
@@ -112,7 +103,6 @@ public class AbusiveHostRulesTest {
     assertThat(resultSet.getString("notes")).isEqualTo("Testing one two");
 
     abusiveHostRules.setBlockedHost("172.17.0.1", "Different notes");
-
 
     statement = db.getTestDatabase().getConnection().prepareStatement("SELECT * from abusive_host_rules WHERE host = ?::inet");
     statement.setString(1, "172.17.0.1");

@@ -70,8 +70,7 @@ public class ReplicatedJedisPoolTest {
     verifyNoMoreInteractions(master);
   }
 
-  @Test
-  // @Ignore
+  @Test  
   public void testBrokenReadCheckout() {
     JedisPool master = mock(JedisPool.class);
     JedisPool slaveOne = mock(JedisPool.class);
@@ -90,8 +89,7 @@ public class ReplicatedJedisPoolTest {
     verifyNoMoreInteractions(master);
   }
 
-  @Test
-  // @Ignore
+  @Test  
   public void testAllBrokenReadCheckout() {
     JedisPool master = mock(JedisPool.class);
     JedisPool slaveOne = mock(JedisPool.class);
