@@ -5,7 +5,6 @@
  */
 package su.sres.shadowserver.redis;
 
-import org.junit.Ignore;
 import org.junit.Test;
 import su.sres.shadowserver.configuration.CircuitBreakerConfiguration;
 
@@ -19,189 +18,188 @@ import static org.mockito.Mockito.*;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.exceptions.JedisException;
-import su.sres.shadowserver.redis.ReplicatedJedisPool;
 
 public class ReplicatedJedisPoolTest {
 
-    @Test
-    public void testWriteCheckoutNoSlaves() {
-	JedisPool master = mock(JedisPool.class);
+  @Test
+  public void testWriteCheckoutNoSlaves() {
+    JedisPool master = mock(JedisPool.class);
 
-	try {
-	    new ReplicatedJedisPool("testWriteCheckoutNoSlaves", master, new LinkedList<>(), new CircuitBreakerConfiguration());
-	    throw new AssertionError();
-	} catch (Exception e) {
-	    // good
-	}
+    try {
+      new ReplicatedJedisPool("testWriteCheckoutNoSlaves", master, new LinkedList<>(), new CircuitBreakerConfiguration());
+      throw new AssertionError();
+    } catch (Exception e) {
+      // good
+    }
+  }
+
+  @Test
+  public void testWriteCheckoutWithSlaves() {
+    JedisPool master = mock(JedisPool.class);
+    JedisPool slave = mock(JedisPool.class);
+    Jedis instance = mock(Jedis.class);
+
+    when(master.getResource()).thenReturn(instance);
+
+    ReplicatedJedisPool replicatedJedisPool = new ReplicatedJedisPool("testWriteCheckoutWithSlaves", master, Collections.singletonList(slave), new CircuitBreakerConfiguration());
+    Jedis writeResource = replicatedJedisPool.getWriteResource();
+
+    assertThat(writeResource).isEqualTo(instance);
+    verify(master, times(1)).getResource();
+  }
+
+  @Test
+  public void testReadCheckouts() {
+    JedisPool master = mock(JedisPool.class);
+    JedisPool slaveOne = mock(JedisPool.class);
+    JedisPool slaveTwo = mock(JedisPool.class);
+    Jedis instanceOne = mock(Jedis.class);
+    Jedis instanceTwo = mock(Jedis.class);
+
+    when(slaveOne.getResource()).thenReturn(instanceOne);
+    when(slaveTwo.getResource()).thenReturn(instanceTwo);
+
+    ReplicatedJedisPool replicatedJedisPool = new ReplicatedJedisPool("testReadCheckouts", master, Arrays.asList(slaveOne, slaveTwo), new CircuitBreakerConfiguration());
+
+    assertThat(replicatedJedisPool.getReadResource()).isEqualTo(instanceOne);
+    assertThat(replicatedJedisPool.getReadResource()).isEqualTo(instanceTwo);
+    assertThat(replicatedJedisPool.getReadResource()).isEqualTo(instanceOne);
+    assertThat(replicatedJedisPool.getReadResource()).isEqualTo(instanceTwo);
+    assertThat(replicatedJedisPool.getReadResource()).isEqualTo(instanceOne);
+
+    verifyNoMoreInteractions(master);
+  }
+
+  @Test
+  // @Ignore
+  public void testBrokenReadCheckout() {
+    JedisPool master = mock(JedisPool.class);
+    JedisPool slaveOne = mock(JedisPool.class);
+    JedisPool slaveTwo = mock(JedisPool.class);
+    Jedis instanceTwo = mock(Jedis.class);
+
+    when(slaveOne.getResource()).thenThrow(new JedisException("Connection failed!"));
+    when(slaveTwo.getResource()).thenReturn(instanceTwo);
+
+    ReplicatedJedisPool replicatedJedisPool = new ReplicatedJedisPool("testBrokenReadCheckout", master, Arrays.asList(slaveOne, slaveTwo), new CircuitBreakerConfiguration());
+
+    assertThat(replicatedJedisPool.getReadResource()).isEqualTo(instanceTwo);
+    assertThat(replicatedJedisPool.getReadResource()).isEqualTo(instanceTwo);
+    assertThat(replicatedJedisPool.getReadResource()).isEqualTo(instanceTwo);
+
+    verifyNoMoreInteractions(master);
+  }
+
+  @Test
+  // @Ignore
+  public void testAllBrokenReadCheckout() {
+    JedisPool master = mock(JedisPool.class);
+    JedisPool slaveOne = mock(JedisPool.class);
+    JedisPool slaveTwo = mock(JedisPool.class);
+
+    when(slaveOne.getResource()).thenThrow(new JedisException("Connection failed!"));
+    when(slaveTwo.getResource()).thenThrow(new JedisException("Also failed!"));
+
+    ReplicatedJedisPool replicatedJedisPool = new ReplicatedJedisPool("testAllBrokenReadCheckout", master, Arrays.asList(slaveOne, slaveTwo), new CircuitBreakerConfiguration());
+
+    try {
+      replicatedJedisPool.getReadResource();
+      throw new AssertionError();
+    } catch (Exception e) {
+      // good
     }
 
-    @Test
-    public void testWriteCheckoutWithSlaves() {
-	JedisPool master = mock(JedisPool.class);
-	JedisPool slave = mock(JedisPool.class);
-	Jedis instance = mock(Jedis.class);
+    verifyNoMoreInteractions(master);
+  }
 
-	when(master.getResource()).thenReturn(instance);
+  @Test
+  public void testCircuitBreakerOpen() {
+    CircuitBreakerConfiguration configuration = new CircuitBreakerConfiguration();
+    configuration.setFailureRateThreshold(50);
+    configuration.setRingBufferSizeInClosedState(2);
 
-	ReplicatedJedisPool replicatedJedisPool = new ReplicatedJedisPool("testWriteCheckoutWithSlaves", master, Collections.singletonList(slave), new CircuitBreakerConfiguration());
-	Jedis writeResource = replicatedJedisPool.getWriteResource();
+    JedisPool master = mock(JedisPool.class);
+    JedisPool slaveOne = mock(JedisPool.class);
+    JedisPool slaveTwo = mock(JedisPool.class);
 
-	assertThat(writeResource).isEqualTo(instance);
-	verify(master, times(1)).getResource();
+    when(master.getResource()).thenReturn(null);
+    when(slaveOne.getResource()).thenThrow(new JedisException("Connection failed!"));
+    when(slaveTwo.getResource()).thenThrow(new JedisException("Also failed!"));
+
+    ReplicatedJedisPool replicatedJedisPool = new ReplicatedJedisPool("testCircuitBreakerOpen", master, Arrays.asList(slaveOne, slaveTwo), configuration);
+    replicatedJedisPool.getWriteResource();
+
+    when(master.getResource()).thenThrow(new JedisException("Master broken!"));
+
+    try {
+      replicatedJedisPool.getWriteResource();
+      throw new AssertionError();
+    } catch (JedisException exception) {
+      // good
     }
 
-    @Test
-    public void testReadCheckouts() {
-	JedisPool master = mock(JedisPool.class);
-	JedisPool slaveOne = mock(JedisPool.class);
-	JedisPool slaveTwo = mock(JedisPool.class);
-	Jedis instanceOne = mock(Jedis.class);
-	Jedis instanceTwo = mock(Jedis.class);
+    try {
+      replicatedJedisPool.getWriteResource();
+      throw new AssertionError();
+    } catch (CallNotPermittedException e) {
+      // good
+    }
+  }
 
-	when(slaveOne.getResource()).thenReturn(instanceOne);
-	when(slaveTwo.getResource()).thenReturn(instanceTwo);
+  @Test
+  public void testCircuitBreakerHalfOpen() throws InterruptedException {
+    CircuitBreakerConfiguration configuration = new CircuitBreakerConfiguration();
+    configuration.setFailureRateThreshold(50);
+    configuration.setRingBufferSizeInClosedState(2);
+    configuration.setRingBufferSizeInHalfOpenState(1);
+    configuration.setWaitDurationInOpenStateInSeconds(1);
 
-	ReplicatedJedisPool replicatedJedisPool = new ReplicatedJedisPool("testReadCheckouts", master, Arrays.asList(slaveOne, slaveTwo), new CircuitBreakerConfiguration());
+    JedisPool master = mock(JedisPool.class);
+    JedisPool slaveOne = mock(JedisPool.class);
+    JedisPool slaveTwo = mock(JedisPool.class);
 
-	assertThat(replicatedJedisPool.getReadResource()).isEqualTo(instanceOne);
-	assertThat(replicatedJedisPool.getReadResource()).isEqualTo(instanceTwo);
-	assertThat(replicatedJedisPool.getReadResource()).isEqualTo(instanceOne);
-	assertThat(replicatedJedisPool.getReadResource()).isEqualTo(instanceTwo);
-	assertThat(replicatedJedisPool.getReadResource()).isEqualTo(instanceOne);
+    when(master.getResource()).thenThrow(new JedisException("Master broken!"));
+    when(slaveOne.getResource()).thenThrow(new JedisException("Connection failed!"));
+    when(slaveTwo.getResource()).thenThrow(new JedisException("Also failed!"));
 
-	verifyNoMoreInteractions(master);
+    ReplicatedJedisPool replicatedJedisPool = new ReplicatedJedisPool("testCircuitBreakerHalfOpen", master, Arrays.asList(slaveOne, slaveTwo), configuration);
+
+    try {
+      replicatedJedisPool.getWriteResource();
+      throw new AssertionError();
+    } catch (JedisException exception) {
+      // good
     }
 
-    @Test
-    @Ignore
-    public void testBrokenReadCheckout() {
-	JedisPool master = mock(JedisPool.class);
-	JedisPool slaveOne = mock(JedisPool.class);
-	JedisPool slaveTwo = mock(JedisPool.class);
-	Jedis instanceTwo = mock(Jedis.class);
-
-	when(slaveOne.getResource()).thenThrow(new JedisException("Connection failed!"));
-	when(slaveTwo.getResource()).thenReturn(instanceTwo);
-
-	ReplicatedJedisPool replicatedJedisPool = new ReplicatedJedisPool("testBrokenReadCheckout", master, Arrays.asList(slaveOne, slaveTwo), new CircuitBreakerConfiguration());
-
-	assertThat(replicatedJedisPool.getReadResource()).isEqualTo(instanceTwo);
-	assertThat(replicatedJedisPool.getReadResource()).isEqualTo(instanceTwo);
-	assertThat(replicatedJedisPool.getReadResource()).isEqualTo(instanceTwo);
-
-	verifyNoMoreInteractions(master);
+    try {
+      replicatedJedisPool.getWriteResource();
+      throw new AssertionError();
+    } catch (JedisException exception) {
+      // good
     }
 
-    @Test
-    @Ignore
-    public void testAllBrokenReadCheckout() {
-	JedisPool master = mock(JedisPool.class);
-	JedisPool slaveOne = mock(JedisPool.class);
-	JedisPool slaveTwo = mock(JedisPool.class);
-
-	when(slaveOne.getResource()).thenThrow(new JedisException("Connection failed!"));
-	when(slaveTwo.getResource()).thenThrow(new JedisException("Also failed!"));
-
-	ReplicatedJedisPool replicatedJedisPool = new ReplicatedJedisPool("testAllBrokenReadCheckout", master, Arrays.asList(slaveOne, slaveTwo), new CircuitBreakerConfiguration());
-
-	try {
-	    replicatedJedisPool.getReadResource();
-	    throw new AssertionError();
-	} catch (Exception e) {
-	    // good
-	}
-
-	verifyNoMoreInteractions(master);
+    try {
+      replicatedJedisPool.getWriteResource();
+      throw new AssertionError();
+    } catch (CallNotPermittedException e) {
+      // good
     }
 
-    @Test
-    public void testCircuitBreakerOpen() {
-	CircuitBreakerConfiguration configuration = new CircuitBreakerConfiguration();
-	configuration.setFailureRateThreshold(50);
-	configuration.setRingBufferSizeInClosedState(2);
+    Thread.sleep(1100);
 
-	JedisPool master = mock(JedisPool.class);
-	JedisPool slaveOne = mock(JedisPool.class);
-	JedisPool slaveTwo = mock(JedisPool.class);
-
-	when(master.getResource()).thenReturn(null);
-	when(slaveOne.getResource()).thenThrow(new JedisException("Connection failed!"));
-	when(slaveTwo.getResource()).thenThrow(new JedisException("Also failed!"));
-
-	ReplicatedJedisPool replicatedJedisPool = new ReplicatedJedisPool("testCircuitBreakerOpen", master, Arrays.asList(slaveOne, slaveTwo), configuration);
-	replicatedJedisPool.getWriteResource();
-
-	when(master.getResource()).thenThrow(new JedisException("Master broken!"));
-
-	try {
-	    replicatedJedisPool.getWriteResource();
-	    throw new AssertionError();
-	} catch (JedisException exception) {
-	    // good
-	}
-
-	try {
-	    replicatedJedisPool.getWriteResource();
-	    throw new AssertionError();
-	} catch (CallNotPermittedException e) {
-	    // good
-	}
+    try {
+      replicatedJedisPool.getWriteResource();
+      throw new AssertionError();
+    } catch (JedisException exception) {
+      // good
     }
 
-    @Test
-    public void testCircuitBreakerHalfOpen() throws InterruptedException {
-	CircuitBreakerConfiguration configuration = new CircuitBreakerConfiguration();
-	configuration.setFailureRateThreshold(50);
-	configuration.setRingBufferSizeInClosedState(2);
-	configuration.setRingBufferSizeInHalfOpenState(1);
-	configuration.setWaitDurationInOpenStateInSeconds(1);
-
-	JedisPool master = mock(JedisPool.class);
-	JedisPool slaveOne = mock(JedisPool.class);
-	JedisPool slaveTwo = mock(JedisPool.class);
-
-	when(master.getResource()).thenThrow(new JedisException("Master broken!"));
-	when(slaveOne.getResource()).thenThrow(new JedisException("Connection failed!"));
-	when(slaveTwo.getResource()).thenThrow(new JedisException("Also failed!"));
-
-	ReplicatedJedisPool replicatedJedisPool = new ReplicatedJedisPool("testCircuitBreakerHalfOpen", master, Arrays.asList(slaveOne, slaveTwo), configuration);
-
-	try {
-	    replicatedJedisPool.getWriteResource();
-	    throw new AssertionError();
-	} catch (JedisException exception) {
-	    // good
-	}
-
-	try {
-	    replicatedJedisPool.getWriteResource();
-	    throw new AssertionError();
-	} catch (JedisException exception) {
-	    // good
-	}
-
-	try {
-	    replicatedJedisPool.getWriteResource();
-	    throw new AssertionError();
-	} catch (CallNotPermittedException e) {
-	    // good
-	}
-
-	Thread.sleep(1100);
-
-	try {
-	    replicatedJedisPool.getWriteResource();
-	    throw new AssertionError();
-	} catch (JedisException exception) {
-	    // good
-	}
-
-	try {
-	    replicatedJedisPool.getWriteResource();
-	    throw new AssertionError();
-	} catch (CallNotPermittedException e) {
-	    // good
-	}
-
+    try {
+      replicatedJedisPool.getWriteResource();
+      throw new AssertionError();
+    } catch (CallNotPermittedException e) {
+      // good
     }
+
+  }
 }
