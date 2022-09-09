@@ -33,7 +33,7 @@ function check_app
 
 check_root_and_exit
 
-SHADOW_SERVER_VERSION=1.13
+SHADOW_SERVER_VERSION=2.00
 
 set +o history
 
