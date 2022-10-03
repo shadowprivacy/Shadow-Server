@@ -16,6 +16,7 @@ cdn:                          # private cloud access configuration for profiles 
   region: us-east-1
 
 debuglogs:                    # private cloud access configuration for debug logs
+  uri: "https://localhost:9000"                                         # Minio URL as seen by the Shadow server 
   accessKey: minio_shadow                                               # Minio service access key
   accessSecret: your_service_password                                   # Minio service secret key configured when installing Minio  
   bucket: debuglogs
