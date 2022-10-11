@@ -21,287 +21,272 @@ import su.sres.shadowserver.redis.ReplicatedJedisPool;
 
 public class DirectoryManager {
 
-	private final Logger logger = LoggerFactory.getLogger(DirectoryManager.class);
+  private final Logger logger = LoggerFactory.getLogger(DirectoryManager.class);
 
-	static final String DIRECTORY_PLAIN = "DirectoryPlain";
-	static final String DIRECTORY_VERSION = "DirectoryVersion";
-	private static final String CURRENT_UPDATE = "CurrentUpdate";
-	private static final String INCREMENTAL_UPDATE = "UpdateDiff::";
+  static final String DIRECTORY_PLAIN = "DirectoryPlain";
+  static final String DIRECTORY_VERSION = "DirectoryVersion";
 
-	public static final int INCREMENTAL_UPDATES_TO_HOLD = 100;
-	private static final String DIRECTORY_ACCESS_LOCK_KEY = "DirectoryAccessLock";
+  // TODO: to be deprecated
+  private static final String CURRENT_UPDATE = "CurrentUpdate";
 
-	private final ObjectMapper objectMapper;
-	private final ReplicatedJedisPool redisPool;
+  private static final String INCREMENTAL_UPDATE = "UpdateDiff::";
 
-	public DirectoryManager(ReplicatedJedisPool redisPool) {
-		this.redisPool = redisPool;
-		this.objectMapper = new ObjectMapper();
-		this.objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-	}
+  private static final String DIRECTORY_HISTORIC = "DirectoryHistoric::";
 
-	public BatchOperationHandle startBatchOperation() {
-		Jedis jedis = redisPool.getWriteResource();
-		return new BatchOperationHandle(jedis, jedis.pipelined());
-	}
+  public static final int INCREMENTAL_UPDATES_TO_HOLD = 100;
+  private static final String DIRECTORY_ACCESS_LOCK_KEY = "DirectoryAccessLock";
 
-	public void stopBatchOperation(BatchOperationHandle handle) {
-		Pipeline pipeline = handle.pipeline;
-		Jedis jedis = handle.jedis;
+  private final ObjectMapper objectMapper;
+  private final ReplicatedJedisPool redisPool;
 
-		pipeline.sync();
-		jedis.close();
-	}
+  public DirectoryManager(ReplicatedJedisPool redisPool) {
+    this.redisPool = redisPool;
+    this.objectMapper = new ObjectMapper();
+    this.objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+  }
 
-	void redisUpdatePlainDirectory(Account account) {
+  public BatchOperationHandle startBatchOperation() {
+    Jedis jedis = redisPool.getWriteResource();
+    return new BatchOperationHandle(jedis, jedis.pipelined());
+  }
 
-		PlainDirectoryEntryValue entryValue = new PlainDirectoryEntryValue(account.getUuid());
+  public void stopBatchOperation(BatchOperationHandle handle) {
+    Pipeline pipeline = handle.pipeline;
+    Jedis jedis = handle.jedis;
 
-		try (Jedis jedis = redisPool.getWriteResource()) {
+    pipeline.sync();
+    jedis.close();
+  }
 
-			jedis.hset(DIRECTORY_PLAIN, account.getUserLogin(), objectMapper.writeValueAsString(entryValue));
-		} catch (JsonProcessingException e) {
-			logger.warn("JSON Error", e);
-		}
-	}
+  void redisUpdatePlainDirectory(Account account) {
 
-	public void redisUpdatePlainDirectory(BatchOperationHandle handle, String userLogin, String entryValueString) {
+    PlainDirectoryEntryValue entryValue = new PlainDirectoryEntryValue(account.getUuid());
 
-		handle.pipeline.hset(DIRECTORY_PLAIN, userLogin, entryValueString);
-	}
+    try (Jedis jedis = redisPool.getWriteResource()) {
 
-	void redisRemoveFromPlainDirectory(HashSet<Account> accountsToRemove) {
-		try (Jedis jedis = redisPool.getWriteResource()) {
+      jedis.hset(DIRECTORY_PLAIN, account.getUserLogin(), objectMapper.writeValueAsString(entryValue));
+    } catch (JsonProcessingException e) {
+      logger.warn("JSON Error", e);
+    }
+  }
 
-			for (Account account : accountsToRemove) {
+  public void redisUpdatePlainDirectory(BatchOperationHandle handle, String userLogin, String entryValueString) {
 
-				jedis.hdel(DIRECTORY_PLAIN, account.getUserLogin());
-			}
-		}
-	}
+    handle.pipeline.hset(DIRECTORY_PLAIN, userLogin, entryValueString);
+  }
 
-	public void redisRemoveFromPlainDirectory(BatchOperationHandle handle, String userLogin) {
-		handle.pipeline.hdel(DIRECTORY_PLAIN, userLogin);
-	}
+  void redisRemoveFromPlainDirectory(HashSet<Account> accountsToRemove) {
+    try (Jedis jedis = redisPool.getWriteResource()) {
 
-	public HashMap<String, String> retrievePlainDirectory() {
+      for (Account account : accountsToRemove) {
 
-		try (Jedis jedis = redisPool.getWriteResource()) {
+        jedis.hdel(DIRECTORY_PLAIN, account.getUserLogin());
+      }
+    }
+  }
 
-			return (HashMap<String, String>) jedis.hgetAll(DIRECTORY_PLAIN);
-		}
-	}
+  public void redisRemoveFromPlainDirectory(BatchOperationHandle handle, String userLogin) {
+    handle.pipeline.hdel(DIRECTORY_PLAIN, userLogin);
+  }
 
-	public HashMap<String, String> retrieveIncrementalUpdate(int backoff) {
+  public HashMap<String, String> retrievePlainDirectory() {
 
-		try (Jedis jedis = redisPool.getWriteResource()) {
+    try (Jedis jedis = redisPool.getWriteResource()) {
 
-			return (HashMap<String, String>) jedis.hgetAll(getIncrementalUpdateKey(backoff));
-		}
-	}
+      return (HashMap<String, String>) jedis.hgetAll(DIRECTORY_PLAIN);
+    }
+  }
 
-	public void setDirectoryVersion(long version) {
-		Jedis jedis = redisPool.getWriteResource();
-		jedis.set(DIRECTORY_VERSION, String.valueOf(version));
-		jedis.close();
-	}
+  public HashMap<String, String> retrieveIncrementalUpdate(int backoff) {
 
-	public String getIncrementalUpdateKey(int backoff) {
+    try (Jedis jedis = redisPool.getWriteResource()) {
 
-		return INCREMENTAL_UPDATE + String.valueOf(backoff);
-	}
+      return (HashMap<String, String>) jedis.hgetAll(getIncrementalUpdateKey(backoff));
+    }
+  }
 
-	public void recordUpdateUpdate(Account account) {
-		try (Jedis jedis = redisPool.getWriteResource()) {
+  public void setDirectoryVersion(long version) {
+    Jedis jedis = redisPool.getWriteResource();
+    jedis.set(DIRECTORY_VERSION, String.valueOf(version));
+    jedis.close();
+  }
 
-			// deleting since we need to rewrite it;
-			jedis.del(CURRENT_UPDATE);
+  public String getIncrementalUpdateKey(int backoff) {
 
-			boolean alreadyInDirectory = jedis.hexists(DIRECTORY_PLAIN, account.getUserLogin());
+    return INCREMENTAL_UPDATE + String.valueOf(backoff);
+  }
 
-			// TODO: this is simply checking if the login is already in directory, since
-			// this "update" is actually limited to creation
-			// so far, and UUID does not change afterwards. Needs to be made more
-			// complicated if actual updates and, the more so,
-			// multiple accounts at a time, are implemented
-			if (!alreadyInDirectory) {
-				PlainDirectoryEntryValue entryValue = new PlainDirectoryEntryValue(account.getUuid());
-				jedis.hset(CURRENT_UPDATE, account.getUserLogin(), objectMapper.writeValueAsString(entryValue));
-			}
-		} catch (JsonProcessingException e) {
-			logger.warn("JSON Error", e);
-		}
-	}
+  public String getDirectoryHistoricKey(int backoff) {
 
-	public void recordUpdateRemoval(HashSet<Account> accounts) {
+    if (backoff == 0) {
+      return DIRECTORY_PLAIN;
+    } else {
+      return DIRECTORY_HISTORIC + String.valueOf(backoff);
+    }
+  }
 
-		Jedis jedis = redisPool.getWriteResource();
+  public void buildIncrementalUpdates(long directoryVersion) {
 
-		// deleting since we need to rewrite it;
-		jedis.del(CURRENT_UPDATE);
+    Jedis jedis = redisPool.getWriteResource();
 
-		// -1 stands for the flag of removal
-		for (Account account : accounts) {
-			jedis.hset(CURRENT_UPDATE, account.getUserLogin(), "-1");
-		}
+    HashMap<String, String> freshDirectory = retrievePlainDirectory();
 
-		jedis.close();
-	}
+    // this is 1 or more, since this method is not invoked until the directory
+    // version is incremented from 0;
+    int backoff = calculateBackoff(directoryVersion);
 
-	public void buildIncrementalUpdates(long directoryVersion) {
+    for (int i = backoff; i > 0; i--) {
 
-		Jedis jedis = redisPool.getWriteResource();
+      // here we are making best effort to build the incremental update of depth i
 
-		// this is 1 or more, since this method is not invoked until the directory
-		// version is incremented from 0;
-		int backoff = calculateBackoff(directoryVersion);
-		
-		// if current update is missing, we can't calculate anything; nullifying all
-		// incremental updates
-		if (!jedis.exists(CURRENT_UPDATE)) {
+      String targetIncrementalUpdateKey = getIncrementalUpdateKey(i);
 
-			logger.warn("The current update key is missing in Redis. Flushing all incremental updates...");
+      // deleting since we need to rewrite it;
+      jedis.del(targetIncrementalUpdateKey);
 
-			flushIncrementalUpdates(backoff, jedis);
-			jedis.close();
-			return;
-		}
+      String directoryHistoricKey = getDirectoryHistoricKey(i);
 
-		for (int i = backoff; i > 0; i--) {
+      // if a historic directory is missing, we can't calculate the target incremental
+      // update; so just nullifying it
+      if (!jedis.exists(directoryHistoricKey)) {
+        logger.debug(directoryHistoricKey + " is missing in Redis. Therefore nullifying " + targetIncrementalUpdateKey + " as it's impossible to calculate it");
+        continue;
+      }
 
-			// here we are making best effort to build the incremental update of depth i
+      HashMap<String, String> directoryHistoric = (HashMap<String, String>) jedis.hgetAll(directoryHistoricKey);
 
-			String targetIncrementalUpdateKey = getIncrementalUpdateKey(i);
+      HashMap<String, String> updatedIncrementalUpdate = calculateIncrementalUpdate(directoryHistoric, freshDirectory);
 
-			// deleting since we need to rewrite it;
-			jedis.del(targetIncrementalUpdateKey);
+      if (!updatedIncrementalUpdate.isEmpty()) {
+        jedis.hmset(targetIncrementalUpdateKey, updatedIncrementalUpdate);
+      } else {
+        // just a filler for the case when the incremental update is empty
+        jedis.hset(targetIncrementalUpdateKey, "", "");
+      }
+    }
 
-			// for i = 1 the incremental update is just the same as the current update
-			if (i == 1) {
-				jedis.hmset(targetIncrementalUpdateKey, jedis.hgetAll(CURRENT_UPDATE));
-				continue;
-			}
+    jedis.close();
+  }
 
-			String legacyIncrementalUpdateKey = getIncrementalUpdateKey(i - 1);
+  public HashMap<String, String> calculateIncrementalUpdate(HashMap<String, String> directoryHistoric, HashMap<String, String> directoryCurrent) {
 
-			// if legacy incremental update is missing, we can't calculate the target
-			// incremental update; so just nullifying it
-			if (!jedis.exists(legacyIncrementalUpdateKey)) {
+    Jedis jedis = redisPool.getWriteResource();
 
-				logger.debug(legacyIncrementalUpdateKey + " is missing in Redis. Therefore nullifying "
-						+ targetIncrementalUpdateKey + " as it's impossible to calculate it");
-				continue;
-			}
+    Set<String> olderFields = directoryHistoric.keySet();
+    Set<String> newerFields = directoryCurrent.keySet();
 
-			HashMap<String, String> updatedIncrementalUpdate = mergeUpdates(legacyIncrementalUpdateKey, CURRENT_UPDATE);
+    HashMap<String, String> merge = new HashMap<String, String>();
 
-			if (!updatedIncrementalUpdate.isEmpty()) {
-				jedis.hmset(targetIncrementalUpdateKey, updatedIncrementalUpdate);
-			} else {
-				// just a filler for the case when the incremental update is empty
-				jedis.hset(targetIncrementalUpdateKey, "", "");
-			}
-		}
+    for (String field : olderFields) {
 
-		jedis.close();
-	}
+      if (!newerFields.contains(field)) {
+        // if current directory does not contain the login, means remove it
+        merge.put(field, "-1");
+      } else {
+        // if current directory does contain the login, we need to compare the contents;
+        // the difference means there's been a re-insertion of an account with a
+        // previously deleted login
 
-	// TODO: if directory stores anything beyond usernames and (immutable) UUIDs,
-	// and there are "true" entry updates,
-	// this needs be more complicated
-	public HashMap<String, String> mergeUpdates(String olderKey, String newerKey) {
+        String currentValue = directoryCurrent.get(field);
 
-		Jedis jedis = redisPool.getWriteResource();
+        if (!directoryHistoric.get(field).equals(currentValue)) {
+          merge.put(field, currentValue);
+        }
+      }
+    }
 
-		Set<String> olderFields = jedis.hkeys(olderKey);
-		Set<String> newerFields = jedis.hkeys(newerKey);
+    for (String field : newerFields) {
 
-		HashMap<String, String> mergeFields = new HashMap<String, String>();
+      // now checking fields absent in the historic directory but present in the
+      // current one, and copying those
+      if (!olderFields.contains(field)) {
+        merge.put(field, directoryCurrent.get(field));
+      }
+    }
 
-		for (String field : olderFields) {
+    jedis.close();
 
-			// If newerFields.contains(field) and the two are different we don't want to do
-			// anything, since addition and deletion negate each other.
-			// There won't be the case when two values are equal: if a login is to be added
-			// up to the previous step, it won't be added again on the current step; same
-			// for deletion
+    return merge;
+  }
 
-			if (!newerFields.contains(field)) {
+  public void buildHistoricDirectories(long directoryVersion) {
 
-				// if the field is absent in the newer update, copy what's in the older one,
-				// neglecting the empty filler
-				if (!field.equals("")) {
-					mergeFields.put(field, jedis.hget(olderKey, field));
-				}
-			}
-		}
+    Jedis jedis = redisPool.getWriteResource();
+    int backoff = calculateBackoff(directoryVersion);
 
-		for (String field : newerFields) {
+    for (int i = backoff; i > 0; i--) {
 
-			// now checking fields absent in the older update but present in the newer one,
-			// and copying those
-			if (!olderFields.contains(field)) {
+      String runningKey = getDirectoryHistoricKey(i);
+      String upstreamKey = getDirectoryHistoricKey(i - 1);
 
-				mergeFields.put(field, jedis.hget(newerKey, field));
-			}
-		}
+      // delete the running historic directory since we need to recreate it
+      jedis.del(runningKey);
 
-		jedis.close();
+      HashMap<String, String> upstream = (HashMap<String, String>) jedis.hgetAll(upstreamKey);
 
-		return mergeFields;
-	}
+      // if the next in line historic directory exists, then the running directory is
+      // rewritten with the next in line, otherwise the running one would now be
+      // missing as well
+      if (!upstream.isEmpty()) {
+        jedis.hmset(runningKey, upstream);
+      }
+    }
 
-	public void flushIncrementalUpdates(int backoff, Jedis jedis) {
+    jedis.close();
+  }
 
-		for (int i = 1; i <= backoff; i++) {
-			jedis.del(getIncrementalUpdateKey(i));
-		}
-		
-		jedis.del(CURRENT_UPDATE);
-	}
+  public void flushIncrementalUpdates(int backoff, Jedis jedis) {
 
-	public int calculateBackoff(long directoryVersion) {
+    for (int i = 1; i <= backoff; i++) {
+      jedis.del(getIncrementalUpdateKey(i));
+    }
 
-		if (directoryVersion < INCREMENTAL_UPDATES_TO_HOLD) {
-			return (int) directoryVersion;
-		} else {
-			return INCREMENTAL_UPDATES_TO_HOLD;
-		}
-	}
+    // TODO: to be deprecated
+    jedis.del(CURRENT_UPDATE);
+  }
 
-	public ReplicatedJedisPool accessDirectoryCache() {
-		return redisPool;
-	}
+  public int calculateBackoff(long directoryVersion) {
 
-	public void setDirectoryReadLock() {
-		Jedis jedis = redisPool.getWriteResource();
+    if (directoryVersion < INCREMENTAL_UPDATES_TO_HOLD) {
+      return (int) directoryVersion;
+    } else {
+      return INCREMENTAL_UPDATES_TO_HOLD;
+    }
+  }
 
-		jedis.setex(DIRECTORY_ACCESS_LOCK_KEY, 60, "");
-		jedis.close();
-	}
+  public ReplicatedJedisPool accessDirectoryCache() {
+    return redisPool;
+  }
 
-	public void releaseDirectoryReadLock() {
-		Jedis jedis = redisPool.getWriteResource();
+  public void setDirectoryReadLock() {
+    Jedis jedis = redisPool.getWriteResource();
 
-		jedis.del(DIRECTORY_ACCESS_LOCK_KEY);
-		jedis.close();
-	}
+    jedis.setex(DIRECTORY_ACCESS_LOCK_KEY, 60, "");
+    jedis.close();
+  }
 
-	public boolean getDirectoryReadLock() {
-		try (Jedis jedis = redisPool.getWriteResource()) {
+  public void releaseDirectoryReadLock() {
+    Jedis jedis = redisPool.getWriteResource();
 
-			return jedis.exists(DIRECTORY_ACCESS_LOCK_KEY);
-		}
-	}
+    jedis.del(DIRECTORY_ACCESS_LOCK_KEY);
+    jedis.close();
+  }
 
-	public static class BatchOperationHandle {
+  public boolean getDirectoryReadLock() {
+    try (Jedis jedis = redisPool.getWriteResource()) {
 
-		public final Pipeline pipeline;
-		public final Jedis jedis;
+      return jedis.exists(DIRECTORY_ACCESS_LOCK_KEY);
+    }
+  }
 
-		public BatchOperationHandle(Jedis jedis, Pipeline pipeline) {
-			this.pipeline = pipeline;
-			this.jedis = jedis;
-		}
-	}
+  public static class BatchOperationHandle {
+
+    public final Pipeline pipeline;
+    public final Jedis jedis;
+
+    public BatchOperationHandle(Jedis jedis, Pipeline pipeline) {
+      this.pipeline = pipeline;
+      this.jedis = jedis;
+    }
+  }
 }

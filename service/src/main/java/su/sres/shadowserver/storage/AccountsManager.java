@@ -118,15 +118,16 @@ public class AccountsManager {
     accountCreateLock.getAndIncrement();
     setAccountCreationLock();
 
-    long newDirectoryVersion = getDirectoryVersion() + 1L;
+    long directoryVersion = getDirectoryVersion();
+    long newDirectoryVersion = directoryVersion + 1L;
 
     try (Timer.Context ignored = createTimer.time()) {
       boolean freshUser = databaseCreate(account, newDirectoryVersion);
       redisSet(account);
       // updateDirectory(account);
 
-      // recording the update
-      directory.recordUpdateUpdate(account);
+      // building historic directories
+      directory.buildHistoricDirectories(directoryVersion);
 
       // incrementing the directory version in Redis
       directory.setDirectoryVersion(newDirectoryVersion);
@@ -160,33 +161,6 @@ public class AccountsManager {
       // updateDirectory(account);
     }
   }
-
-  /*
-   * public void remove(HashSet<Account> accountsToRemove) {
-   * 
-   * setAccountRemovalLock();
-   * 
-   * long newDirectoryVersion = getDirectoryVersion() + 1L;
-   * 
-   * try (Timer.Context ignored = updateTimer.time()) {
-   * 
-   * for (Account account : accountsToRemove) {
-   * 
-   * redisSet(account); databaseUpdate(account, true, newDirectoryVersion); }
-   * 
-   * // recording the update directory.recordUpdateRemoval(accountsToRemove);
-   * 
-   * // incrementing directory version in Redis and deleting the account from the
-   * // plain directory directory.setDirectoryVersion(newDirectoryVersion);
-   * directory.redisRemoveFromPlainDirectory(accountsToRemove);
-   * 
-   * // building incremental updates
-   * directory.buildIncrementalUpdates(newDirectoryVersion);
-   * 
-   * } finally {
-   * 
-   * releaseAccountRemovalLock(); } }
-   */
 
   public Optional<Account> get(AmbiguousIdentifier identifier) {
     if (identifier.hasUserLogin())
@@ -244,7 +218,8 @@ public class AccountsManager {
 
   public void delete(final HashSet<Account> accountsToDelete, final DeletionReason deletionReason) {
 
-    long newDirectoryVersion = getDirectoryVersion() + 1L;
+    long directoryVersion = getDirectoryVersion();
+    long newDirectoryVersion = directoryVersion + 1L;
 
     setAccountRemovalLock();
 
@@ -263,8 +238,8 @@ public class AccountsManager {
 
       }
 
-      // recording the update
-      directory.recordUpdateRemoval(accountsToDelete);
+      // building historic directories
+      directory.buildHistoricDirectories(directoryVersion);
 
       // incrementing directory version in Redis and deleting the account from the
       // plain directory
