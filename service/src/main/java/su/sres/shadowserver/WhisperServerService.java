@@ -129,6 +129,7 @@ import su.sres.shadowserver.workers.CreatePendingAccountCommand;
 import su.sres.shadowserver.workers.CertHashCommand;
 import su.sres.shadowserver.workers.DeleteUserCommand;
 import su.sres.shadowserver.workers.DirectoryCommand;
+import su.sres.shadowserver.workers.GenerateQRCodeCommand;
 import su.sres.shadowserver.workers.GetRedisCommandStatsCommand;
 import su.sres.shadowserver.workers.GetRedisSlowlogCommand;
 import su.sres.shadowserver.workers.LicenseHashCommand;
@@ -160,8 +161,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 
   @Override
   public void initialize(Bootstrap<WhisperServerConfiguration> bootstrap) {
-
-    bootstrap.addCommand(new CertHashCommand());
+   
     bootstrap.addCommand(new DirectoryCommand());
     bootstrap.addCommand(new LicenseHashCommand());
     bootstrap.addCommand(new VacuumCommand());
@@ -173,6 +173,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     bootstrap.addCommand(new GetRedisCommandStatsCommand());
     bootstrap.addCommand(new CreateMessageDbCommand());
     bootstrap.addCommand(new CreateKeysDbCommand());
+    bootstrap.addCommand(new GenerateQRCodeCommand());
 
     bootstrap.addBundle(new ProtobufBundle<WhisperServerConfiguration>());
 
