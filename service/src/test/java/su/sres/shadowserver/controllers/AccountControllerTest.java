@@ -60,8 +60,6 @@ import su.sres.shadowserver.entities.AccountAttributes;
 import su.sres.shadowserver.entities.AccountCreationResult;
 import su.sres.shadowserver.entities.ApnRegistrationId;
 import su.sres.shadowserver.entities.GcmRegistrationId;
-import su.sres.shadowserver.entities.RegistrationLock;
-import su.sres.shadowserver.entities.RegistrationLockFailure;
 import su.sres.shadowserver.limits.RateLimiter;
 import su.sres.shadowserver.limits.RateLimiters;
 import su.sres.shadowserver.mappers.RateLimitExceededExceptionMapper;
