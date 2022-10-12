@@ -177,6 +177,8 @@ localParametersConfiguration: # locally significant server parameters
  keyStorePath: /home/shadow/shadowserver/auxiliary.keystore             # path to the auxiliary keystore 
  keyStorePassword: your_aux_keystore_password                           # password of the auxiliary keystore configured when generating credentials
  licensePath: /home/shadow/shadowserver/license                         # path to the folder where activation keys will be stored
+ accountLifetime: 365                                                   # if an account is not seen in this many days it is considered for expiration
+ accountExpirationPolicy: 0                                             # this should be set to 0, 1 or 2. The value of 2 means automatically delete accounts due to expiration, 1 means do not delete but just log, 0 means disable checking for expiration  
 
 serviceConfiguration:         # client-server parameters
  cloudUri: https://shadow.example.com:9000                              # Minio server URL as accessible from the Internet                             

@@ -11,14 +11,20 @@ import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.SharedMetricRegistries;
 import com.google.common.annotations.VisibleForTesting;
 
+import su.sres.shadowserver.configuration.LocalParametersConfiguration;
 import su.sres.shadowserver.util.Constants;
 import su.sres.shadowserver.util.Util;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static com.codahale.metrics.MetricRegistry.name;
 
@@ -31,9 +37,16 @@ public class AccountCleaner extends AccountDatabaseCrawlerListener {
   public static final int MAX_ACCOUNT_UPDATES_PER_CHUNK = 40;
 
   private final AccountsManager accountsManager;
+  private final int action;
+  private final int interval;
 
-  public AccountCleaner(AccountsManager accountsManager) {
+  @VisibleForTesting
+  protected final Logger logger = LoggerFactory.getLogger(AccountCleaner.class);
+
+  public AccountCleaner(AccountsManager accountsManager, int action, int interval) {
     this.accountsManager = accountsManager;
+    this.action = action;
+    this.interval = interval;
   }
 
   @Override
@@ -46,7 +59,7 @@ public class AccountCleaner extends AccountDatabaseCrawlerListener {
 
   @Override
   protected void onCrawlChunk(Optional<UUID> fromUuid, List<Account> chunkAccounts) {
-
+          
     int accountUpdateCount = 0;
     int deletableAccountCount = 0;
     HashSet<Account> accountsToDelete = new HashSet<Account>();
@@ -64,8 +77,29 @@ public class AccountCleaner extends AccountDatabaseCrawlerListener {
       }
     }
 
-    if (!accountsToDelete.isEmpty())
-      accountsManager.delete(accountsToDelete, AccountsManager.DeletionReason.EXPIRED);
+    if (!accountsToDelete.isEmpty()) {
+     
+      if (action == 2) {        
+        accountsManager.delete(accountsToDelete, AccountsManager.DeletionReason.EXPIRED); 
+        
+      } else if (action == 1) {
+        
+        List<String> accounts = new ArrayList<String>();
+        
+        for (Account account : accountsToDelete) {
+          accounts.add(account.getUserLogin());
+        }
+        
+        Collections.sort(accounts);
+        
+        logger.info("Account(s) " + String.join(", ", accounts) + " have not been seen for at least " + interval + " days. You may wish to remove them.");
+        
+      } else {
+        // noop; we should not fall here
+      }      
+      
+    }
+      
 
     deletableAccountHistogram.update(deletableAccountCount);
   }
@@ -80,7 +114,7 @@ public class AccountCleaner extends AccountDatabaseCrawlerListener {
   }
 
   private boolean isExpired(Account account) {
-    return account.getLastSeen() + TimeUnit.DAYS.toMillis(365) < System.currentTimeMillis();
+    return account.getLastSeen() + TimeUnit.DAYS.toMillis(interval) < System.currentTimeMillis();
   }
 
 }

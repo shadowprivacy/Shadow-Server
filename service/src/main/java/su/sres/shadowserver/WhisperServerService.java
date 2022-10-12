@@ -64,6 +64,7 @@ import su.sres.shadowserver.auth.ExternalServiceCredentialGenerator;
 import su.sres.shadowserver.auth.DisabledPermittedAccount;
 import su.sres.shadowserver.auth.DisabledPermittedAccountAuthenticator;
 import su.sres.shadowserver.auth.TurnTokenGenerator;
+import su.sres.shadowserver.configuration.LocalParametersConfiguration;
 import su.sres.shadowserver.configuration.MessageScyllaDbConfiguration;
 import su.sres.shadowserver.configuration.ScyllaDbConfiguration;
 import su.sres.shadowserver.configuration.dynamic.DynamicConfiguration;
@@ -287,6 +288,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     FaultTolerantDatabase accountDatabase = new FaultTolerantDatabase("accounts_database", accountJdbi, config.getAccountsDatabaseConfiguration().getCircuitBreakerConfiguration());
     FaultTolerantDatabase abuseDatabase = new FaultTolerantDatabase("abuse_database", abuseJdbi, config.getAbuseDatabaseConfiguration().getCircuitBreakerConfiguration());
 
+    LocalParametersConfiguration localParams = config.getLocalParametersConfiguration();
     MessageScyllaDbConfiguration scyllaMessageConfig = config.getMessageScyllaDbConfiguration();
     ScyllaDbConfiguration scyllaKeysConfig = config.getKeysScyllaDbConfiguration();
 
@@ -409,7 +411,8 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     final List<AccountDatabaseCrawlerListener> accountDatabaseCrawlerListeners = new ArrayList<>();
     accountDatabaseCrawlerListeners.add(new PushFeedbackProcessor(accountsManager));
     accountDatabaseCrawlerListeners.add(new ActiveUserCounter(config.getMetricsFactory(), cacheCluster));
-    accountDatabaseCrawlerListeners.add(new AccountCleaner(accountsManager));
+    
+    if (localParams.getAccountExpirationPolicy() != 0) accountDatabaseCrawlerListeners.add(new AccountCleaner(accountsManager, localParams.getAccountExpirationPolicy(), localParams.getAccountLifetime()));
 
     HttpClient currencyClient = HttpClient.newBuilder().version(HttpClient.Version.HTTP_2).connectTimeout(Duration.ofSeconds(10)).build();
     FixerClient fixerClient = new FixerClient(currencyClient, config.getPaymentsServiceConfiguration().getFixerApiKey());
@@ -493,8 +496,8 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 
     environment.jersey().register(new AccountController(pendingAccountsManager, accountsManager, usernamesManager, abusiveHostRules, rateLimiters, messagesManager, turnTokenGenerator, config.getTestDevices(), recaptchaClient, gcmSender
     // , apnSender
-        , config.getLocalParametersConfiguration(), config.getServiceConfiguration()));
-    environment.jersey().register(new DeviceController(pendingDevicesManager, accountsManager, messagesManager, rateLimiters, config.getMaxDevices(), config.getLocalParametersConfiguration().getVerificationCodeLifetime()));
+        , localParams, config.getServiceConfiguration()));
+    environment.jersey().register(new DeviceController(pendingDevicesManager, accountsManager, messagesManager, rateLimiters, config.getMaxDevices(), localParams.getVerificationCodeLifetime()));
     environment.jersey().register(new PlainDirectoryController(rateLimiters, accountsManager));
 
     // excluded federation (?), reserved for future purposes
