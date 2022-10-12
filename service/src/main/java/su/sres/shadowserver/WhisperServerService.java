@@ -126,7 +126,6 @@ import su.sres.shadowserver.workers.CertificateCommand;
 import su.sres.shadowserver.workers.CreateKeysDbCommand;
 import su.sres.shadowserver.workers.CreateMessageDbCommand;
 import su.sres.shadowserver.workers.CreatePendingAccountCommand;
-import su.sres.shadowserver.workers.CertHashCommand;
 import su.sres.shadowserver.workers.DeleteUserCommand;
 import su.sres.shadowserver.workers.DirectoryCommand;
 import su.sres.shadowserver.workers.GenerateQRCodeCommand;
