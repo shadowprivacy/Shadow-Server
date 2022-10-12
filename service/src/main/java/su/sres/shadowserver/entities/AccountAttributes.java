@@ -28,12 +28,6 @@ public class AccountAttributes {
   private String name;
 
   @JsonProperty
-  private String pin;
-
-  @JsonProperty
-  private String registrationLock;
-
-  @JsonProperty
   private byte[] unidentifiedAccessKey;
 
   @JsonProperty
@@ -49,12 +43,10 @@ public class AccountAttributes {
   }
 
   @VisibleForTesting
-  public AccountAttributes(boolean fetchesMessages, int registrationId, String name, String pin, String registrationLock, boolean discoverableByUserLogin, final DeviceCapabilities capabilities) {
+  public AccountAttributes(boolean fetchesMessages, int registrationId, String name, boolean discoverableByUserLogin, final DeviceCapabilities capabilities) {
     this.fetchesMessages = fetchesMessages;
     this.registrationId = registrationId;
-    this.name = name;
-    this.pin = pin;
-    this.registrationLock = registrationLock;
+    this.name = name;   
     this.discoverableByUserLogin = discoverableByUserLogin;
     this.capabilities = capabilities;
   }
@@ -69,15 +61,7 @@ public class AccountAttributes {
 
   public String getName() {
     return name;
-  }
-
-  public String getPin() {
-    return pin;
-  }
-
-  public String getRegistrationLock() {
-    return registrationLock;
-  }
+  }  
 
   public byte[] getUnidentifiedAccessKey() {
     return unidentifiedAccessKey;

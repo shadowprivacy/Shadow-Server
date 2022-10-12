@@ -18,8 +18,7 @@ public class RateLimiters {
   private final RateLimiter smsDestinationLimiter;
   private final RateLimiter smsVoiceIpLimiter;
   private final RateLimiter autoBlockLimiter;
-  private final RateLimiter verifyLimiter;
-  private final RateLimiter pinLimiter;
+  private final RateLimiter verifyLimiter;  
 
   private final RateLimiter attachmentLimiter;
   private final RateLimiter preKeysLimiter;
@@ -65,11 +64,7 @@ public class RateLimiters {
 
     this.verifyLimiter = new LockingRateLimiter(cacheCluster, "verify",
         config.getVerifyUserLogin().getBucketSize(),
-        config.getVerifyUserLogin().getLeakRatePerMinute());
-
-    this.pinLimiter = new LockingRateLimiter(cacheCluster, "pin",
-        config.getVerifyPin().getBucketSize(),
-        config.getVerifyPin().getLeakRatePerMinute());
+        config.getVerifyUserLogin().getLeakRatePerMinute());   
 
     this.attachmentLimiter = new RateLimiter(cacheCluster, "attachmentCreate",
         config.getAttachments().getBucketSize(), config.getAttachments().getLeakRatePerMinute());
@@ -185,11 +180,7 @@ public class RateLimiters {
   public RateLimiter getVerifyLimiter() {
     return verifyLimiter;
   }
-
-  public RateLimiter getPinLimiter() {
-    return pinLimiter;
-  }
-
+  
   public RateLimiter getTurnLimiter() {
     return turnLimiter;
   }

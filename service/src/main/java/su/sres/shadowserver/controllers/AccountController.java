@@ -63,9 +63,6 @@ import su.sres.shadowserver.entities.AccountCreationResult;
 import su.sres.shadowserver.entities.ApnRegistrationId;
 import su.sres.shadowserver.entities.DeviceName;
 import su.sres.shadowserver.entities.GcmRegistrationId;
-import su.sres.shadowserver.entities.DeprecatedPin;
-import su.sres.shadowserver.entities.RegistrationLock;
-import su.sres.shadowserver.entities.RegistrationLockFailure;
 import su.sres.shadowserver.limits.RateLimiters;
 import su.sres.shadowserver.metrics.UserAgentTagUtil;
 import su.sres.shadowserver.providers.CertsProvider;
@@ -277,42 +274,9 @@ public class AccountController {
 
       Optional<Account> existingAccount = accounts.get(userLogin);
 
-      if (existingAccount.isPresent()
-          && (existingAccount.get().getPin().isPresent()
-              || existingAccount.get().getRegistrationLock().isPresent())
-          && System.currentTimeMillis() - existingAccount.get().getLastSeen() < TimeUnit.DAYS.toMillis(7)) {
-        rateLimiters.getVerifyLimiter().clear(userLogin);
-
-        long timeRemaining = TimeUnit.DAYS.toMillis(7)
-            - (System.currentTimeMillis() - existingAccount.get().getLastSeen());
-
-        if (Util.isEmpty(accountAttributes.getPin()) && Util.isEmpty(accountAttributes.getRegistrationLock())) {
-          throw new WebApplicationException(
-              Response.status(423).entity(new RegistrationLockFailure(timeRemaining)).build());
-        }
-
-        rateLimiters.getPinLimiter().validate(userLogin);
-
-        boolean pinMatches;
-
-        if (existingAccount.get().getRegistrationLock().isPresent()
-            && existingAccount.get().getRegistrationLockSalt().isPresent()) {
-          pinMatches = new AuthenticationCredentials(existingAccount.get().getRegistrationLock().get(),
-              existingAccount.get().getRegistrationLockSalt().get())
-                  .verify(accountAttributes.getRegistrationLock());
-        } else if (existingAccount.get().getPin().isPresent()) {
-          pinMatches = MessageDigest.isEqual(existingAccount.get().getPin().get().getBytes(),
-              accountAttributes.getPin().getBytes());
-        } else {
-          throw new AssertionError("Invalid registration lock state");
-        }
-
-        if (!pinMatches) {
-          throw new WebApplicationException(
-              Response.status(423).entity(new RegistrationLockFailure(timeRemaining)).build());
-        }
-
-        rateLimiters.getPinLimiter().clear(userLogin);
+      // TODO: remove this after sogt-deletion is abandoned on the client side
+      if (existingAccount.isPresent() && System.currentTimeMillis() - existingAccount.get().getLastSeen() < TimeUnit.DAYS.toMillis(7)) {
+        rateLimiters.getVerifyLimiter().clear(userLogin);        
       }
 
       if (availableForTransfer.orElse(false) && existingAccount.map(Account::isTransferSupported).orElse(false)) {
@@ -490,48 +454,7 @@ public class AccountController {
       device.setUserAgent("OWP");
     }
     accounts.update(account);
-  }
-
-  @Timed
-  @PUT
-  @Produces(MediaType.APPLICATION_JSON)
-  @Path("/registration_lock")
-  public void setRegistrationLock(@Auth Account account, @Valid RegistrationLock accountLock) {
-    AuthenticationCredentials credentials = new AuthenticationCredentials(accountLock.getRegistrationLock());
-    account.setRegistrationLock(credentials.getHashedAuthenticationToken());
-    account.setRegistrationLockSalt(credentials.getSalt());
-    account.setPin(null);
-
-    accounts.update(account);
-  }
-
-  @Timed
-  @DELETE
-  @Path("/registration_lock")
-  public void removeRegistrationLock(@Auth Account account) {
-    account.setRegistrationLock(null);
-    account.setRegistrationLockSalt(null);
-    accounts.update(account);
-  }
-
-  @Timed
-  @PUT
-  @Produces(MediaType.APPLICATION_JSON)
-  @Path("/pin/")
-  public void setPin(@Auth Account account, @Valid DeprecatedPin accountLock) {
-    account.setPin(accountLock.getPin());
-    account.setRegistrationLock(null);
-    account.setRegistrationLockSalt(null);
-    accounts.update(account);
-  }
-
-  @Timed
-  @DELETE
-  @Path("/pin/")
-  public void removePin(@Auth Account account) {
-    account.setPin(null);
-    accounts.update(account);
-  }
+  }  
 
   @Timed
   @PUT
@@ -563,19 +486,7 @@ public class AccountController {
     device.setLastSeen(Util.todayInMillis());
     device.setCapabilities(attributes.getCapabilities());
     device.setRegistrationId(attributes.getRegistrationId());
-    device.setUserAgent(userAgent);
-
-    if (!Util.isEmpty(attributes.getPin())) {
-      account.setPin(attributes.getPin());
-    } else if (!Util.isEmpty(attributes.getRegistrationLock())) {
-      AuthenticationCredentials credentials = new AuthenticationCredentials(attributes.getRegistrationLock());
-      account.setRegistrationLock(credentials.getHashedAuthenticationToken());
-      account.setRegistrationLockSalt(credentials.getSalt());
-    } else {
-      account.setPin(null);
-      account.setRegistrationLock(null);
-      account.setRegistrationLockSalt(null);
-    }
+    device.setUserAgent(userAgent);    
 
     account.setUnidentifiedAccessKey(attributes.getUnidentifiedAccessKey());
     account.setUnrestrictedUnidentifiedAccess(attributes.isUnrestrictedUnidentifiedAccess());
@@ -731,8 +642,7 @@ public class AccountController {
     account.setUserLogin(userLogin);
     account.setUuid(UUID.randomUUID());
 
-    account.addDevice(device);
-    account.setPin(accountAttributes.getPin());
+    account.addDevice(device);    
 
     account.setUnidentifiedAccessKey(accountAttributes.getUnidentifiedAccessKey());
     account.setUnrestrictedUnidentifiedAccess(accountAttributes.isUnrestrictedUnidentifiedAccess());

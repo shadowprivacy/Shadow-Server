@@ -41,16 +41,7 @@ public class Account implements Principal {
   private String name;
 
   @JsonProperty
-  private String avatar;
-
-  @JsonProperty
-  private String pin;
-
-  @JsonProperty
-  private String registrationLock;
-
-  @JsonProperty
-  private String registrationLockSalt;
+  private String avatar; 
 
   @JsonProperty("uak")
   private byte[] unidentifiedAccessKey;
@@ -226,31 +217,7 @@ public class Account implements Principal {
 
   public void setAvatar(String avatar) {
     this.avatar = avatar;
-  }
-
-  public Optional<String> getPin() {
-    return Optional.ofNullable(pin);
-  }
-
-  public void setPin(String pin) {
-    this.pin = pin;
-  }
-
-  public void setRegistrationLock(String registrationLock) {
-    this.registrationLock = registrationLock;
-  }
-
-  public Optional<String> getRegistrationLock() {
-    return Optional.ofNullable(registrationLock);
-  }
-
-  public void setRegistrationLockSalt(String registrationLockSalt) {
-    this.registrationLockSalt = registrationLockSalt;
-  }
-
-  public Optional<String> getRegistrationLockSalt() {
-    return Optional.ofNullable(registrationLockSalt);
-  }
+  }  
 
   public Optional<byte[]> getUnidentifiedAccessKey() {
     return Optional.ofNullable(unidentifiedAccessKey);
