@@ -78,19 +78,11 @@ public class AccountCleaner extends AccountDatabaseCrawlerListener {
     if (!accountsToDelete.isEmpty()) {
      
       if (action == 2) {        
-        accountsManager.delete(accountsToDelete, AccountsManager.DeletionReason.EXPIRED); 
+        accountsManager.delete(accountsToDelete, AccountsManager.DeletionReason.EXPIRED);
+        issueLog(action, accountsToDelete);
         
-      } else if (action == 1) {
-        
-        List<String> accounts = new ArrayList<String>();
-        
-        for (Account account : accountsToDelete) {
-          accounts.add(account.getUserLogin());
-        }
-        
-        Collections.sort(accounts);
-        
-        logger.info("Account(s) " + String.join(", ", accounts) + " have not been seen for at least " + interval + " days. You may wish to remove them.");
+      } else if (action == 1) {        
+        issueLog(action, accountsToDelete);
         
       } else {
         // noop; we should not fall here
@@ -113,6 +105,23 @@ public class AccountCleaner extends AccountDatabaseCrawlerListener {
 
   private boolean isExpired(Account account) {
     return account.getLastSeen() + TimeUnit.DAYS.toMillis(interval) < System.currentTimeMillis();
+  }
+  
+  private void issueLog(int action, HashSet<Account> accountsToDelete) {
+    
+    List<String> accounts = new ArrayList<String>();
+    
+    for (Account account : accountsToDelete) {
+      accounts.add(account.getUserLogin());
+    }
+    
+    Collections.sort(accounts);
+    
+    if (action == 1) {      
+      logger.info("Account(s) " + String.join(", ", accounts) + " have not been seen for at least " + interval + " days. You may wish to remove them.");      
+    } else if (action ==2) {      
+      logger.info("Account(s) " + String.join(", ", accounts) + " have not been seen for at least " + interval + " days and were removed from the system.");      
+    }
   }
 
 }
