@@ -37,8 +37,8 @@
     <mockito.version>2.25.1</mockito.version>
     <aws.sdk.version>1.11.939</aws.sdk.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <ShadowServer.version>2.00</ShadowServer.version>
-    <project.build.outputTimestamp>2022-09-09T22:52:00Z</project.build.outputTimestamp>
+    <ShadowServer.version>2.01</ShadowServer.version>
+    <project.build.outputTimestamp>2022-10-18T09:39:00Z</project.build.outputTimestamp>
 
   </properties>
 
