@@ -11,7 +11,6 @@ import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.SharedMetricRegistries;
 import com.google.common.annotations.VisibleForTesting;
 
-import su.sres.shadowserver.configuration.LocalParametersConfiguration;
 import su.sres.shadowserver.util.Constants;
 import su.sres.shadowserver.util.Util;
 
@@ -39,9 +38,8 @@ public class AccountCleaner extends AccountDatabaseCrawlerListener {
   private final AccountsManager accountsManager;
   private final int action;
   private final int interval;
-
-  @VisibleForTesting
-  protected final Logger logger = LoggerFactory.getLogger(AccountCleaner.class);
+  
+  private final Logger logger = LoggerFactory.getLogger(AccountCleaner.class);
 
   public AccountCleaner(AccountsManager accountsManager, int action, int interval) {
     this.accountsManager = accountsManager;
