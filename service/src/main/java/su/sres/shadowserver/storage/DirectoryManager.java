@@ -240,6 +240,10 @@ public class DirectoryManager {
     for (int i = 1; i <= backoff; i++) {
       jedis.del(getIncrementalUpdateKey(i));
     }
+    
+    for (int i = 1; i <= backoff; i++) {
+      jedis.del(getDirectoryHistoricKey(i));
+    }
 
     // TODO: to be deprecated
     jedis.del(CURRENT_UPDATE);
