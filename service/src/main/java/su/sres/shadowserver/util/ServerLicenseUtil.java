@@ -220,7 +220,7 @@ public class ServerLicenseUtil {
 		
 	int start = dname.indexOf("CN");
 	String tmpName, name = "";
-	if (start > 0) { 
+	if (start >= 0) { 
 	  tmpName = dname.substring(start+3);
 	  int end = tmpName.indexOf(",");
 	  if (end > 0) {
