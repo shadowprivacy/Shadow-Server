@@ -102,6 +102,16 @@ public class WhisperServerConfiguration extends Configuration {
   @Valid
   @NotNull
   @JsonProperty
+  private ScyllaDbConfiguration groupsScyllaDb;
+
+  @Valid
+  @NotNull
+  @JsonProperty
+  private ScyllaDbConfiguration groupLogsScyllaDb;
+
+  @Valid
+  @NotNull
+  @JsonProperty
   private DatabaseConfiguration abuseDatabase;
 
   @Valid
@@ -197,6 +207,11 @@ public class WhisperServerConfiguration extends Configuration {
   @JsonProperty
   private RemoteConfigConfiguration remoteConfig;
 
+  @JsonProperty
+  @Valid
+  @NotNull
+  private GroupConfiguration group;
+
   private Map<String, String> transparentDataIndex = new HashMap<>();
 
   public RecaptchaConfiguration getRecaptchaConfiguration() {
@@ -265,6 +280,14 @@ public class WhisperServerConfiguration extends Configuration {
 
   public ScyllaDbConfiguration getKeysScyllaDbConfiguration() {
     return keysScyllaDb;
+  }
+
+  public ScyllaDbConfiguration getGroupsScyllaDbConfiguration() {
+    return groupsScyllaDb;
+  }
+
+  public ScyllaDbConfiguration getGroupLogsScyllaDbConfiguration() {
+    return groupLogsScyllaDb;
   }
 
   public DatabaseConfiguration getAbuseDatabaseConfiguration() {
@@ -353,5 +376,9 @@ public class WhisperServerConfiguration extends Configuration {
 
   public RemoteConfigConfiguration getRemoteConfigConfiguration() {
     return remoteConfig;
+  }
+
+  public GroupConfiguration getGroupConfiguration() {
+    return group;
   }
 }

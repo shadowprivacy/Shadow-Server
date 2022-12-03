@@ -5,7 +5,6 @@
  */
 package su.sres.shadowserver.auth;
 
-import java.util.List;
 import java.util.Optional;
 
 import io.dropwizard.auth.Authenticator;

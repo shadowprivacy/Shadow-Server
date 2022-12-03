@@ -286,7 +286,14 @@ sed -i "s/password\: your_postgres_user_password/password\: '${PSQL_PASSWORD_CON
 sed -i "s|/home/shadow/shadowserver|${SERVER_PATH}|" ${SERVER_PATH}/config/shadow.yml
 
 SCYLLA_PASSWORD_CONV2=$(preproc_sed $(normalize_yaml $(preproc_cfg $SALTED_HASH)))
-sed -i "s/accessSecret: your_scylla_service_password/accessSecret\: '${SCYLLA_PASSWORD_CONV2}'/" ${SERVER_PATH}/config/shadow.yml
+sed -i "s/accessSecret\: your_scylla_service_password/accessSecret\: '${SCYLLA_PASSWORD_CONV2}'/" ${SERVER_PATH}/config/shadow.yml
+
+printf "\n"
+
+echo "Enter the secret key for the ZK group service (must be a hex key!!) >>"
+read GROUP_HEX_KEY
+sed -i "s/externalServiceSecret\: your_group_service_secret_key/externalServiceSecret\: '${GROUP_HEX_KEY}'/" ${SERVER_PATH}/config/shadow.yml
+sed -i "s|storageUri\: https\://shadow.example.com|storageUri\: https\://${SERVER_DOMAIN}|" ${SERVER_PATH}/config/shadow.yml
 
 printf "\n"
 
@@ -312,6 +319,8 @@ then
     
     java -jar ShadowServer-${SHADOW_SERVER_VERSION}.jar createmessagedb ${SERVER_PATH}/config/shadow.yml
     java -jar ShadowServer-${SHADOW_SERVER_VERSION}.jar createkeysdb ${SERVER_PATH}/config/shadow.yml
+    java -jar ShadowServer-${SHADOW_SERVER_VERSION}.jar creategroupdb ${SERVER_PATH}/config/shadow.yml
+    java -jar ShadowServer-${SHADOW_SERVER_VERSION}.jar creategroplogsdb ${SERVER_PATH}/config/shadow.yml
     
     chown ${USER_SH} /var/log/shadow.log
     

@@ -8,7 +8,7 @@ awsAttachments:               # private cloud access configuration for attachmen
   bucket: attachments
   region: us-east-1
 
-cdn:                          # private cloud access configuration for profiles and sticker uploads
+cdn:                          # private cloud access configuration for profiles, groups and sticker uploads
   uri: "https://localhost:9000"                                         # Minio URL as seen by the Shadow server
   accessKey: minio_shadow                                               # Minio service access key
   accessSecret: your_service_password                                   # Minio service secret key configured when installing Minio
@@ -97,6 +97,20 @@ keysScyllaDb:                 # ScyllaDB database configuration for keys databas
   accessKey: shadow                                                     # Scylla service access key
   accessSecret: your_scylla_service_password                            # Scylla service secret key configured when installing ScyllaDB      
 
+groupsScyllaDb:               # ScyllaDB database configuration for groups database
+  region: us-east-1
+  tableName:  groupsdb
+  endpoint: "http://localhost:8083/"
+  accessKey: shadow                                                     # Scylla service access key
+  accessSecret: your_scylla_service_password                            # Scylla service secret key configured when installing ScyllaDB
+  
+groupLogsScyllaDb:            # ScyllaDB database configuration for group logs database
+  region: us-east-1
+  tableName:  grouplogsdb
+  endpoint: "http://localhost:8083/"
+  accessKey: shadow                                                     # Scylla service access key
+  accessSecret: your_scylla_service_password                            # Scylla service secret key configured when installing ScyllaDB  
+
 accountsDatabase:             # Postgres database configuration for accounts database  
   driverClass: org.postgresql.Driver  
   user: shadow                                                          # username of the Postgres user
@@ -164,13 +178,19 @@ remoteConfig:
 
 paymentsService:
   userAuthenticationTokenSharedSecret: 6730674e1bd4f3a9cfdb2645159230b1 # fake/unused
-  fixerApiKey: 6730674e1bd4f3a9cfdb2645159230b1 # fake/unused
-  paymentCurrencies:                            # unused for now 
+  fixerApiKey: 6730674e1bd4f3a9cfdb2645159230b1                         # fake/unused
+  paymentCurrencies:                                                    # unused for now 
     - USD
     - RUB
 
 storageService:
-  userAuthenticationTokenSharedSecret: 6730674e1bd4f3a9cfdb2645159230b1 # fake/unused
+  userAuthenticationTokenSharedSecret: 12345                            # fake/unused
+  
+group:                        # group parameters
+  maxGroupSize: 100                                                     # maximum number of users in a group
+  maxGroupTitleLengthBytes: 256                                         # maximum length of group title (in bytes)  
+  maxGroupDescriptionLengthBytes: 1024                                  # maximum length of group description (in bytes)
+  externalServiceSecret: your_group_service_secret_key                  # must be a hex string key
 
 localParametersConfiguration: # locally significant server parameters
  verificationCodeLifetime: 24                                           # account verification code lifetime in hours
@@ -183,7 +203,7 @@ localParametersConfiguration: # locally significant server parameters
 serviceConfiguration:         # client-server parameters
  cloudUri: https://shadow.example.com:9000                              # Minio server URL as accessible from the Internet                             
  statusUri: shadowuptime.example.com                                    # offline alarm signaling URL
- storageUri: https://example.com                                        # fake/unused
+ storageUri: https://shadow.example.com:8080                            # Shadow server URL as accessible from the Internet
  unidentifiedDeliveryCaPublicKey: xxxxx                                 # public key of the unidentified access CA 
  serverZkPublic: xxxxx                                                  # server ZK public key
  fcmSenderId: 12345                                                     # the sender ID of your Firebase project 

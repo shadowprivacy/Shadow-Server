@@ -18,6 +18,7 @@ put.sh
 service/src/main/java/su/sres/shadowserver/entities/MessageProtos.java
 service/src/main/java/su/sres/shadowserver/storage/PubSubProtos.java
 service/src/main/java/su/sres/shadowserver/storage/protos/*
+service/src/main/java/su/sres/shadowserver/groups/protos/*
 .project
 .settings
 /bin/

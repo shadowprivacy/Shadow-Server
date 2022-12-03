@@ -11,6 +11,7 @@ import com.amazonaws.ClientConfiguration;
 import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.auth.BasicAWSCredentials;
 import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration;
+import com.amazonaws.services.dynamodbv2.AmazonDynamoDBAsyncClientBuilder;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
 import com.amazonaws.services.dynamodbv2.document.DynamoDB;
 import com.codahale.metrics.SharedMetricRegistries;
@@ -61,9 +62,15 @@ import su.sres.shadowserver.auth.CertificateGenerator;
 // excluded federation, reserved for future purposes
 // import su.sres.shadowserver.auth.FederatedPeerAuthenticator;
 import su.sres.shadowserver.auth.ExternalServiceCredentialGenerator;
+import su.sres.shadowserver.auth.ExternalServiceCredentialValidator;
+import su.sres.shadowserver.auth.GroupUser;
+import su.sres.shadowserver.auth.GroupUserAuthenticator;
 import su.sres.shadowserver.auth.DisabledPermittedAccount;
 import su.sres.shadowserver.auth.DisabledPermittedAccountAuthenticator;
+import su.sres.shadowserver.auth.ExternalGroupCredentialGenerator;
 import su.sres.shadowserver.auth.TurnTokenGenerator;
+import su.sres.shadowserver.auth.User;
+import su.sres.shadowserver.auth.UserAuthenticator;
 import su.sres.shadowserver.configuration.LocalParametersConfiguration;
 import su.sres.shadowserver.configuration.MessageScyllaDbConfiguration;
 import su.sres.shadowserver.configuration.ScyllaDbConfiguration;
@@ -98,6 +105,9 @@ import su.sres.shadowserver.metrics.NetworkSentGauge;
 import su.sres.shadowserver.metrics.OperatingSystemMemoryGauge;
 import su.sres.shadowserver.metrics.PushLatencyManager;
 import su.sres.shadowserver.metrics.TrafficSource;
+import su.sres.shadowserver.providers.InvalidProtocolBufferExceptionMapper;
+import su.sres.shadowserver.providers.ProtocolBufferMessageBodyProvider;
+import su.sres.shadowserver.providers.ProtocolBufferValidationErrorMessageBodyWriter;
 import su.sres.shadowserver.providers.RedisClientFactory;
 import su.sres.shadowserver.providers.RedisClusterHealthCheck;
 import su.sres.shadowserver.providers.RedisHealthCheck;
@@ -124,6 +134,8 @@ import su.sres.shadowserver.websocket.DeadLetterHandler;
 import su.sres.shadowserver.websocket.ProvisioningConnectListener;
 import su.sres.shadowserver.websocket.WebSocketAccountAuthenticator;
 import su.sres.shadowserver.workers.CertificateCommand;
+import su.sres.shadowserver.workers.CreateGroupDbCommand;
+import su.sres.shadowserver.workers.CreateGroupLogsDbCommand;
 import su.sres.shadowserver.workers.CreateKeysDbCommand;
 import su.sres.shadowserver.workers.CreateMessageDbCommand;
 import su.sres.shadowserver.workers.CreatePendingAccountCommand;
@@ -173,6 +185,8 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     bootstrap.addCommand(new GetRedisCommandStatsCommand());
     bootstrap.addCommand(new CreateMessageDbCommand());
     bootstrap.addCommand(new CreateKeysDbCommand());
+    bootstrap.addCommand(new CreateGroupDbCommand());
+    bootstrap.addCommand(new CreateGroupLogsDbCommand());
     bootstrap.addCommand(new GenerateQRCodeCommand());
 
     bootstrap.addBundle(new ProtobufBundle<WhisperServerConfiguration>());
@@ -291,6 +305,8 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     LocalParametersConfiguration localParams = config.getLocalParametersConfiguration();
     MessageScyllaDbConfiguration scyllaMessageConfig = config.getMessageScyllaDbConfiguration();
     ScyllaDbConfiguration scyllaKeysConfig = config.getKeysScyllaDbConfiguration();
+    ScyllaDbConfiguration scyllaGroupsConfig = config.getGroupsScyllaDbConfiguration();
+    ScyllaDbConfiguration scyllaGroupLogsConfig = config.getGroupLogsScyllaDbConfiguration();
 
     AmazonDynamoDBClientBuilder messageScyllaDbClientBuilder = AmazonDynamoDBClientBuilder
         .standard()
@@ -301,13 +317,30 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 
     AmazonDynamoDBClientBuilder keysScyllaDbClientBuilder = AmazonDynamoDBClientBuilder
         .standard()
-        .withEndpointConfiguration(new EndpointConfiguration(scyllaKeysConfig.getEndpoint(), config.getMessageScyllaDbConfiguration().getRegion()))
+        .withEndpointConfiguration(new EndpointConfiguration(scyllaKeysConfig.getEndpoint(), scyllaKeysConfig.getRegion()))
         .withClientConfiguration(new ClientConfiguration().withClientExecutionTimeout(((int) scyllaKeysConfig.getClientExecutionTimeout().toMillis()))
             .withRequestTimeout((int) scyllaKeysConfig.getClientRequestTimeout().toMillis()))
         .withCredentials(new AWSStaticCredentialsProvider(new BasicAWSCredentials(scyllaKeysConfig.getAccessKey(), scyllaKeysConfig.getAccessSecret())));
 
-    DynamoDB messageScyllaDb = new DynamoDB(messageScyllaDbClientBuilder.build());
-    DynamoDB preKeyScyllaDb = new DynamoDB(keysScyllaDbClientBuilder.build());
+    AmazonDynamoDBClientBuilder groupsScyllaDbClientBuilder = AmazonDynamoDBClientBuilder
+        .standard()
+        .withEndpointConfiguration(new EndpointConfiguration(scyllaGroupsConfig.getEndpoint(), scyllaGroupsConfig.getRegion()))
+        .withClientConfiguration(new ClientConfiguration().withClientExecutionTimeout(((int) scyllaGroupsConfig.getClientExecutionTimeout().toMillis()))
+            .withRequestTimeout((int) scyllaGroupsConfig.getClientRequestTimeout().toMillis()))
+        .withCredentials(new AWSStaticCredentialsProvider(new BasicAWSCredentials(scyllaGroupsConfig.getAccessKey(), scyllaGroupsConfig.getAccessSecret())));
+    
+    AmazonDynamoDBClientBuilder groupLogsScyllaDbClientBuilder = AmazonDynamoDBClientBuilder
+        .standard()
+        .withEndpointConfiguration(new EndpointConfiguration(scyllaGroupLogsConfig.getEndpoint(), scyllaGroupLogsConfig.getRegion()))
+        .withClientConfiguration(new ClientConfiguration().withClientExecutionTimeout(((int) scyllaGroupLogsConfig.getClientExecutionTimeout().toMillis()))
+            .withRequestTimeout((int) scyllaGroupLogsConfig.getClientRequestTimeout().toMillis()))
+        .withCredentials(new AWSStaticCredentialsProvider(new BasicAWSCredentials(scyllaGroupLogsConfig.getAccessKey(), scyllaGroupLogsConfig.getAccessSecret())));
+    
+    
+    DynamoDB messageDynamoDb = new DynamoDB(messageScyllaDbClientBuilder.build());
+    DynamoDB keyDynamoDb = new DynamoDB(keysScyllaDbClientBuilder.build());
+    DynamoDB groupsDynamoDb = new DynamoDB(groupsScyllaDbClientBuilder.build());
+    DynamoDB groupLogsDynamoDb = new DynamoDB(groupLogsScyllaDbClientBuilder.build());
 
     Accounts accounts = new Accounts(accountDatabase);
     PendingAccounts pendingAccounts = new PendingAccounts(accountDatabase);
@@ -315,8 +348,10 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     Usernames usernames = new Usernames(accountDatabase);
     ReservedUsernames reservedUsernames = new ReservedUsernames(accountDatabase);
     Profiles profiles = new Profiles(accountDatabase);
-    KeysScyllaDb keysScyllaDb = new KeysScyllaDb(preKeyScyllaDb, config.getKeysScyllaDbConfiguration().getTableName());
-    MessagesScyllaDb messagesScyllaDb = new MessagesScyllaDb(messageScyllaDb, config.getMessageScyllaDbConfiguration().getTableName(), config.getMessageScyllaDbConfiguration().getTimeToLive());
+    KeysScyllaDb keysScyllaDb = new KeysScyllaDb(keyDynamoDb, config.getKeysScyllaDbConfiguration().getTableName());
+    MessagesScyllaDb messagesScyllaDb = new MessagesScyllaDb(messageDynamoDb, config.getMessageScyllaDbConfiguration().getTableName(), config.getMessageScyllaDbConfiguration().getTimeToLive());
+    GroupsScyllaDb groupsScyllaDb = new GroupsScyllaDb(groupsDynamoDb, config.getGroupsScyllaDbConfiguration().getTableName());
+    GroupLogsScyllaDb groupLogsScyllaDb = new GroupLogsScyllaDb(groupLogsDynamoDb, config.getGroupLogsScyllaDbConfiguration().getTableName());
     AbusiveHostRules abusiveHostRules = new AbusiveHostRules(abuseDatabase);
     RemoteConfigs remoteConfigs = new RemoteConfigs(accountDatabase);
 
@@ -392,7 +427,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 
     AccountAuthenticator accountAuthenticator = new AccountAuthenticator(accountsManager);
     DisabledPermittedAccountAuthenticator disabledPermittedAccountAuthenticator = new DisabledPermittedAccountAuthenticator(accountsManager);
-
+    
     ExternalServiceCredentialGenerator storageCredentialsGenerator = new ExternalServiceCredentialGenerator(config.getSecureStorageServiceConfiguration().getUserAuthenticationTokenSharedSecret(), new byte[0], false);
     ExternalServiceCredentialGenerator paymentsCredentialsGenerator = new ExternalServiceCredentialGenerator(config.getPaymentsServiceConfiguration().getUserAuthenticationTokenSharedSecret(), new byte[0], false);
 
@@ -440,7 +475,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 
     PostPolicyGenerator profileCdnPolicyGenerator = new PostPolicyGenerator(config.getCdnConfiguration().getRegion(), config.getCdnConfiguration().getBucket(), config.getCdnConfiguration().getAccessKey());
     PolicySigner profileCdnPolicySigner = new PolicySigner(config.getCdnConfiguration().getAccessSecret(), config.getCdnConfiguration().getRegion());
-
+        
     ServerSecretParams zkSecretParams = new ServerSecretParams(config.getZkConfig().getServerSecret());
     ServerZkProfileOperations zkProfileOperations = new ServerZkProfileOperations(zkSecretParams);
     ServerZkAuthOperations zkAuthOperations = new ServerZkAuthOperations(zkSecretParams);
@@ -456,6 +491,12 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
      * = new MessageController(rateLimiters, pushSender, receiptSender,
      * accountsManager, messagesManager, federatedClientManager, null);
      */
+    
+    GroupsManager      groupsManager      = new GroupsManager(groupsScyllaDb, groupLogsScyllaDb);
+        
+    GroupUserAuthenticator groupUserAuthenticator = new GroupUserAuthenticator(new ServerZkAuthOperations(zkSecretParams));
+    ExternalGroupCredentialGenerator externalGroupCredentialGenerator = new ExternalGroupCredentialGenerator(config.getGroupConfiguration().getExternalServiceSecret());
+    
     AttachmentControllerV1 attachmentControllerV1 = new AttachmentControllerV1(rateLimiters, config.getAwsAttachmentsConfiguration().getAccessKey(), config.getAwsAttachmentsConfiguration().getAccessSecret(), config.getAwsAttachmentsConfiguration().getBucket(), config.getAwsAttachmentsConfiguration().getUri());
     AttachmentControllerV2 attachmentControllerV2 = new AttachmentControllerV2(rateLimiters, config.getAwsAttachmentsConfiguration().getAccessKey(), config.getAwsAttachmentsConfiguration().getAccessSecret(), config.getAwsAttachmentsConfiguration().getRegion(),
         config.getAwsAttachmentsConfiguration().getBucket());
@@ -482,18 +523,25 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     // environment.jersey().register(new AuthValueFactoryProvider.Binder());
 
     AuthFilter<BasicCredentials, Account> accountAuthFilter = new BasicCredentialAuthFilter.Builder<Account>().setAuthenticator(accountAuthenticator).buildAuthFilter();
-    AuthFilter<BasicCredentials, DisabledPermittedAccount> disabledPermittedAccountAuthFilter = new BasicCredentialAuthFilter.Builder<DisabledPermittedAccount>().setAuthenticator(disabledPermittedAccountAuthenticator).buildAuthFilter();
+    AuthFilter<BasicCredentials, DisabledPermittedAccount> disabledPermittedAccountAuthFilter = new BasicCredentialAuthFilter.Builder<DisabledPermittedAccount>().setAuthenticator(disabledPermittedAccountAuthenticator).buildAuthFilter();    
+    AuthFilter<BasicCredentials, GroupUser> groupUserAuthFilter = new BasicCredentialAuthFilter.Builder<GroupUser>().setAuthenticator(groupUserAuthenticator).buildAuthFilter();
 
     environment.servlets().addFilter("RemoteDeprecationFilter", new RemoteDeprecationFilter(dynamicConfig.getRemoteDeprecationConfiguration()))
         .addMappingForUrlPatterns(EnumSet.of(DispatcherType.REQUEST), false, "/*");
 
+    environment.jersey().register(ProtocolBufferMessageBodyProvider.class);
+    environment.jersey().register(ProtocolBufferValidationErrorMessageBodyWriter.class);
+    environment.jersey().register(InvalidProtocolBufferExceptionMapper.class);
+    // environment.jersey().register(CompletionExceptionMapper.class);
+    
+    
     environment.jersey().register(new MetricsApplicationEventListener(TrafficSource.HTTP));
-    environment.jersey().register(new PolymorphicAuthDynamicFeature<>(ImmutableMap.of(Account.class, accountAuthFilter, DisabledPermittedAccount.class, disabledPermittedAccountAuthFilter)));
-
+    environment.jersey().register(new PolymorphicAuthDynamicFeature<>(ImmutableMap.of(Account.class, accountAuthFilter, DisabledPermittedAccount.class, disabledPermittedAccountAuthFilter, GroupUser.class, groupUserAuthFilter)));
+        
     environment.jersey().register(new TimestampResponseFilter());
 
-    environment.jersey().register(new PolymorphicAuthValueFactoryProvider.Binder<>(ImmutableSet.of(Account.class, DisabledPermittedAccount.class)));
-
+    environment.jersey().register(new PolymorphicAuthValueFactoryProvider.Binder<>(ImmutableSet.of(Account.class, DisabledPermittedAccount.class, GroupUser.class)));
+    
     environment.jersey().register(new AccountController(pendingAccountsManager, accountsManager, usernamesManager, abusiveHostRules, rateLimiters, messagesManager, turnTokenGenerator, config.getTestDevices(), recaptchaClient, gcmSender
     // , apnSender
         , localParams, config.getServiceConfiguration()));
@@ -518,7 +566,9 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     environment.jersey().register(messageController);
     environment.jersey().register(profileController);
     environment.jersey().register(stickerController);
-//    environment.jersey().register(remoteConfigController);	
+//    environment.jersey().register(remoteConfigController);
+   //  environment.jersey().register(new HealthCheckController());
+    environment.jersey().register(new GroupsController(groupsManager, zkSecretParams, profileCdnPolicySigner, profileCdnPolicyGenerator, config.getGroupConfiguration(), externalGroupCredentialGenerator));
 
     ///
     WebSocketEnvironment<Account> webSocketEnvironment = new WebSocketEnvironment<>(environment, config.getWebSocketConfiguration(), 90000);
