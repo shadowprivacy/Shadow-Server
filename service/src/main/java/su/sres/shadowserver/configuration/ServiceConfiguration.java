@@ -17,73 +17,101 @@ import su.sres.shadowserver.util.ByteArrayAdapter;
 
 public class ServiceConfiguration {
 
-	@JsonProperty
-	@NotEmpty
-	private String cloudUri;
+  @JsonProperty
+  @NotEmpty
+  private String cloudUri;
 
-	@JsonProperty
-	@NotEmpty
-	private String statusUri;
-	
-	@JsonProperty
-	@NotEmpty
-	private String storageUri;
-		
-	@JsonProperty
-	@JsonSerialize(using = ByteArrayAdapter.Serializing.class)
-	@JsonDeserialize(using = ByteArrayAdapter.Deserializing.class)
-	@NotNull
-	@Size(min = 32, max = 32)
-	private byte[] unidentifiedDeliveryCaPublicKey;
-	
-	@JsonProperty
-	@NotEmpty
-	private int certsVersion;
-	
-	@JsonProperty
-	@NotEmpty
-	private String supportEmail;
-	
-	@JsonProperty
-	@NotEmpty
-	private String fcmSenderId;	
+  @JsonProperty
+  @NotEmpty
+  private String statusUri;
 
-    @JsonProperty
-	@JsonSerialize(using = ByteArrayAdapter.Serializing.class)
-	@JsonDeserialize(using = ByteArrayAdapter.Deserializing.class)
-	@NotNull
-	private byte[] serverZkPublic;
+  @JsonProperty
+  @NotEmpty
+  private String storageUri;
 
-	public String getCloudUri() {
-		return cloudUri;
-	}
+  @JsonProperty
+  @JsonSerialize(using = ByteArrayAdapter.Serializing.class)
+  @JsonDeserialize(using = ByteArrayAdapter.Deserializing.class)
+  @NotNull
+  @Size(min = 32, max = 32)
+  private byte[] unidentifiedDeliveryCaPublicKey;
 
-	public String getStatusUri() {
-		return statusUri;
-	}
-	
-	public String getStorageUri() {
-		return storageUri;
-	}	
-	
-	public byte[] getUnidentifiedDeliveryCaPublicKey() {
-		return unidentifiedDeliveryCaPublicKey;
-	}	
-	
-	public int getCertsVersion() {
-		return certsVersion;
-	}
-	
-	public String getSupportEmail() {
-		return supportEmail;
-	}
-	
-	public String getFcmSenderId() {
-		return fcmSenderId;
-	}
-	
-	public byte[] getServerZkPublic() {
-	    return serverZkPublic;
-	  }
-	
+  @JsonProperty
+  @NotEmpty
+  private int certsVersion;
+
+  @JsonProperty
+  @NotEmpty
+  private String supportEmail;
+
+  @JsonProperty
+  @NotEmpty
+  private String fcmSenderId;
+
+  @JsonProperty
+  @JsonSerialize(using = ByteArrayAdapter.Serializing.class)
+  @JsonDeserialize(using = ByteArrayAdapter.Deserializing.class)
+  @NotNull
+  private byte[] serverZkPublic;
+
+  @JsonProperty
+  private int maxImageSize;
+
+  @JsonProperty
+  private int maxAudioSize;
+
+  @JsonProperty
+  private int maxVideoSize;
+
+  @JsonProperty
+  private int maxDocSize;
+
+  public String getCloudUri() {
+    return cloudUri;
+  }
+
+  public String getStatusUri() {
+    return statusUri;
+  }
+
+  public String getStorageUri() {
+    return storageUri;
+  }
+
+  public byte[] getUnidentifiedDeliveryCaPublicKey() {
+    return unidentifiedDeliveryCaPublicKey;
+  }
+
+  public int getCertsVersion() {
+    return certsVersion;
+  }
+
+  public String getSupportEmail() {
+    return supportEmail;
+  }
+
+  public String getFcmSenderId() {
+    return fcmSenderId;
+  }
+
+  public byte[] getServerZkPublic() {
+    return serverZkPublic;
+  }
+
+  public int getMaxImageSize() {
+    return maxImageSize;
+  }
+
+  public int getMaxAudioSize() {
+    return maxAudioSize;
+  }
+
+  public int getMaxVideoSize() {
+    return maxVideoSize;
+  }
+
+  public int getMaxDocSize() {
+    return maxDocSize;
+  }
+
 }

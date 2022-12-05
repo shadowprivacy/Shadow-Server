@@ -184,7 +184,7 @@ paymentsService:
     - RUB
 
 storageService:
-  userAuthenticationTokenSharedSecret: 12345                            # fake/unused
+  userAuthenticationTokenSharedSecret: 6730674e1bd4f3a9cfdb2645159230b1 # fake/unused
   
 group:                        # group parameters
   maxGroupSize: 100                                                     # maximum number of users in a group
@@ -209,3 +209,7 @@ serviceConfiguration:         # client-server parameters
  fcmSenderId: 12345                                                     # the sender ID of your Firebase project 
  certsVersion: 1                                                        # should be 1 if certificate rotation is not used
  supportEmail: shadow@example.com                                       # email address whither debug reports will be sent
+ # maxImageSize: 100                                                    # (TBA) image attachment size limit (MB)
+ # maxAudioSize: 100                                                    # (TBA) audio attachment size limit (MB)  
+ # maxVideoSize: 100                                                    # (TBA) video attachment size limit (MB)
+ # maxDocSize: 100                                                      # (TBA) document attachment size limit (MB)
