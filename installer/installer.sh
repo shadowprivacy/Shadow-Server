@@ -61,6 +61,13 @@ else
     echo "tar already installed" 
 fi
 
+if [ $(check_app make) -ne 0 ] 
+then 
+    dnf -y install make 
+else
+    echo "make already installed" 
+fi
+
 if [ $(check_app tmux) -ne 0 ] 
 then 
     dnf -y install tmux 
