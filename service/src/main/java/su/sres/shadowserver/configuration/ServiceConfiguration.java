@@ -65,6 +65,10 @@ public class ServiceConfiguration {
 
   @JsonProperty
   private int maxDocSize;
+  
+  @JsonProperty
+  @NotEmpty
+  private boolean updatesAllowed;
 
   public String getCloudUri() {
     return cloudUri;
@@ -114,4 +118,7 @@ public class ServiceConfiguration {
     return maxDocSize;
   }
 
+  public boolean isUpdatesAllowed() {
+    return updatesAllowed;
+  }
 }

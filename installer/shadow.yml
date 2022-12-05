@@ -213,3 +213,4 @@ serviceConfiguration:         # client-server parameters
  # maxAudioSize: 100                                                    # (TBA) audio attachment size limit (MB)  
  # maxVideoSize: 100                                                    # (TBA) video attachment size limit (MB)
  # maxDocSize: 100                                                      # (TBA) document attachment size limit (MB)
+ updatesAllowed: true                                                   # whether clients are allowed to update 
