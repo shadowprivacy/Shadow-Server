@@ -140,6 +140,7 @@ download_sticker_pack fb535407d2f6497ec074df8b9c51dd1d 25
 download_sticker_pack 9acc9e8aba563d26a4994e69263e3b25 24
 download_sticker_pack e61fa0867031597467ccc036cc65d403 29
 download_sticker_pack cca32f5b905208b7d0f1e17f23fdc185 89
+download_sticker_pack cfc50156556893ef9838069d3890fe49 23
 
 chown -R ${USER_SH} ${DATA_PATH}/stickers/
 
