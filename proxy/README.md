@@ -6,7 +6,7 @@ To run a Shadow TLS proxy, you will need a host that has ports 80 and 443 access
 
 1. Install docker and docker-compose (e.g. `apt update && apt install docker docker-compose`). Refer to <a>https://docs.docker.com/engine/install/</a> for instructions on the variety of operating systems.
 1. Ensure your current user has access to docker (`adduser $USER docker`)
-1. Clone this repository
+1. Copy the proxy module files to your host
 1. `./init-certificate.sh`
 1. `docker-compose up --detach`
 
@@ -14,10 +14,9 @@ Your proxy is now running! You can share this with the URL `https://proxy.shadow
 
 ## Updating from a previous version
 
-If you've previously run a proxy, please update to the most recent version by pulling the most recent changes from `main`, then restarting your Docker containers:
+Update the files, then restart your Docker containers:
 
-```shell
-git pull
+```
 docker-compose down
 docker-compose up --detach
 ```
