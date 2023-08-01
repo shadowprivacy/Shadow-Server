@@ -91,11 +91,65 @@ printf "\nEnter the shared secret for the TURN authorization (should match that 
        sed -i "s/turn\:shadow.example.com/turn\:${SERVER_DOMAIN}/" ${SERVER_PATH}/config/shadow.yml
     fi
 
-# sed -i "s/^#redis-userdb=\"ip=<ip-address> dbname=<database-number> password=<database-user-password> port=<port> connect_timeout=<seconds>\"/redis-userdb=\"ip=127.0.0.1 port=6379\"/" /usr/local/etc/turnserver.conf
 sed -i "s/^#realm=mycompany.org/realm=${SERVER_DOMAIN}/" /usr/local/etc/turnserver.conf
 sed -i "s/^#no-tcp/no-tcp/" /usr/local/etc/turnserver.conf
 sed -i "s/^#no-multicast-peers/no-multicast-peers/" /usr/local/etc/turnserver.conf
 sed -i "s/^#pidfile=\"\/var\/run\/turnserver.pid\"/pidfile=\"\/var\/tmp\/coturn.pid\"/" /usr/local/etc/turnserver.conf
+
+# TURNS autoconfig
+
+echo "To ensure better firewall traversal for voice and video calls, TURN over TLS (TURNS) can be automatically configured. This strictly requires that port 80 of the current machine is directly accessible from the Internet or reverse-proxied. If this is not the case, then you can still configure TURNS manually after the installation"
+read -p "Do you want to automatically configure TURNS now [y/n]?" -n 1 -r
+if [[ $REPLY =~ ^[Yy]$ ]]   
+then
+   RESTRICTED_TLD=("af" "by" "cu" "er" "gn" "ir" "kp" "lr" "ru" "ss" "su" "sy" "zw")
+   TLD=$(extract_tld $SERVER_DOMAIN)
+   
+   if [[ ! " ${RESTRICTED_TLD[*]} " =~ " ${TLD} " ]]
+   then   
+       printf "\n"
+       echo "Proceeding to request an X.509 certificate from ZeroSSL. Enter your email address to register with ZeroSSL >>"
+       read EMAIL
+       # EMAIL_TLD=$(extract_tld $EMAIL)
+   
+       # while [[ " ${RESTRICTED_TLD[*]} " =~ " ${EMAIL_TLD} " ]]
+       # do   
+       #    echo "The top-level domain \"${EMAIL_TLD}\" is not currently supported. Please enter an email address in a supported domain >>"
+       #    read EMAIL
+       #    EMAIL_TLD=$(extract_tld $EMAIL)
+       # done
+       
+       echo "Installing dependencies..."
+       dnf -y install socat       
+          
+       echo "Opening ports..."
+    
+       firewall-cmd --zone=public --permanent --add-port=80/tcp    
+       firewall-cmd --zone=public --permanent --add-port=5349/tcp
+       firewall-cmd --reload
+       
+       echo "Installing acme.sh..."
+       
+       cd ${SERVER_PATH}/       
+       wget https://raw.githubusercontent.com/acmesh-official/acme.sh/master/acme.sh
+       chmod +x acme.sh
+       
+       ./acme.sh --install --home ${SERVER_PATH}/acme --accountemail  ${EMAIL}
+       source ~/.bashrc
+       ./acme.sh --issue --standalone -d ${SERVER_DOMAIN}  
+       
+       echo "Updating configs..."       
+       
+       sed -i "s|^#cert=/usr/local/etc/turn_server_cert.pem|cert=${SERVER_PATH}/acme/${SERVER_DOMAIN}_ecc/fullchain.cer|" /usr/local/etc/turnserver.conf
+       sed -i "s|^#pkey=/usr/local/etc/turn_server_pkey.pem|pkey=${SERVER_PATH}/acme/${SERVER_DOMAIN}_ecc/${SERVER_DOMAIN}.key|" /usr/local/etc/turnserver.conf
+       
+       sed -i "/turn\:${SERVER_DOMAIN}:3478/i - turns\:${SERVER_DOMAIN}:5349" ${SERVER_PATH}/config/shadow.yml
+            
+   else
+   printf  "\nUnfortunately, the top-level domain \"${TLD}\" is not currently supported for automated TURNS configuration. The TURNS configuration will abort. Refer to the documentation to enable TURNS manually.\n"
+   fi    
+   
+fi
 
 read -p "Do you want to enable CLI access for Coturn [y/n]?" -n 1 -r
 if [[ $REPLY =~ ^[Yy]$ ]]

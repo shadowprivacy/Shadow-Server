@@ -40,3 +40,8 @@ function preproc_sed
 {        
     echo $(sed 's|/|\\/|g' <<< "$1")
 }
+
+function extract_tld
+{        
+    echo $(grep -o '[^.]*$' <<< "$1")
+}
