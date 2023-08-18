@@ -255,6 +255,10 @@ public class GroupValidator {
 
     return object.length == 16;
   }
+  
+  public boolean isPendingAdminApprovalFull(Group group) {
+    return group.getMembersPendingAdminApprovalCount() >= maxGroupSize;
+  }
 
   public void validateFinalGroupState(Group group) throws BadRequestException {
     if (group.getTitle().isEmpty()) {
@@ -282,6 +286,11 @@ public class GroupValidator {
     // the admin approval pending list was purposefully left out of this computation
     if (group.getMembersCount() + group.getMembersPendingProfileKeyCount() > maxGroupSize) {
       throw new BadRequestException("group size cannot exceed " + maxGroupSize);
+    }
+    
+    // put some sort of cap on the maximum number of accounts that can be pending admin review
+    if (group.getMembersPendingAdminApprovalCount() > maxGroupSize) {
+      throw new BadRequestException("members pending admin approval cannot exceed " + maxGroupSize);
     }
 
     Set<ByteString> membersUserIds = group.getMembersList().stream().map(Member::getUserId).collect(Collectors.toSet());

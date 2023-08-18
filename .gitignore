@@ -24,6 +24,7 @@ service/src/main/java/su/sres/shadowserver/storage/protos/*
 service/src/main/java/su/sres/shadowserver/groups/protos/*
 .project
 .settings
+.classpath
 /bin/
 deployer.properties
 deployer.log

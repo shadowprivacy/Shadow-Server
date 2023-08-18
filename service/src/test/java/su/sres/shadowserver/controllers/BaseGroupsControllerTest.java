@@ -43,6 +43,7 @@ public abstract class BaseGroupsControllerTest {
   protected final ProfileKeyCredentialPresentation validUserPresentation      = new ClientZkProfileOperations(GroupAuthHelper.GROUPS_SERVER_KEY.getPublicParams()).createProfileKeyCredentialPresentation(groupSecretParams, GroupAuthHelper.VALID_USER_PROFILE_CREDENTIAL);
   protected final ProfileKeyCredentialPresentation validUserTwoPresentation   = new ClientZkProfileOperations(GroupAuthHelper.GROUPS_SERVER_KEY.getPublicParams()).createProfileKeyCredentialPresentation(groupSecretParams, GroupAuthHelper.VALID_USER_TWO_PROFILE_CREDENTIAL);
   protected final ProfileKeyCredentialPresentation validUserThreePresentation = new ClientZkProfileOperations(GroupAuthHelper.GROUPS_SERVER_KEY.getPublicParams()).createProfileKeyCredentialPresentation(groupSecretParams, GroupAuthHelper.VALID_USER_THREE_PROFILE_CREDENTIAL);
+  protected final ProfileKeyCredentialPresentation validUserFourPresentation  = new ClientZkProfileOperations(GroupAuthHelper.GROUPS_SERVER_KEY.getPublicParams()).createProfileKeyCredentialPresentation(groupSecretParams, GroupAuthHelper.VALID_USER_FOUR_PROFILE_CREDENTIAL);
   protected final GroupsManager                    groupsManager              = mock(GroupsManager.class);
   protected final PostPolicyGenerator              postPolicyGenerator        = new PostPolicyGenerator("us-west-1", "profile-bucket", "accessKey");
   protected final PolicySigner                     policySigner               = new PolicySigner("accessSecret", "us-west-1");

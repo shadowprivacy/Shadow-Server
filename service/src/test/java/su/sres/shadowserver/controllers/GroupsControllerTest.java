@@ -27,6 +27,7 @@ import su.sres.shadowserver.groups.protos.GroupJoinInfo;
 import su.sres.shadowserver.groups.protos.Member;
 import su.sres.shadowserver.groups.protos.MemberPendingAdminApproval;
 import su.sres.shadowserver.groups.protos.MemberPendingProfileKey;
+import su.sres.shadowserver.util.AuthHelper;
 import su.sres.shadowserver.util.GroupAuthHelper;
 import org.signal.zkgroup.InvalidInputException;
 import org.signal.zkgroup.NotarySignature;
@@ -43,9 +44,11 @@ import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.time.Clock;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -122,7 +125,7 @@ public class GroupsControllerTest extends BaseGroupsControllerTest {
                                                       .setMembers(AccessControl.AccessRequired.MEMBER)
                                                       .setAttributes(AccessControl.AccessRequired.MEMBER))
                        .setTitle(ByteString.copyFromUtf8("Some title"))
-                       .setAvatar("groups/" + encodeBase64URLSafeString(groupPublicParams.getGroupIdentifier().serialize()) + "/foo")
+                       .setAvatar("groups/" + Base64.getUrlEncoder().withoutPadding().encodeToString(groupPublicParams.getGroupIdentifier().serialize()) + "/foo")
                        .setVersion(0)
                        .addMembers(Member.newBuilder()
                                          .setPresentation(ByteString.copyFrom(validUserPresentation.serialize()))
@@ -222,7 +225,7 @@ public class GroupsControllerTest extends BaseGroupsControllerTest {
 
 
   @Test
-  public void testCreateGroupNotAdmin() throws Exception {
+  public void testCreateGroupNotAdmin() {
     GroupSecretParams groupSecretParams = GroupSecretParams.generate();
     GroupPublicParams groupPublicParams = groupSecretParams.getPublicParams();
 
@@ -262,7 +265,7 @@ public class GroupsControllerTest extends BaseGroupsControllerTest {
   }
 
   @Test
-  public void testCreateGroupNoMembers() throws Exception {
+  public void testCreateGroupNoMembers() {
     GroupSecretParams groupSecretParams = GroupSecretParams.generate();
     GroupPublicParams groupPublicParams = groupSecretParams.getPublicParams();
 
@@ -291,7 +294,7 @@ public class GroupsControllerTest extends BaseGroupsControllerTest {
   }
 
   @Test
-  public void testCreateGroupNoKey() throws Exception {
+  public void testCreateGroupNoKey() {
     GroupSecretParams groupSecretParams = GroupSecretParams.generate();
     GroupPublicParams groupPublicParams = groupSecretParams.getPublicParams();
 
@@ -330,7 +333,7 @@ public class GroupsControllerTest extends BaseGroupsControllerTest {
   }
 
   @Test
-  public void testCreateGroupBadVersion() throws Exception {
+  public void testCreateGroupBadVersion() {
     GroupSecretParams groupSecretParams = GroupSecretParams.generate();
     GroupPublicParams groupPublicParams = groupSecretParams.getPublicParams();
 
@@ -370,7 +373,7 @@ public class GroupsControllerTest extends BaseGroupsControllerTest {
   }
 
   @Test
-  public void testCreateGroupUnknownField() throws Exception {
+  public void testCreateGroupUnknownField() {
     GroupSecretParams groupSecretParams = GroupSecretParams.generate();
     GroupPublicParams groupPublicParams = groupSecretParams.getPublicParams();
 
@@ -412,7 +415,7 @@ public class GroupsControllerTest extends BaseGroupsControllerTest {
   }
 
   @Test
-  public void testCreateGroupNoAccessControl() throws Exception {
+  public void testCreateGroupNoAccessControl() {
     GroupSecretParams groupSecretParams = GroupSecretParams.generate();
     GroupPublicParams groupPublicParams = groupSecretParams.getPublicParams();
 
@@ -449,13 +452,12 @@ public class GroupsControllerTest extends BaseGroupsControllerTest {
   }
 
   @Test
-  public void testCreateGroupBadMember() throws Exception {
+  public void testCreateGroupBadMember() {
     GroupSecretParams groupSecretParams = GroupSecretParams.generate();
     GroupPublicParams groupPublicParams = groupSecretParams.getPublicParams();
 
     ProfileKeyCredentialPresentation validUserPresentation = new ClientZkProfileOperations(GroupAuthHelper.GROUPS_SERVER_KEY.getPublicParams()).createProfileKeyCredentialPresentation(groupSecretParams, GroupAuthHelper.VALID_USER_PROFILE_CREDENTIAL);
-    ProfileKeyCredentialPresentation validUserTwoPresentation = new ClientZkProfileOperations(GroupAuthHelper.GROUPS_SERVER_KEY.getPublicParams()).createProfileKeyCredentialPresentation(groupSecretParams, GroupAuthHelper.VALID_USER_TWO_PROFILE_CREDENTIAL);
-
+    
     when(groupsManager.createGroup(eq(ByteString.copyFrom(groupPublicParams.getGroupIdentifier().serialize())),
                                    any(Group.class)))
         .thenReturn(true);
@@ -489,7 +491,7 @@ public class GroupsControllerTest extends BaseGroupsControllerTest {
   }
 
   @Test
-  public void testGetGroup() throws Exception, IOException {
+  public void testGetGroup() throws Exception {
     GroupSecretParams groupSecretParams = GroupSecretParams.generate();
     GroupPublicParams groupPublicParams = groupSecretParams.getPublicParams();
 
@@ -540,7 +542,7 @@ public class GroupsControllerTest extends BaseGroupsControllerTest {
   public void testGetGroupJoinInfo() throws Exception {
     final byte[] inviteLinkPassword = new byte[16];
     new SecureRandom().nextBytes(inviteLinkPassword);
-    final String inviteLinkPasswordString = encodeBase64URLSafeString(inviteLinkPassword);
+    final String inviteLinkPasswordString = Base64.getUrlEncoder().withoutPadding().encodeToString(inviteLinkPassword);
 
     final Group.Builder groupBuilder = Group.newBuilder();
     groupBuilder.setPublicKey(ByteString.copyFrom(groupPublicParams.serialize()));
@@ -613,6 +615,7 @@ public class GroupsControllerTest extends BaseGroupsControllerTest {
     assertThat(groupJoinInfo.getAddFromInviteLink()).isEqualTo(AccessControl.AccessRequired.ANY);
     assertThat(groupJoinInfo.getVersion()).isEqualTo(42);
     assertThat(groupJoinInfo.getPendingAdminApproval()).isFalse();
+    assertThat(groupJoinInfo.getPendingAdminApprovalFull()).isFalse();
 
     groupBuilder.setVersion(0);
 
@@ -668,6 +671,7 @@ public class GroupsControllerTest extends BaseGroupsControllerTest {
     assertThat(groupJoinInfo.getAddFromInviteLink()).isEqualTo(AccessControl.AccessRequired.UNSATISFIABLE);
     assertThat(groupJoinInfo.getVersion()).isEqualTo(0);
     assertThat(groupJoinInfo.getPendingAdminApproval()).isTrue();
+    assertThat(groupJoinInfo.getPendingAdminApprovalFull()).isFalse();
 
     when(groupsManager.getGroup(eq(ByteString.copyFrom(groupPublicParams.getGroupIdentifier().serialize()))))
             .thenReturn(Optional.of(groupBuilder.build()));
@@ -690,10 +694,11 @@ public class GroupsControllerTest extends BaseGroupsControllerTest {
     assertThat(groupJoinInfo.getAddFromInviteLink()).isEqualTo(AccessControl.AccessRequired.UNSATISFIABLE);
     assertThat(groupJoinInfo.getVersion()).isEqualTo(0);
     assertThat(groupJoinInfo.getPendingAdminApproval()).isTrue();
+    assertThat(groupJoinInfo.getPendingAdminApprovalFull()).isFalse();
   }
 
   @Test
-  public void testGetGroupUnauthorized() throws Exception, IOException {
+  public void testGetGroupUnauthorized() {
     GroupSecretParams groupSecretParams = GroupSecretParams.generate();
     GroupPublicParams groupPublicParams = groupSecretParams.getPublicParams();
 
@@ -728,7 +733,7 @@ public class GroupsControllerTest extends BaseGroupsControllerTest {
   }
 
   @Test
-  public void testGetGroupNotFound() throws Exception, IOException {
+  public void testGetGroupNotFound() {
     GroupSecretParams groupSecretParams = GroupSecretParams.generate();
     GroupPublicParams groupPublicParams = groupSecretParams.getPublicParams();
 
@@ -746,7 +751,7 @@ public class GroupsControllerTest extends BaseGroupsControllerTest {
   }
 
   @Test
-  public void testModifyBadAvatar() throws Exception {
+  public void testModifyBadAvatar() {
     GroupSecretParams groupSecretParams = GroupSecretParams.generate();
     GroupPublicParams groupPublicParams = groupSecretParams.getPublicParams();
 
@@ -1014,13 +1019,11 @@ public class GroupsControllerTest extends BaseGroupsControllerTest {
 
     when(groupsManager.getGroup(eq(ByteString.copyFrom(groupPublicParams.getGroupIdentifier().serialize()))))
             .thenReturn(Optional.of(group));
-
-    StringBuilder newTitle = new StringBuilder(2048);
-    newTitle.append("A".repeat(2047));
+    
     GroupChange.Actions groupChange = Actions.newBuilder()
                                              .setVersion(1)
                                              .setModifyTitle(ModifyTitleAction.newBuilder()
-                                                                              .setTitle(ByteString.copyFromUtf8(newTitle.toString())))
+                                             .setTitle(ByteString.copyFromUtf8("A".repeat(2047))))
                                              .build();
 
     Response response = resources.getJerseyTest()
@@ -1115,6 +1118,95 @@ public class GroupsControllerTest extends BaseGroupsControllerTest {
     GroupAuthHelper.GROUPS_SERVER_KEY.getPublicParams().verifySignature(signedChange.getActions().toByteArray(),
                                                                    new NotarySignature(signedChange.getServerSignature().toByteArray()));
   }
+  
+  @Test
+  public void testModifyGroupAnnouncementsOnly() throws Exception {
+    GroupSecretParams groupSecretParams = GroupSecretParams.generate();
+    GroupPublicParams groupPublicParams = groupSecretParams.getPublicParams();
+
+    ProfileKeyCredentialPresentation validUserPresentation    = new ClientZkProfileOperations(GroupAuthHelper.GROUPS_SERVER_KEY.getPublicParams()).createProfileKeyCredentialPresentation(groupSecretParams, GroupAuthHelper.VALID_USER_PROFILE_CREDENTIAL    );
+    ProfileKeyCredentialPresentation validUserTwoPresentation = new ClientZkProfileOperations(GroupAuthHelper.GROUPS_SERVER_KEY.getPublicParams()).createProfileKeyCredentialPresentation(groupSecretParams, GroupAuthHelper.VALID_USER_TWO_PROFILE_CREDENTIAL);
+
+    Group group = Group.newBuilder()
+        .setPublicKey(ByteString.copyFrom(groupPublicParams.serialize()))
+        .setAccessControl(AccessControl.newBuilder()
+            .setMembers(AccessControl.AccessRequired.MEMBER)
+            .setAttributes(AccessControl.AccessRequired.MEMBER))
+        .setTitle(ByteString.copyFromUtf8("Some title"))
+        .setAvatar(avatarFor(groupPublicParams.getGroupIdentifier().serialize()))
+        .setVersion(0)
+        .addMembers(Member.newBuilder()
+            .setUserId(ByteString.copyFrom(validUserPresentation.getUuidCiphertext().serialize()))
+            .setProfileKey(ByteString.copyFrom(validUserPresentation.getProfileKeyCiphertext().serialize()))
+            .setRole(Member.Role.ADMINISTRATOR)
+            .build())
+        .addMembers(Member.newBuilder()
+            .setUserId(ByteString.copyFrom(validUserTwoPresentation.getUuidCiphertext().serialize()))
+            .setProfileKey(ByteString.copyFrom(validUserTwoPresentation.getProfileKeyCiphertext().serialize()))
+            .setRole(Member.Role.DEFAULT)
+            .build())
+        .build();
+
+
+    when(groupsManager.getGroup(eq(ByteString.copyFrom(groupPublicParams.getGroupIdentifier().serialize()))))
+        .thenReturn(Optional.of(group));
+
+    when(groupsManager.updateGroup(eq(ByteString.copyFrom(groupPublicParams.getGroupIdentifier().serialize())), any(Group.class)))
+        .thenReturn(Optional.empty());
+
+    when(groupsManager.appendChangeRecord(eq(ByteString.copyFrom(groupPublicParams.getGroupIdentifier().serialize())), eq(1), any(GroupChange.class), any(Group.class)))
+        .thenReturn(true);
+
+    GroupChange.Actions groupChange = Actions.newBuilder()
+        .setVersion(1)
+        .setModifyAnnouncementsOnly(Actions.ModifyAnnouncementsOnlyAction.newBuilder().setAnnouncementsOnly(true))
+        .build();
+
+    Response response = resources.getJerseyTest()
+        .target("/v1/groups/")
+        .request(ProtocolBufferMediaType.APPLICATION_PROTOBUF)
+        .header("Authorization", GroupAuthHelper.getAuthHeader(groupSecretParams, GroupAuthHelper.VALID_USER_TWO_AUTH_CREDENTIAL))
+        .method("PATCH", Entity.entity(groupChange.toByteArray(), ProtocolBufferMediaType.APPLICATION_PROTOBUF));
+
+    assertThat(response.getStatus()).isEqualTo(403);
+    verify(groupsManager, never()).updateGroup(eq(ByteString.copyFrom(groupPublicParams.getGroupIdentifier().serialize())), any());
+    verify(groupsManager, never()).appendChangeRecord(eq(ByteString.copyFrom(groupPublicParams.getGroupIdentifier().serialize())), anyInt(), any(), any());
+
+    response = resources.getJerseyTest()
+        .target("/v1/groups/")
+        .request(ProtocolBufferMediaType.APPLICATION_PROTOBUF)
+        .header("Authorization", GroupAuthHelper.getAuthHeader(groupSecretParams, GroupAuthHelper.VALID_USER_AUTH_CREDENTIAL))
+        .method("PATCH", Entity.entity(groupChange.toByteArray(), ProtocolBufferMediaType.APPLICATION_PROTOBUF));
+
+    assertThat(response.getStatus()).isEqualTo(200);
+    assertThat(response.hasEntity()).isTrue();
+    assertThat(response.getMediaType().toString()).isEqualTo("application/x-protobuf");
+
+    GroupChange signedChange = GroupChange.parseFrom(response.readEntity(InputStream.class).readAllBytes());
+
+    ArgumentCaptor<Group> captor = ArgumentCaptor.forClass(Group.class);
+    ArgumentCaptor<GroupChange> changeCaptor = ArgumentCaptor.forClass(GroupChange.class);
+
+    verify(groupsManager).updateGroup(eq(ByteString.copyFrom(groupPublicParams.getGroupIdentifier().serialize())), captor.capture());
+    verify(groupsManager).appendChangeRecord(eq(ByteString.copyFrom(groupPublicParams.getGroupIdentifier().serialize())), eq(1), changeCaptor.capture(), any(Group.class));
+
+    assertThat(captor.getValue().getAnnouncementsOnly()).isTrue();
+    assertThat(captor.getValue().getVersion()).isEqualTo(1);
+
+    assertThat(captor.getValue().toBuilder()
+        .setAnnouncementsOnly(false)
+        .setVersion(0)
+        .build()).isEqualTo(group);
+
+    assertThat(signedChange).isEqualTo(changeCaptor.getValue());
+    assertThat(signedChange.getChangeEpoch()).isEqualTo(3);
+    assertThat(Actions.parseFrom(signedChange.getActions()).getVersion()).isEqualTo(1);
+    assertThat(Actions.parseFrom(signedChange.getActions()).getSourceUuid()).isEqualTo(ByteString.copyFrom(validUserPresentation.getUuidCiphertext().serialize()));
+    assertThat(Actions.parseFrom(signedChange.getActions()).toBuilder().clearSourceUuid().build()).isEqualTo(groupChange);
+
+    GroupAuthHelper.GROUPS_SERVER_KEY.getPublicParams().verifySignature(signedChange.getActions().toByteArray(),
+        new NotarySignature(signedChange.getServerSignature().toByteArray()));
+  }
 
   @Test
   public void testModifyGroupAvatarAndTitle() throws Exception {
@@ -1205,7 +1297,7 @@ public class GroupsControllerTest extends BaseGroupsControllerTest {
   }
 
   @Test
-  public void testModifyGroupTimer() throws Exception, IOException, InvalidInputException {
+  public void testModifyGroupTimer() throws Exception {
     GroupSecretParams groupSecretParams = GroupSecretParams.generate();
     GroupPublicParams groupPublicParams = groupSecretParams.getPublicParams();
 
@@ -1286,7 +1378,7 @@ public class GroupsControllerTest extends BaseGroupsControllerTest {
   }
 
   @Test
-  public void testModifyGroupTimerUnauthorized() throws Exception, IOException, InvalidInputException {
+  public void testModifyGroupTimerUnauthorized() {
     GroupSecretParams groupSecretParams = GroupSecretParams.generate();
     GroupPublicParams groupPublicParams = groupSecretParams.getPublicParams();
 
@@ -1335,7 +1427,7 @@ public class GroupsControllerTest extends BaseGroupsControllerTest {
   }
 
   @Test
-  public void testDeleteMember() throws Exception, IOException, InvalidInputException {
+  public void testDeleteMember() throws Exception {
     GroupSecretParams groupSecretParams = GroupSecretParams.generate();
     GroupPublicParams groupPublicParams = groupSecretParams.getPublicParams();
 
@@ -1421,7 +1513,7 @@ public class GroupsControllerTest extends BaseGroupsControllerTest {
   }
 
   @Test
-  public void testDeleteMemberUnauthorized() throws Exception, IOException, InvalidInputException {
+  public void testDeleteMemberUnauthorized() {
     GroupSecretParams groupSecretParams = GroupSecretParams.generate();
     GroupPublicParams groupPublicParams = groupSecretParams.getPublicParams();
 
@@ -1472,7 +1564,7 @@ public class GroupsControllerTest extends BaseGroupsControllerTest {
 
 
   @Test
-  public void testAddMember() throws Exception, IOException, InvalidInputException {
+  public void testAddMember() throws Exception {
     GroupSecretParams groupSecretParams = GroupSecretParams.generate();
     GroupPublicParams groupPublicParams = groupSecretParams.getPublicParams();
 
@@ -1801,7 +1893,7 @@ public class GroupsControllerTest extends BaseGroupsControllerTest {
   }
 
   @Test
-  public void testAddMemberUnauthorized() throws Exception, IOException, InvalidInputException {
+  public void testAddMemberUnauthorized() {
     GroupSecretParams groupSecretParams = GroupSecretParams.generate();
     GroupPublicParams groupPublicParams = groupSecretParams.getPublicParams();
 
@@ -1848,7 +1940,7 @@ public class GroupsControllerTest extends BaseGroupsControllerTest {
   }
 
   @Test
-  public void testJoinNonPublicGroup() throws Exception, IOException, InvalidInputException {
+  public void testJoinNonPublicGroup() {
     GroupSecretParams groupSecretParams = GroupSecretParams.generate();
     GroupPublicParams groupPublicParams = groupSecretParams.getPublicParams();
 
@@ -1899,7 +1991,7 @@ public class GroupsControllerTest extends BaseGroupsControllerTest {
   }
 
   @Test
-  public void testAddAdminUnauthorized() throws Exception, IOException, InvalidInputException {
+  public void testAddAdminUnauthorized() {
     GroupSecretParams groupSecretParams = GroupSecretParams.generate();
     GroupPublicParams groupPublicParams = groupSecretParams.getPublicParams();
 
@@ -2028,7 +2120,7 @@ public class GroupsControllerTest extends BaseGroupsControllerTest {
   }
 
   @Test
-  public void testModifyMemberPresentationUnauthorized() throws Exception {
+  public void testModifyMemberPresentationUnauthorized() {
     GroupSecretParams groupSecretParams = GroupSecretParams.generate();
     GroupPublicParams groupPublicParams = groupSecretParams.getPublicParams();
 
@@ -2076,7 +2168,7 @@ public class GroupsControllerTest extends BaseGroupsControllerTest {
   }
 
   @Test
-  public void testAddMemberPendingProfileKey() throws Exception, IOException, InvalidInputException {
+  public void testAddMemberPendingProfileKey() throws Exception {
     GroupSecretParams groupSecretParams = GroupSecretParams.generate();
     GroupPublicParams groupPublicParams = groupSecretParams.getPublicParams();
 
@@ -2165,7 +2257,7 @@ public class GroupsControllerTest extends BaseGroupsControllerTest {
   }
 
   @Test
-  public void testAddMemberPendingProfileKeyNotMember() throws Exception, IOException, InvalidInputException {
+  public void testAddMemberPendingProfileKeyNotMember() {
     GroupSecretParams groupSecretParams = GroupSecretParams.generate();
     GroupPublicParams groupPublicParams = groupSecretParams.getPublicParams();
 
@@ -2218,7 +2310,7 @@ public class GroupsControllerTest extends BaseGroupsControllerTest {
   }
 
   @Test
-  public void testAddMemberPendingProfileKeyUnauthorized() throws Exception, IOException, InvalidInputException {
+  public void testAddMemberPendingProfileKeyUnauthorized() {
     GroupSecretParams groupSecretParams = GroupSecretParams.generate();
     GroupPublicParams groupPublicParams = groupSecretParams.getPublicParams();
 
@@ -2270,7 +2362,7 @@ public class GroupsControllerTest extends BaseGroupsControllerTest {
   }
 
   @Test
-  public void testDeleteMemberPendingProfileKeyAsAdmin() throws Exception, IOException, InvalidInputException {
+  public void testDeleteMemberPendingProfileKeyAsAdmin() throws Exception {
     GroupSecretParams groupSecretParams = GroupSecretParams.generate();
     GroupPublicParams groupPublicParams = groupSecretParams.getPublicParams();
 
@@ -2352,7 +2444,7 @@ public class GroupsControllerTest extends BaseGroupsControllerTest {
   }
 
   @Test
-  public void testDeleteMemberPendingProfileKeyAsInvitee() throws Exception, IOException, InvalidInputException {
+  public void testDeleteMemberPendingProfileKeyAsInvitee() throws Exception {
     GroupSecretParams groupSecretParams = GroupSecretParams.generate();
     GroupPublicParams groupPublicParams = groupSecretParams.getPublicParams();
 
@@ -2433,7 +2525,7 @@ public class GroupsControllerTest extends BaseGroupsControllerTest {
   }
 
   @Test
-  public void testDeleteMemberPendingProfileKeyUnauthorized() throws Exception, IOException, InvalidInputException {
+  public void testDeleteMemberPendingProfileKeyUnauthorized() {
     GroupSecretParams groupSecretParams = GroupSecretParams.generate();
     GroupPublicParams groupPublicParams = groupSecretParams.getPublicParams();
 
@@ -2494,7 +2586,7 @@ public class GroupsControllerTest extends BaseGroupsControllerTest {
   }
 
   @Test
-  public void testAcceptMemberPendingProfileKeyInvitation() throws Exception, IOException, InvalidInputException {
+  public void testAcceptMemberPendingProfileKeyInvitation() throws Exception {
     GroupSecretParams groupSecretParams = GroupSecretParams.generate();
     GroupPublicParams groupPublicParams = groupSecretParams.getPublicParams();
 
@@ -2588,7 +2680,7 @@ public class GroupsControllerTest extends BaseGroupsControllerTest {
   }
 
   @Test
-  public void testAcceptMemberPendingProfileKeyInvitationUnauthorized() throws Exception, IOException, InvalidInputException {
+  public void testAcceptMemberPendingProfileKeyInvitationUnauthorized() {
     GroupSecretParams groupSecretParams = GroupSecretParams.generate();
     GroupPublicParams groupPublicParams = groupSecretParams.getPublicParams();
 
@@ -2643,7 +2735,7 @@ public class GroupsControllerTest extends BaseGroupsControllerTest {
   }
 
   @Test
-  public void testModifyMembersRole() throws Exception, IOException, InvalidInputException {
+  public void testModifyMembersRole() throws Exception {
     GroupSecretParams groupSecretParams = GroupSecretParams.generate();
     GroupPublicParams groupPublicParams = groupSecretParams.getPublicParams();
 
@@ -2723,7 +2815,7 @@ public class GroupsControllerTest extends BaseGroupsControllerTest {
   }
 
   @Test
-  public void testModifyMembersAccessRoleUnauthorized() throws Exception, IOException, InvalidInputException {
+  public void testModifyMembersAccessRoleUnauthorized() {
     GroupSecretParams groupSecretParams = GroupSecretParams.generate();
     GroupPublicParams groupPublicParams = groupSecretParams.getPublicParams();
 
@@ -2779,7 +2871,7 @@ public class GroupsControllerTest extends BaseGroupsControllerTest {
   }
 
   @Test
-  public void testModifyMemberRole() throws Exception, IOException, InvalidInputException {
+  public void testModifyMemberRole() throws Exception {
     GroupSecretParams groupSecretParams = GroupSecretParams.generate();
     GroupPublicParams groupPublicParams = groupSecretParams.getPublicParams();
 
@@ -2862,7 +2954,7 @@ public class GroupsControllerTest extends BaseGroupsControllerTest {
   }
 
   @Test
-  public void testModifyMemberRoleUnauthorized() throws Exception, IOException, InvalidInputException {
+  public void testModifyMemberRoleUnauthorized() {
     GroupSecretParams groupSecretParams = GroupSecretParams.generate();
     GroupPublicParams groupPublicParams = groupSecretParams.getPublicParams();
 
@@ -3087,7 +3179,7 @@ public class GroupsControllerTest extends BaseGroupsControllerTest {
   }
 
   @Test
-  public void testGetGroupLogsTooOldTest() throws Exception {
+  public void testGetGroupLogsTooOldTest() {
     GroupSecretParams groupSecretParams = GroupSecretParams.generate();
     GroupPublicParams groupPublicParams = groupSecretParams.getPublicParams();
 
@@ -3148,7 +3240,7 @@ public class GroupsControllerTest extends BaseGroupsControllerTest {
 
     AvatarUploadAttributes uploadAttributes = AvatarUploadAttributes.parseFrom(response.readEntity(InputStream.class).readAllBytes());
 
-    assertThat(uploadAttributes.getKey()).startsWith("groups/" + encodeBase64URLSafeString(groupPublicParams.getGroupIdentifier().serialize()));
+    assertThat(uploadAttributes.getKey()).startsWith("groups/" + Base64.getUrlEncoder().withoutPadding().encodeToString(groupPublicParams.getGroupIdentifier().serialize()));
     assertThat(uploadAttributes.getAcl()).isEqualTo("private");
     assertThat(uploadAttributes.getCredential()).isNotEmpty();
     assertThat(uploadAttributes.getDate()).isNotEmpty();
@@ -3204,7 +3296,7 @@ public class GroupsControllerTest extends BaseGroupsControllerTest {
   }
 
   @Test
-  public void testGetGroupCredentialTokenUnauthorized() throws Exception, IOException {
+  public void testGetGroupCredentialTokenUnauthorized() {
     GroupSecretParams groupSecretParams = GroupSecretParams.generate();
     GroupPublicParams groupPublicParams = groupSecretParams.getPublicParams();
 
@@ -3239,7 +3331,7 @@ public class GroupsControllerTest extends BaseGroupsControllerTest {
   }
 
   @Test
-  public void testGetGroupCredentialTokenNotFound() throws Exception, IOException {
+  public void testGetGroupCredentialTokenNotFound() {
     GroupSecretParams groupSecretParams = GroupSecretParams.generate();
     GroupPublicParams groupPublicParams = groupSecretParams.getPublicParams();
 

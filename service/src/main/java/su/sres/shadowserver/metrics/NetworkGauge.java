@@ -18,10 +18,10 @@ import java.io.IOException;
 public abstract class NetworkGauge implements Gauge<Double> {
 
   protected Pair<Long, Long> getSentReceived() throws IOException {
-    File           proc          = new File("/proc/net/dev");
-    BufferedReader reader        = new BufferedReader(new FileReader(proc));
-    String         header        = reader.readLine();
-    String         header2       = reader.readLine();
+    File proc = new File("/proc/net/dev");
+    try (BufferedReader reader = new BufferedReader(new FileReader(proc))) {
+      reader.readLine(); // header
+      reader.readLine(); // header2
 
     long           bytesSent     = 0;
     long           bytesReceived = 0;
@@ -37,6 +37,7 @@ public abstract class NetworkGauge implements Gauge<Double> {
         }
       }
 
-    return new Pair<>(bytesSent, bytesReceived);
+      return new Pair<>(bytesSent, bytesReceived);
+    }
   }
 }

@@ -465,6 +465,12 @@
       <artifactId>api-common</artifactId>
       <version>1.10.6</version>
     </dependency>
+    
+    <dependency>
+            <groupId>org.syslog4j</groupId>
+            <artifactId>syslog4j</artifactId>
+            <version>0.9.30</version>
+    </dependency>
 
   </dependencies>
 
