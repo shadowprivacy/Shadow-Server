@@ -7,8 +7,6 @@ package su.sres.shadowserver.push;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,11 +19,11 @@ import io.micrometer.core.instrument.Metrics;
 import io.micrometer.core.instrument.Tag;
 import su.sres.shadowserver.controllers.MessageController;
 import su.sres.shadowserver.metrics.PushLatencyManager;
+import su.sres.shadowserver.push.ApnMessage.Type;
 import su.sres.shadowserver.redis.RedisOperation;
 import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.storage.Device;
 import su.sres.shadowserver.storage.MessagesManager;
-import su.sres.shadowserver.util.Constants;
 import su.sres.shadowserver.util.Util;
 
 /**
@@ -146,10 +144,10 @@ public class MessageSender implements Managed {
     ApnMessage apnMessage;
 
     if (!Util.isEmpty(device.getVoipApnId())) {
-      apnMessage = new ApnMessage(device.getVoipApnId(), account.getUserLogin(), device.getId(), true, Optional.empty());
+      apnMessage = new ApnMessage(device.getVoipApnId(), account.getUserLogin(), device.getId(), true, Type.NOTIFICATION, Optional.empty());
       RedisOperation.unchecked(() -> apnFallbackManager.schedule(account, device));
     } else {
-      apnMessage = new ApnMessage(device.getApnId(), account.getUserLogin(), device.getId(), false, Optional.empty());
+      apnMessage = new ApnMessage(device.getApnId(), account.getUserLogin(), device.getId(), false, Type.NOTIFICATION, Optional.empty());
     }
 
     apnSender.sendMessage(apnMessage);

@@ -6,6 +6,7 @@
 package su.sres.shadowserver.providers;
 
 import java.io.IOException;
+import java.util.Base64;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonGenerator;
@@ -13,8 +14,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonSerializer;
 import com.fasterxml.jackson.databind.SerializerProvider;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
-
-import su.sres.shadowserver.util.Base64;
 
 public class SystemCerts {
 
@@ -104,7 +103,7 @@ public class SystemCerts {
 	    public void serialize(byte[] bytes, JsonGenerator jsonGenerator, SerializerProvider serializerProvider)
 	        throws IOException, JsonProcessingException
 	    {
-	      jsonGenerator.writeString(Base64.encodeBytes(bytes));
+	      jsonGenerator.writeString(Base64.getEncoder().encodeToString(bytes));
 	    }
 	  }
 }

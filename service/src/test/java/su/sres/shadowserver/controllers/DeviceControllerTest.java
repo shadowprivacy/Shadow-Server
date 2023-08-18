@@ -35,6 +35,7 @@ import su.sres.shadowserver.mappers.DeviceLimitExceededExceptionMapper;
 import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.storage.AccountsManager;
 import su.sres.shadowserver.storage.Device;
+import su.sres.shadowserver.storage.Device.DeviceCapabilities;
 import su.sres.shadowserver.storage.MessagesManager;
 import su.sres.shadowserver.storage.PendingDevicesManager;
 import su.sres.shadowserver.util.AuthHelper;
@@ -105,8 +106,7 @@ public class DeviceControllerTest {
     when(rateLimiters.getVerifyLimiter()).thenReturn(rateLimiter);
     when(rateLimiters.getAllocateDeviceLimiter()).thenReturn(rateLimiter);
     when(rateLimiters.getVerifyDeviceLimiter()).thenReturn(rateLimiter);
-
-    // introduced with CDS
+    
     when(masterDevice.getId()).thenReturn(1L);
 
     when(account.getNextDeviceId()).thenReturn(42L);
@@ -114,11 +114,12 @@ public class DeviceControllerTest {
     when(account.getUuid()).thenReturn(AuthHelper.VALID_UUID);
 //    when(maxedAccount.getActiveDeviceCount()).thenReturn(6);
 
-    // introduced with CDS
     when(account.getAuthenticatedDevice()).thenReturn(Optional.of(masterDevice));
     when(account.isEnabled()).thenReturn(false);
     when(account.isGroupsV2Supported()).thenReturn(true);
     when(account.isGv1MigrationSupported()).thenReturn(true);
+    when(account.isSenderKeySupported()).thenReturn(true);
+    when(account.isAnnouncementGroupSupported()).thenReturn(true);
 
     when(pendingDevicesManager.getCodeForUserLogin(AuthHelper.VALID_NUMBER)).thenReturn(Optional.of(new StoredVerificationCode("5678901", System.currentTimeMillis(), null)));
     when(pendingDevicesManager.getCodeForUserLogin(AuthHelper.VALID_NUMBER_TWO)).thenReturn(Optional.of(new StoredVerificationCode("1112223", System.currentTimeMillis() - TimeUnit.HOURS.toMillis(50), null)));
@@ -224,7 +225,7 @@ public class DeviceControllerTest {
   @Test
   @Parameters(method = "argumentsForDeviceDowngradeCapabilitiesTest")
   public void deviceDowngradeCapabilitiesTest(final String userAgent, final boolean gv2, final boolean gv2_2, final boolean gv2_3, final int expectedStatus) throws Exception {
-    Device.DeviceCapabilities deviceCapabilities = new Device.DeviceCapabilities(gv2, gv2_2, gv2_3, true, false, true);
+    DeviceCapabilities deviceCapabilities = new DeviceCapabilities(gv2, gv2_2, gv2_3, true, false, true, true, true);
     AccountAttributes accountAttributes = new AccountAttributes(false, 1234, null, true, deviceCapabilities);
     Response response = resources.getJerseyTest()
         .target("/v1/devices/5678901")
@@ -264,7 +265,7 @@ public class DeviceControllerTest {
 
   @Test
   public void deviceDowngradeGv1MigrationTest() {
-    Device.DeviceCapabilities deviceCapabilities = new Device.DeviceCapabilities(true, true, true, true, false, false);
+    DeviceCapabilities deviceCapabilities = new DeviceCapabilities(true, true, true, true, false, false, true, true);
     AccountAttributes accountAttributes = new AccountAttributes(false, 1234, null, true, deviceCapabilities);
     Response response = resources.getJerseyTest()
         .target("/v1/devices/5678901")
@@ -275,7 +276,7 @@ public class DeviceControllerTest {
 
     assertThat(response.getStatus()).isEqualTo(409);
 
-    deviceCapabilities = new Device.DeviceCapabilities(true, true, true, true, false, true);
+    deviceCapabilities = new DeviceCapabilities(true, true, true, true, false, true, true, true);
     accountAttributes = new AccountAttributes(false, 1234, null, true, deviceCapabilities);
     response = resources.getJerseyTest()
         .target("/v1/devices/5678901")
@@ -284,6 +285,59 @@ public class DeviceControllerTest {
         .header("user-agent", "Signal-Android/4.68.3 Android/25")
         .put(Entity.entity(accountAttributes, MediaType.APPLICATION_JSON_TYPE));
 
+    assertThat(response.getStatus()).isEqualTo(200);
+    
+  }
+
+  @Test
+  public void deviceDowngradeSenderKeyTest() {
+    DeviceCapabilities deviceCapabilities = new DeviceCapabilities(true, true, true, true, true, true, false, true);
+    AccountAttributes accountAttributes =
+        new AccountAttributes(false, 1234, null, true, deviceCapabilities);
+    Response response = resources
+        .getJerseyTest()
+        .target("/v1/devices/5678901")
+        .request()
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .header("User-Agent", "Signal-Android/5.42.8675309 Android/30")
+        .put(Entity.entity(accountAttributes, MediaType.APPLICATION_JSON_TYPE));
+    assertThat(response.getStatus()).isEqualTo(409);
+
+    deviceCapabilities = new DeviceCapabilities(true, true, true, true, true, true, true, true);
+    accountAttributes = new AccountAttributes(false, 1234, null, true, deviceCapabilities);
+    response = resources
+        .getJerseyTest()
+        .target("/v1/devices/5678901")
+        .request()
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .header("User-Agent", "Signal-Android/5.42.8675309 Android/30")
+        .put(Entity.entity(accountAttributes, MediaType.APPLICATION_JSON_TYPE));
+    assertThat(response.getStatus()).isEqualTo(200);
+  }
+
+  @Test
+  public void deviceDowngradeAnnouncementGroupTest() {
+    DeviceCapabilities deviceCapabilities = new DeviceCapabilities(true, true, true, true, true, true, true, false);
+    AccountAttributes accountAttributes =
+        new AccountAttributes(false, 1234, null, true, deviceCapabilities);
+    Response response = resources
+        .getJerseyTest()
+        .target("/v1/devices/5678901")
+        .request()
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .header("User-Agent", "Signal-Android/5.42.8675309 Android/30")
+        .put(Entity.entity(accountAttributes, MediaType.APPLICATION_JSON_TYPE));
+    assertThat(response.getStatus()).isEqualTo(409);
+
+    deviceCapabilities = new DeviceCapabilities(true, true, true, true, true, true, true, true);
+    accountAttributes = new AccountAttributes(false, 1234, null, true, deviceCapabilities);
+    response = resources
+        .getJerseyTest()
+        .target("/v1/devices/5678901")
+        .request()
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .header("User-Agent", "Signal-Android/5.42.8675309 Android/30")
+        .put(Entity.entity(accountAttributes, MediaType.APPLICATION_JSON_TYPE));
     assertThat(response.getStatus()).isEqualTo(200);
 
   }

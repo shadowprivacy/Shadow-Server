@@ -6,25 +6,23 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.amazonaws.ClientConfiguration;
-import com.amazonaws.auth.AWSStaticCredentialsProvider;
-import com.amazonaws.auth.BasicAWSCredentials;
-import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration;
-import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
-import com.amazonaws.services.dynamodbv2.document.DynamoDB;
-import com.amazonaws.services.dynamodbv2.document.Table;
-import com.amazonaws.services.dynamodbv2.model.AttributeDefinition;
-import com.amazonaws.services.dynamodbv2.model.CreateTableRequest;
-import com.amazonaws.services.dynamodbv2.model.KeySchemaElement;
-import com.amazonaws.services.dynamodbv2.model.KeyType;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 
 import io.dropwizard.Application;
 import io.dropwizard.cli.EnvironmentCommand;
 import io.dropwizard.setup.Environment;
 import net.sourceforge.argparse4j.inf.Namespace;
+import software.amazon.awssdk.core.waiters.WaiterResponse;
+import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
+import software.amazon.awssdk.services.dynamodb.model.AttributeDefinition;
+import software.amazon.awssdk.services.dynamodb.model.CreateTableRequest;
+import software.amazon.awssdk.services.dynamodb.model.DescribeTableResponse;
+import software.amazon.awssdk.services.dynamodb.model.KeySchemaElement;
+import software.amazon.awssdk.services.dynamodb.model.KeyType;
+import software.amazon.awssdk.services.dynamodb.waiters.DynamoDbWaiter;
 import su.sres.shadowserver.WhisperServerConfiguration;
 import su.sres.shadowserver.configuration.ScyllaDbConfiguration;
+import su.sres.shadowserver.util.ScyllaDbFromConfig;
 
 public class CreateGroupLogsDbCommand extends EnvironmentCommand<WhisperServerConfiguration> {
 
@@ -54,38 +52,40 @@ public class CreateGroupLogsDbCommand extends EnvironmentCommand<WhisperServerCo
 
     ScyllaDbConfiguration scyllaGroupLogsConfig = config.getGroupLogsScyllaDbConfiguration();
 
-    AmazonDynamoDBClientBuilder clientBuilder = AmazonDynamoDBClientBuilder
-        .standard()
-        .withEndpointConfiguration(new EndpointConfiguration(scyllaGroupLogsConfig.getEndpoint(), scyllaGroupLogsConfig.getRegion()))
-        .withClientConfiguration(new ClientConfiguration().withClientExecutionTimeout(((int) scyllaGroupLogsConfig.getClientExecutionTimeout().toMillis()))
-            .withRequestTimeout((int) scyllaGroupLogsConfig.getClientRequestTimeout().toMillis()))
-        .withCredentials(new AWSStaticCredentialsProvider(new BasicAWSCredentials(scyllaGroupLogsConfig.getAccessKey(), scyllaGroupLogsConfig.getAccessSecret())));
+    String tableName = scyllaGroupLogsConfig.getTableName();
 
-    DynamoDB groupLogsDynamoDb = new DynamoDB(clientBuilder.build());
+    DynamoDbClient groupLogsScyllaDb = ScyllaDbFromConfig.client(scyllaGroupLogsConfig);
 
     List<AttributeDefinition> attributeDefinitions = new ArrayList<AttributeDefinition>();
-    attributeDefinitions.add(new AttributeDefinition().withAttributeName(KEY_GROUP_ID).withAttributeType("B"));
-    attributeDefinitions.add(new AttributeDefinition().withAttributeName(KEY_GROUP_VERSION).withAttributeType("N"));
-    attributeDefinitions.add(new AttributeDefinition().withAttributeName(KEY_GROUP_CHANGE).withAttributeType("B"));
-    attributeDefinitions.add(new AttributeDefinition().withAttributeName(KEY_GROUP_STATE).withAttributeType("B"));
+    attributeDefinitions.add(AttributeDefinition.builder().attributeName(KEY_GROUP_ID).attributeType("B").build());
+    attributeDefinitions.add(AttributeDefinition.builder().attributeName(KEY_GROUP_VERSION).attributeType("N").build());
+    attributeDefinitions.add(AttributeDefinition.builder().attributeName(KEY_GROUP_CHANGE).attributeType("B").build());
+    attributeDefinitions.add(AttributeDefinition.builder().attributeName(KEY_GROUP_STATE).attributeType("B").build());
 
     List<KeySchemaElement> keySchema = new ArrayList<KeySchemaElement>();
-    keySchema.add(new KeySchemaElement().withAttributeName(KEY_GROUP_ID).withKeyType(KeyType.HASH));
-    keySchema.add(new KeySchemaElement().withAttributeName(KEY_GROUP_VERSION).withKeyType(KeyType.RANGE));
+    keySchema.add(KeySchemaElement.builder().attributeName(KEY_GROUP_ID).keyType(KeyType.HASH).build());
+    keySchema.add(KeySchemaElement.builder().attributeName(KEY_GROUP_VERSION).keyType(KeyType.RANGE).build());
 
-    CreateTableRequest request = new CreateTableRequest()
-        .withTableName(scyllaGroupLogsConfig.getTableName())
-        .withKeySchema(keySchema)
-        .withAttributeDefinitions(attributeDefinitions)
-        .withBillingMode("PAY_PER_REQUEST");
+    CreateTableRequest request = CreateTableRequest.builder()
+        .tableName(tableName)
+        .keySchema(keySchema)
+        .attributeDefinitions(attributeDefinitions)
+        .billingMode("PAY_PER_REQUEST")
+        .build();
 
     logger.info("Creating the grouplogsdb table...");
 
-    Table table = groupLogsDynamoDb.createTable(request);
+    DynamoDbWaiter waiter = groupLogsScyllaDb.waiter();
 
-    table.waitForActive();
+    groupLogsScyllaDb.createTable(request);
 
-    logger.info("Done");
+    WaiterResponse<DescribeTableResponse> waiterResponse = waiter.waitUntilTableExists(r -> r.tableName(tableName));
+
+    if (waiterResponse.matched().response().isPresent()) {
+
+      logger.info("Done");
+
+    }
 
   }
 }

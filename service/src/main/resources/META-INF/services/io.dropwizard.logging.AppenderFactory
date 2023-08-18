@@ -1,1 +1,1 @@
-su.sres.shadowserver.metrics.LoggingNetworkAppenderFactory
+su.sres.shadowserver.metrics.LogstashTcpSocketAppenderFactory

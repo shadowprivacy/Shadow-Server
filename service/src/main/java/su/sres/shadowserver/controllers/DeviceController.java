@@ -232,10 +232,10 @@ public class DeviceController {
 
   private boolean isCapabilityDowngrade(Account account, DeviceCapabilities capabilities, String userAgent) {
     boolean isDowngrade = false;
-
-    if (account.isGv1MigrationSupported() && !capabilities.isGv1Migration()) {
-      isDowngrade = true;
-    }
+    
+    isDowngrade |= account.isAnnouncementGroupSupported() && !capabilities.isAnnouncementGroup();
+    isDowngrade |= account.isSenderKeySupported() && !capabilities.isSenderKey();
+    isDowngrade |= account.isGv1MigrationSupported() && !capabilities.isGv1Migration();
 
     if (account.isGroupsV2Supported()) {
       try {

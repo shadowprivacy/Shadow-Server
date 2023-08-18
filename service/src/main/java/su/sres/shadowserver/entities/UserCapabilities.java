@@ -7,27 +7,53 @@ package su.sres.shadowserver.entities;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import su.sres.shadowserver.storage.Account;
+
 public class UserCapabilities {
 
-    @JsonProperty
-    private boolean gv2;
+  public static UserCapabilities createForAccount(Account account) {
+    return new UserCapabilities(
+        account.isGroupsV2Supported(),
+        account.isGv1MigrationSupported(),
+        account.isSenderKeySupported(),
+        account.isAnnouncementGroupSupported());
+  }
 
-    @JsonProperty("gv1-migration")
-    private boolean gv1Migration;
+  @JsonProperty
+  private boolean gv2;
 
-    public UserCapabilities() {
-    }
+  @JsonProperty("gv1-migration")
+  private boolean gv1Migration;
 
-    public UserCapabilities(boolean gv2, boolean gv1Migration) {
-	this.gv2 = gv2;
-	this.gv1Migration = gv1Migration;
-    }
+  @JsonProperty
+  private boolean senderKey;
 
-    public boolean isGv2() {
-	return gv2;
-    }
+  @JsonProperty
+  private boolean announcementGroup;
 
-    public boolean isGv1Migration() {
-	return gv1Migration;
-    }
+  public UserCapabilities() {
+  }
+
+  public UserCapabilities(boolean gv2, boolean gv1Migration, final boolean senderKey, final boolean announcementGroup) {
+    this.gv2 = gv2;
+    this.gv1Migration = gv1Migration;
+    this.senderKey = senderKey;
+    this.announcementGroup = announcementGroup;
+  }
+
+  public boolean isGv2() {
+    return gv2;
+  }
+
+  public boolean isGv1Migration() {
+    return gv1Migration;
+  }
+
+  public boolean isSenderKey() {
+    return senderKey;
+  }
+
+  public boolean isAnnouncementGroup() {
+    return announcementGroup;
+  }
 }

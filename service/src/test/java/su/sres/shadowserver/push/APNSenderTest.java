@@ -19,6 +19,7 @@ import org.mockito.stubbing.Answer;
 import su.sres.shadowserver.push.APNSender;
 import su.sres.shadowserver.push.ApnFallbackManager;
 import su.sres.shadowserver.push.ApnMessage;
+import su.sres.shadowserver.push.ApnMessage.Type;
 import su.sres.shadowserver.push.RetryingApnsClient;
 import su.sres.shadowserver.push.RetryingApnsClient.ApnResult;
 import su.sres.shadowserver.storage.Account;
@@ -65,7 +66,7 @@ public class APNSenderTest {
         .thenAnswer((Answer) invocationOnMock -> new MockPushNotificationFuture<>(invocationOnMock.getArgument(0), response));
 
     RetryingApnsClient retryingApnsClient = new RetryingApnsClient(apnsClient);
-    ApnMessage         message            = new ApnMessage(DESTINATION_APN_ID, DESTINATION_NUMBER, 1, true, Optional.empty());
+    ApnMessage         message            = new ApnMessage(DESTINATION_APN_ID, DESTINATION_NUMBER, 1, true, Type.NOTIFICATION, Optional.empty());
     APNSender          apnSender          = new APNSender(new SynchronousExecutorService(), accountsManager, retryingApnsClient, "foo", false);
 
     apnSender.setApnFallbackManager(fallbackManager);
@@ -77,7 +78,7 @@ public class APNSenderTest {
 
     assertThat(notification.getValue().getToken()).isEqualTo(DESTINATION_APN_ID);
     assertThat(notification.getValue().getExpiration()).isEqualTo(Instant.ofEpochMilli(ApnMessage.MAX_EXPIRATION));
-    assertThat(notification.getValue().getPayload()).isEqualTo(ApnMessage.APN_NOTIFICATION_PAYLOAD);
+    assertThat(notification.getValue().getPayload()).isEqualTo(ApnMessage.APN_VOIP_NOTIFICATION_PAYLOAD);
     assertThat(notification.getValue().getPriority()).isEqualTo(DeliveryPriority.IMMEDIATE);
     assertThat(notification.getValue().getTopic()).isEqualTo("foo.voip");
 
@@ -99,7 +100,7 @@ public class APNSenderTest {
         .thenAnswer((Answer) invocationOnMock -> new MockPushNotificationFuture<>(invocationOnMock.getArgument(0), response));
 
     RetryingApnsClient retryingApnsClient = new RetryingApnsClient(apnsClient);
-    ApnMessage message = new ApnMessage(DESTINATION_APN_ID, DESTINATION_NUMBER, 1, false, Optional.empty());
+    ApnMessage message = new ApnMessage(DESTINATION_APN_ID, DESTINATION_NUMBER, 1, false, Type.NOTIFICATION,  Optional.empty());
     APNSender apnSender = new APNSender(new SynchronousExecutorService(), accountsManager, retryingApnsClient, "foo", false);
     apnSender.setApnFallbackManager(fallbackManager);
 
@@ -111,7 +112,7 @@ public class APNSenderTest {
 
     assertThat(notification.getValue().getToken()).isEqualTo(DESTINATION_APN_ID);
     assertThat(notification.getValue().getExpiration()).isEqualTo(Instant.ofEpochMilli(ApnMessage.MAX_EXPIRATION));
-    assertThat(notification.getValue().getPayload()).isEqualTo(ApnMessage.APN_NOTIFICATION_PAYLOAD);
+    assertThat(notification.getValue().getPayload()).isEqualTo(ApnMessage.APN_NSE_NOTIFICATION_PAYLOAD);
     assertThat(notification.getValue().getPriority()).isEqualTo(DeliveryPriority.IMMEDIATE);
     assertThat(notification.getValue().getTopic()).isEqualTo("foo");
 
@@ -135,7 +136,7 @@ public class APNSenderTest {
 
 
     RetryingApnsClient retryingApnsClient = new RetryingApnsClient(apnsClient);
-    ApnMessage         message            = new ApnMessage(DESTINATION_APN_ID, DESTINATION_NUMBER, 1, true, Optional.empty());
+    ApnMessage         message            = new ApnMessage(DESTINATION_APN_ID, DESTINATION_NUMBER, 1, true, Type.NOTIFICATION, Optional.empty());
     APNSender          apnSender          = new APNSender(new SynchronousExecutorService(), accountsManager, retryingApnsClient, "foo", false);
     apnSender.setApnFallbackManager(fallbackManager);
 
@@ -152,7 +153,7 @@ public class APNSenderTest {
 
     assertThat(notification.getValue().getToken()).isEqualTo(DESTINATION_APN_ID);
     assertThat(notification.getValue().getExpiration()).isEqualTo(Instant.ofEpochMilli(ApnMessage.MAX_EXPIRATION));
-    assertThat(notification.getValue().getPayload()).isEqualTo(ApnMessage.APN_NOTIFICATION_PAYLOAD);
+    assertThat(notification.getValue().getPayload()).isEqualTo(ApnMessage.APN_VOIP_NOTIFICATION_PAYLOAD);
     assertThat(notification.getValue().getPriority()).isEqualTo(DeliveryPriority.IMMEDIATE);
 
     assertThat(apnResult.getStatus()).isEqualTo(ApnResult.Status.NO_SUCH_USER);
@@ -238,7 +239,7 @@ public class APNSenderTest {
         .thenAnswer((Answer) invocationOnMock -> new MockPushNotificationFuture<>(invocationOnMock.getArgument(0), response));
 
     RetryingApnsClient retryingApnsClient = new RetryingApnsClient(apnsClient);
-    ApnMessage         message            = new ApnMessage(DESTINATION_APN_ID, DESTINATION_NUMBER, 1, true, Optional.empty());
+    ApnMessage         message            = new ApnMessage(DESTINATION_APN_ID, DESTINATION_NUMBER, 1, true, Type.NOTIFICATION,  Optional.empty());
     APNSender          apnSender          = new APNSender(new SynchronousExecutorService(), accountsManager, retryingApnsClient, "foo", false);
     apnSender.setApnFallbackManager(fallbackManager);
 
@@ -255,7 +256,7 @@ public class APNSenderTest {
 
     assertThat(notification.getValue().getToken()).isEqualTo(DESTINATION_APN_ID);
     assertThat(notification.getValue().getExpiration()).isEqualTo(Instant.ofEpochMilli(ApnMessage.MAX_EXPIRATION));
-    assertThat(notification.getValue().getPayload()).isEqualTo(ApnMessage.APN_NOTIFICATION_PAYLOAD);
+    assertThat(notification.getValue().getPayload()).isEqualTo(ApnMessage.APN_VOIP_NOTIFICATION_PAYLOAD);
     assertThat(notification.getValue().getPriority()).isEqualTo(DeliveryPriority.IMMEDIATE);
 
     assertThat(apnResult.getStatus()).isEqualTo(ApnResult.Status.NO_SUCH_USER);
@@ -333,7 +334,7 @@ public class APNSenderTest {
         .thenAnswer((Answer) invocationOnMock -> new MockPushNotificationFuture<>(invocationOnMock.getArgument(0), response));
 
     RetryingApnsClient retryingApnsClient = new RetryingApnsClient(apnsClient);
-    ApnMessage         message            = new ApnMessage(DESTINATION_APN_ID, DESTINATION_NUMBER, 1, true, Optional.empty());
+    ApnMessage         message            = new ApnMessage(DESTINATION_APN_ID, DESTINATION_NUMBER, 1, true, Type.NOTIFICATION, Optional.empty());
     APNSender          apnSender          = new APNSender(new SynchronousExecutorService(), accountsManager, retryingApnsClient, "foo", false);
     apnSender.setApnFallbackManager(fallbackManager);
 
@@ -345,7 +346,7 @@ public class APNSenderTest {
 
     assertThat(notification.getValue().getToken()).isEqualTo(DESTINATION_APN_ID);
     assertThat(notification.getValue().getExpiration()).isEqualTo(Instant.ofEpochMilli(ApnMessage.MAX_EXPIRATION));
-    assertThat(notification.getValue().getPayload()).isEqualTo(ApnMessage.APN_NOTIFICATION_PAYLOAD);
+    assertThat(notification.getValue().getPayload()).isEqualTo(ApnMessage.APN_VOIP_NOTIFICATION_PAYLOAD);
     assertThat(notification.getValue().getPriority()).isEqualTo(DeliveryPriority.IMMEDIATE);
 
     assertThat(apnResult.getStatus()).isEqualTo(ApnResult.Status.GENERIC_FAILURE);
@@ -366,7 +367,7 @@ public class APNSenderTest {
         .thenAnswer((Answer) invocationOnMock -> new MockPushNotificationFuture<>(invocationOnMock.getArgument(0), new Exception("lost connection")));
 
     RetryingApnsClient retryingApnsClient = new RetryingApnsClient(apnsClient);
-    ApnMessage         message            = new ApnMessage(DESTINATION_APN_ID, DESTINATION_NUMBER, 1, true, Optional.empty());
+    ApnMessage         message            = new ApnMessage(DESTINATION_APN_ID, DESTINATION_NUMBER, 1, true, Type.NOTIFICATION,  Optional.empty());
     APNSender          apnSender          = new APNSender(new SynchronousExecutorService(), accountsManager, retryingApnsClient, "foo", false);
     apnSender.setApnFallbackManager(fallbackManager);
 
@@ -386,7 +387,7 @@ public class APNSenderTest {
 
     assertThat(notification.getValue().getToken()).isEqualTo(DESTINATION_APN_ID);
     assertThat(notification.getValue().getExpiration()).isEqualTo(Instant.ofEpochMilli(ApnMessage.MAX_EXPIRATION));
-    assertThat(notification.getValue().getPayload()).isEqualTo(ApnMessage.APN_NOTIFICATION_PAYLOAD);
+    assertThat(notification.getValue().getPayload()).isEqualTo(ApnMessage.APN_VOIP_NOTIFICATION_PAYLOAD);
     assertThat(notification.getValue().getPriority()).isEqualTo(DeliveryPriority.IMMEDIATE);
 
     verifyNoMoreInteractions(apnsClient);

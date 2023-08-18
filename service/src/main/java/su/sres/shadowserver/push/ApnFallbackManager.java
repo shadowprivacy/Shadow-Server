@@ -26,6 +26,7 @@ import static com.codahale.metrics.MetricRegistry.name;
 import io.dropwizard.lifecycle.Managed;
 import io.lettuce.core.ScriptOutputType;
 import io.lettuce.core.cluster.SlotHash;
+import su.sres.shadowserver.push.ApnMessage.Type;
 import su.sres.shadowserver.redis.ClusterLuaScript;
 import su.sres.shadowserver.redis.FaultTolerantRedisCluster;
 import su.sres.shadowserver.redis.RedisException;
@@ -191,7 +192,7 @@ public class ApnFallbackManager implements Managed {
       return;
     }
 
-    apnSender.sendMessage(new ApnMessage(apnId, account.getUserLogin(), device.getId(), true, Optional.empty()));
+    apnSender.sendMessage(new ApnMessage(apnId, account.getUserLogin(), device.getId(), true, Type.NOTIFICATION, Optional.empty()));
     retry.mark();
   }
 

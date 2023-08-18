@@ -121,6 +121,8 @@ public class ProfileControllerTest {
     when(profileAccount.isEnabled()).thenReturn(true);
     when(profileAccount.isGroupsV2Supported()).thenReturn(false);
     when(profileAccount.isGv1MigrationSupported()).thenReturn(false);
+    when(profileAccount.isSenderKeySupported()).thenReturn(false);
+    when(profileAccount.isAnnouncementGroupSupported()).thenReturn(false);
     when(profileAccount.getCurrentProfileVersion()).thenReturn(Optional.empty());
 
     Account capabilitiesAccount = mock(Account.class);
@@ -131,6 +133,8 @@ public class ProfileControllerTest {
     when(capabilitiesAccount.isEnabled()).thenReturn(true);
     when(capabilitiesAccount.isGroupsV2Supported()).thenReturn(true);
     when(capabilitiesAccount.isGv1MigrationSupported()).thenReturn(true);
+    when(capabilitiesAccount.isSenderKeySupported()).thenReturn(true);
+    when(capabilitiesAccount.isAnnouncementGroupSupported()).thenReturn(true);
 
     when(accountsManager.get(AuthHelper.VALID_NUMBER_TWO)).thenReturn(Optional.of(profileAccount));
     when(accountsManager.get(AuthHelper.VALID_UUID_TWO)).thenReturn(Optional.of(profileAccount));
@@ -260,6 +264,20 @@ public class ProfileControllerTest {
 
     assertThat(profile.getCapabilities().isGv2()).isEqualTo(true);
     assertThat(profile.getCapabilities().isGv1Migration()).isEqualTo(true);
+    assertThat(profile.getCapabilities().isSenderKey()).isTrue();
+    assertThat(profile.getCapabilities().isAnnouncementGroup()).isTrue();
+
+    profile = resources
+        .getJerseyTest()
+        .target("/v1/profile/" + AuthHelper.VALID_NUMBER_TWO)
+        .request()
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER_TWO, AuthHelper.VALID_PASSWORD_TWO))
+        .get(Profile.class);
+
+    assertThat(profile.getCapabilities().isGv2()).isFalse();
+    assertThat(profile.getCapabilities().isGv1Migration()).isFalse();
+    assertThat(profile.getCapabilities().isSenderKey()).isFalse();
+    assertThat(profile.getCapabilities().isAnnouncementGroup()).isFalse();
   }
 
   @Test
@@ -403,7 +421,7 @@ public class ProfileControllerTest {
   }
 
   @Test
-  public void testSetProfileExtendedName() throws InvalidInputException, InvalidKeyException, ErrorResponseException, IllegalArgumentException, InsufficientDataException, InternalException, InvalidBucketNameException, InvalidResponseException, NoSuchAlgorithmException, ServerException, XmlParserException, IOException {
+  public void testSetProfileExtendedName() throws InvalidInputException, InvalidKeyException, ErrorResponseException, IllegalArgumentException, InsufficientDataException, InternalException, InvalidResponseException, NoSuchAlgorithmException, ServerException, XmlParserException, IOException {
     ProfileKeyCommitment commitment = new ProfileKey(new byte[32]).getCommitment(AuthHelper.VALID_UUID_TWO);
 
     final String name = RandomStringUtils.randomAlphabetic(380);

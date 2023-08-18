@@ -5,21 +5,23 @@
 
 package su.sres.shadowserver.storage;
 
-import com.amazonaws.services.dynamodbv2.document.DeleteItemOutcome;
-import com.amazonaws.services.dynamodbv2.document.DynamoDB;
-import com.amazonaws.services.dynamodbv2.document.Item;
-import com.amazonaws.services.dynamodbv2.document.PrimaryKey;
-import com.amazonaws.services.dynamodbv2.document.Table;
-import com.amazonaws.services.dynamodbv2.document.TableWriteItems;
-import com.amazonaws.services.dynamodbv2.document.spec.DeleteItemSpec;
-import com.amazonaws.services.dynamodbv2.document.spec.QuerySpec;
-import com.amazonaws.services.dynamodbv2.model.ReturnValue;
-import com.amazonaws.services.dynamodbv2.model.Select;
 import com.google.common.annotations.VisibleForTesting;
 import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.Metrics;
 import io.micrometer.core.instrument.Timer;
+import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
+import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
+import software.amazon.awssdk.services.dynamodb.model.DeleteItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.DeleteItemResponse;
+import software.amazon.awssdk.services.dynamodb.model.DeleteRequest;
+import software.amazon.awssdk.services.dynamodb.model.PutRequest;
+import software.amazon.awssdk.services.dynamodb.model.QueryRequest;
+import software.amazon.awssdk.services.dynamodb.model.QueryResponse;
+import software.amazon.awssdk.services.dynamodb.model.ReturnValue;
+import software.amazon.awssdk.services.dynamodb.model.Select;
+import software.amazon.awssdk.services.dynamodb.model.WriteRequest;
 import su.sres.shadowserver.entities.PreKey;
+import su.sres.shadowserver.util.AttributeValues;
 import su.sres.shadowserver.util.UUIDUtil;
 
 import java.nio.ByteBuffer;
@@ -35,7 +37,7 @@ import static com.codahale.metrics.MetricRegistry.name;
 
 public class KeysScyllaDb extends AbstractScyllaDbStore {
 
-  private final Table table;
+  private final String tableName;
 
   static final String KEY_ACCOUNT_UUID = "U";
   static final String KEY_DEVICE_ID_KEY_ID = "DK";
@@ -50,10 +52,9 @@ public class KeysScyllaDb extends AbstractScyllaDbStore {
   private static final DistributionSummary CONTESTED_KEY_DISTRIBUTION = Metrics.summary(name(KeysScyllaDb.class, "contestedKeys"));
   private static final DistributionSummary KEY_COUNT_DISTRIBUTION        = Metrics.summary(name(KeysScyllaDb.class, "keyCount"));
 
-  public KeysScyllaDb(final DynamoDB scyllaDb, final String tableName) {
-    super(scyllaDb);
-
-    this.table = scyllaDb.getTable(tableName);
+  public KeysScyllaDb(final DynamoDbClient scyllaDB, final String tableName) {
+    super(scyllaDB);
+    this.tableName = tableName;
   }
 
   public void store(final Account account, final long deviceId, final List<PreKey> keys) {
@@ -61,39 +62,48 @@ public class KeysScyllaDb extends AbstractScyllaDbStore {
       delete(account, deviceId);
 
       writeInBatches(keys, batch -> {
-        final TableWriteItems items = new TableWriteItems(table.getTableName());
-
+        List<WriteRequest> items = new ArrayList<>();
         for (final PreKey preKey : batch) {
-          items.addItemToPut(getItemFromPreKey(account.getUuid(), deviceId, preKey));
+          items.add(WriteRequest.builder()
+              .putRequest(PutRequest.builder()
+                  .item(getItemFromPreKey(account.getUuid(), deviceId, preKey))
+                  .build())
+              .build());
         }
-
-        executeTableWriteItemsUntilComplete(items);
+        executeTableWriteItemsUntilComplete(Map.of(tableName, items));
       });
     });
   }
 
   public Optional<PreKey> take(final Account account, final long deviceId) {
     return TAKE_KEY_FOR_DEVICE_TIMER.record(() -> {
-      final byte[] partitionKey = getPartitionKey(account.getUuid());
-
-      final QuerySpec querySpec = new QuerySpec().withKeyConditionExpression("#uuid = :uuid AND begins_with (#sort, :sortprefix)")
-          .withNameMap(Map.of("#uuid", KEY_ACCOUNT_UUID, "#sort", KEY_DEVICE_ID_KEY_ID))
-          .withValueMap(Map.of(":uuid", partitionKey,
+      final AttributeValue partitionKey = getPartitionKey(account.getUuid());
+      QueryRequest queryRequest = QueryRequest.builder()
+          .tableName(tableName)
+          .keyConditionExpression("#uuid = :uuid AND begins_with (#sort, :sortprefix)")
+          .expressionAttributeNames(Map.of("#uuid", KEY_ACCOUNT_UUID, "#sort", KEY_DEVICE_ID_KEY_ID))
+          .expressionAttributeValues(Map.of(
+              ":uuid", partitionKey,
               ":sortprefix", getSortKeyPrefix(deviceId)))
-          .withProjectionExpression(KEY_DEVICE_ID_KEY_ID)
-          .withConsistentRead(false);
+          .projectionExpression(KEY_DEVICE_ID_KEY_ID)
+          .consistentRead(false)
+          .build(); 
 
       int contestedKeys = 0;
 
       try {
-        for (final Item candidate : table.query(querySpec)) {
-          final DeleteItemSpec deleteItemSpec = new DeleteItemSpec().withPrimaryKey(KEY_ACCOUNT_UUID, partitionKey, KEY_DEVICE_ID_KEY_ID, candidate.getBinary(KEY_DEVICE_ID_KEY_ID))
-              .withReturnValues(ReturnValue.ALL_OLD);
-
-          final DeleteItemOutcome outcome = table.deleteItem(deleteItemSpec);
-
-          if (outcome.getItem() != null) {
-            return Optional.of(getPreKeyFromItem(outcome.getItem()));
+        QueryResponse response = db().query(queryRequest);
+        for (Map<String, AttributeValue> candidate : response.items()) {
+          DeleteItemRequest deleteItemRequest = DeleteItemRequest.builder()
+              .tableName(tableName)
+              .key(Map.of(
+                  KEY_ACCOUNT_UUID, partitionKey,
+                  KEY_DEVICE_ID_KEY_ID, candidate.get(KEY_DEVICE_ID_KEY_ID)))
+              .returnValues(ReturnValue.ALL_OLD)
+              .build();
+          DeleteItemResponse deleteItemResponse = db().deleteItem(deleteItemRequest);
+          if (deleteItemResponse.hasAttributes()) {
+            return Optional.of(getPreKeyFromItem(deleteItemResponse.attributes()));
           }
 
           contestedKeys++;
@@ -120,15 +130,26 @@ public class KeysScyllaDb extends AbstractScyllaDbStore {
 
   public int getCount(final Account account, final long deviceId) {
     return GET_KEY_COUNT_TIMER.record(() -> {
-      final QuerySpec querySpec = new QuerySpec().withKeyConditionExpression("#uuid = :uuid AND begins_with (#sort, :sortprefix)")
-          .withNameMap(Map.of("#uuid", KEY_ACCOUNT_UUID, "#sort", KEY_DEVICE_ID_KEY_ID))
-          .withValueMap(Map.of(":uuid", getPartitionKey(account.getUuid()),
+      QueryRequest queryRequest = QueryRequest.builder()
+          .tableName(tableName)
+          .keyConditionExpression("#uuid = :uuid AND begins_with (#sort, :sortprefix)")
+          .expressionAttributeNames(Map.of("#uuid", KEY_ACCOUNT_UUID, "#sort", KEY_DEVICE_ID_KEY_ID))
+          .expressionAttributeValues(Map.of(
+              ":uuid", getPartitionKey(account.getUuid()),
               ":sortprefix", getSortKeyPrefix(deviceId)))
-          .withSelect(Select.COUNT)
-          .withConsistentRead(false);
+          .select(Select.COUNT)
+          .consistentRead(false)
+          .build();
 
-      final int keyCount = (int)countItemsMatchingQuery(table, querySpec);
-
+      int keyCount = 0;
+      // This is very confusing, but does appear to be the intended behavior. See:
+      //
+      // - https://github.com/aws/aws-sdk-java/issues/693
+      // - https://github.com/aws/aws-sdk-java/issues/915
+      // - https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Query.html#Query.Count
+      for (final QueryResponse page : db().queryPaginator(queryRequest)) {
+        keyCount += page.count();
+      }
       KEY_COUNT_DISTRIBUTION.record(keyCount);
       return keyCount;
     });
@@ -136,68 +157,83 @@ public class KeysScyllaDb extends AbstractScyllaDbStore {
 
   public void delete(final Account account) {
     DELETE_KEYS_FOR_ACCOUNT_TIMER.record(() -> {
-      final QuerySpec querySpec = new QuerySpec().withKeyConditionExpression("#uuid = :uuid")
-          .withNameMap(Map.of("#uuid", KEY_ACCOUNT_UUID))
-          .withValueMap(Map.of(":uuid", getPartitionKey(account.getUuid())))
-          .withProjectionExpression(KEY_DEVICE_ID_KEY_ID)
-          .withConsistentRead(true);
+      final QueryRequest queryRequest = QueryRequest.builder()
+          .tableName(tableName)
+          .keyConditionExpression("#uuid = :uuid")
+          .expressionAttributeNames(Map.of("#uuid", KEY_ACCOUNT_UUID))
+          .expressionAttributeValues(Map.of(
+              ":uuid", getPartitionKey(account.getUuid())))
+          .projectionExpression(KEY_DEVICE_ID_KEY_ID)
+          .consistentRead(true)
+          .build();
 
-      deleteItemsForAccountMatchingQuery(account, querySpec);
+      deleteItemsForAccountMatchingQuery(account, queryRequest);
     });
   }
 
   @VisibleForTesting
   void delete(final Account account, final long deviceId) {
     DELETE_KEYS_FOR_DEVICE_TIMER.record(() -> {
-      final QuerySpec querySpec = new QuerySpec().withKeyConditionExpression("#uuid = :uuid AND begins_with (#sort, :sortprefix)")
-          .withNameMap(Map.of("#uuid", KEY_ACCOUNT_UUID, "#sort", KEY_DEVICE_ID_KEY_ID))
-          .withValueMap(Map.of(":uuid", getPartitionKey(account.getUuid()),
+      final QueryRequest queryRequest = QueryRequest.builder()
+          .tableName(tableName)
+          .keyConditionExpression("#uuid = :uuid AND begins_with (#sort, :sortprefix)")
+          .expressionAttributeNames(Map.of("#uuid", KEY_ACCOUNT_UUID, "#sort", KEY_DEVICE_ID_KEY_ID))
+          .expressionAttributeValues(Map.of(
+              ":uuid", getPartitionKey(account.getUuid()),
               ":sortprefix", getSortKeyPrefix(deviceId)))
-          .withProjectionExpression(KEY_DEVICE_ID_KEY_ID)
-          .withConsistentRead(true);
+          .projectionExpression(KEY_DEVICE_ID_KEY_ID)
+          .consistentRead(true)
+          .build();
 
-      deleteItemsForAccountMatchingQuery(account, querySpec);
+      deleteItemsForAccountMatchingQuery(account, queryRequest);
     });
   }
 
-  private void deleteItemsForAccountMatchingQuery(final Account account, final QuerySpec querySpec) {
-    final byte[] partitionKey = getPartitionKey(account.getUuid());
-    writeInBatches(table.query(querySpec), batch -> {
-      final TableWriteItems writeItems = new TableWriteItems(table.getTableName());
+  private void deleteItemsForAccountMatchingQuery(final Account account, final QueryRequest querySpec) {
+    final AttributeValue partitionKey = getPartitionKey(account.getUuid());
 
-      for (final Item item : batch) {
-        writeItems.addPrimaryKeyToDelete(new PrimaryKey(KEY_ACCOUNT_UUID, partitionKey, KEY_DEVICE_ID_KEY_ID, item.getBinary(KEY_DEVICE_ID_KEY_ID)));
+    writeInBatches(db().query(querySpec).items(), batch -> {
+      List<WriteRequest> deletes = new ArrayList<>();
+      for (final Map<String, AttributeValue> item : batch) {
+        deletes.add(WriteRequest.builder()
+            .deleteRequest(DeleteRequest.builder()
+                .key(Map.of(
+                    KEY_ACCOUNT_UUID, partitionKey,
+                    KEY_DEVICE_ID_KEY_ID, item.get(KEY_DEVICE_ID_KEY_ID)))
+                .build())
+            .build());
       }
-
-      executeTableWriteItemsUntilComplete(writeItems);
+      executeTableWriteItemsUntilComplete(Map.of(tableName, deletes));
     });
   }
 
-  private static byte[] getPartitionKey(final UUID accountUuid) {
-    return UUIDUtil.toBytes(accountUuid);
+  private static AttributeValue getPartitionKey(final UUID accountUuid) {
+    return AttributeValues.fromUUID(accountUuid);
   }
 
-  private static byte[] getSortKey(final long deviceId, final long keyId) {
+  private static AttributeValue getSortKey(final long deviceId, final long keyId) {
     final ByteBuffer byteBuffer = ByteBuffer.wrap(new byte[16]);
     byteBuffer.putLong(deviceId);
     byteBuffer.putLong(keyId);
-    return byteBuffer.array();
+    return AttributeValues.fromByteBuffer(byteBuffer.flip());
   }
 
-  private static byte[] getSortKeyPrefix(final long deviceId) {
+  @VisibleForTesting
+  static AttributeValue getSortKeyPrefix(final long deviceId) {
     final ByteBuffer byteBuffer = ByteBuffer.wrap(new byte[8]);
     byteBuffer.putLong(deviceId);
-    return byteBuffer.array();
+    return AttributeValues.fromByteBuffer(byteBuffer.flip());
   }
 
-  private Item getItemFromPreKey(final UUID accountUuid, final long deviceId, final PreKey preKey) {
-    return new Item().withBinary(KEY_ACCOUNT_UUID, getPartitionKey(accountUuid))
-        .withBinary(KEY_DEVICE_ID_KEY_ID, getSortKey(deviceId, preKey.getKeyId()))
-        .withString(KEY_PUBLIC_KEY, preKey.getPublicKey());
+  private Map<String, AttributeValue> getItemFromPreKey(final UUID accountUuid, final long deviceId, final PreKey preKey) {
+    return Map.of(
+        KEY_ACCOUNT_UUID, getPartitionKey(accountUuid),
+        KEY_DEVICE_ID_KEY_ID, getSortKey(deviceId, preKey.getKeyId()),
+        KEY_PUBLIC_KEY, AttributeValues.fromString(preKey.getPublicKey()));
   }
 
-  private PreKey getPreKeyFromItem(final Item item) {
-    final long keyId = ByteBuffer.wrap(item.getBinary(KEY_DEVICE_ID_KEY_ID)).getLong(8);
-    return new PreKey(keyId, item.getString(KEY_PUBLIC_KEY));
+  private PreKey getPreKeyFromItem(Map<String, AttributeValue> item) {
+    final long keyId = item.get(KEY_DEVICE_ID_KEY_ID).b().asByteBuffer().getLong(8);
+    return new PreKey(keyId, item.get(KEY_PUBLIC_KEY).s());
   }
 }

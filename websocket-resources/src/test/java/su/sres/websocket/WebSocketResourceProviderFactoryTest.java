@@ -25,7 +25,6 @@ import su.sres.websocket.auth.WebSocketAuthenticator;
 import su.sres.websocket.setup.WebSocketEnvironment;
 
 import javax.security.auth.Subject;
-import javax.servlet.ServletException;
 import java.io.IOException;
 import java.security.Principal;
 import java.util.Optional;
@@ -55,7 +54,7 @@ public class WebSocketResourceProviderFactoryTest {
   }
 
   @Test
-  public void testValidAuthorization() throws AuthenticationException, ServletException {
+  public void testValidAuthorization() throws AuthenticationException {
     ResourceConfig jerseyEnvironment = new DropwizardResourceConfig();
     WebSocketEnvironment environment = mock(WebSocketEnvironment.class);
     WebSocketAuthenticator authenticator = mock(WebSocketAuthenticator.class);
@@ -83,7 +82,7 @@ public class WebSocketResourceProviderFactoryTest {
   }
 
   @Test
-  public void testErrorAuthorization() throws AuthenticationException, ServletException, IOException {
+  public void testErrorAuthorization() throws AuthenticationException, IOException {
     ResourceConfig jerseyEnvironment = new DropwizardResourceConfig();
     WebSocketEnvironment environment = mock(WebSocketEnvironment.class);
     WebSocketAuthenticator authenticator = mock(WebSocketAuthenticator.class);

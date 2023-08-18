@@ -240,7 +240,7 @@ public class ProfileController {
           .orElse(null);
 
       Optional<ProfileKeyCredentialResponse> credential = getProfileCredential(credentialRequest, profile, uuid);
-
+            
       return Optional.of(new Profile(name,
           about,
           aboutEmoji,
@@ -249,7 +249,7 @@ public class ProfileController {
           accountProfile.get().getIdentityKey(),
           UnidentifiedAccessChecksum.generateFor(accountProfile.get().getUnidentifiedAccessKey()),
           accountProfile.get().isUnrestrictedUnidentifiedAccess(),
-          new UserCapabilities(accountProfile.get().isGroupsV2Supported(), accountProfile.get().isGv1MigrationSupported()),
+          UserCapabilities.createForAccount(accountProfile.get()),
           username.orElse(null),
           null,
           credential.orElse(null)));
@@ -280,7 +280,7 @@ public class ProfileController {
     if (accountProfile.isEmpty()) {
       throw new WebApplicationException(Response.status(Response.Status.NOT_FOUND).build());
     }
-
+        
     return new Profile(accountProfile.get().getProfileName(),
         null,
         null,
@@ -289,7 +289,7 @@ public class ProfileController {
         accountProfile.get().getIdentityKey(),
         UnidentifiedAccessChecksum.generateFor(accountProfile.get().getUnidentifiedAccessKey()),
         accountProfile.get().isUnrestrictedUnidentifiedAccess(),
-        new UserCapabilities(accountProfile.get().isGroupsV2Supported(), accountProfile.get().isGv1MigrationSupported()),
+        UserCapabilities.createForAccount(accountProfile.get()),
         username,
         accountProfile.get().getUuid(),
         null);
@@ -354,8 +354,8 @@ public class ProfileController {
     if (!identifier.hasUserLogin()) {
       // noinspection OptionalGetWithoutIsPresent
       username = usernamesManager.get(accountProfile.get().getUuid());
-    }
-
+    }    
+   
     return new Profile(accountProfile.get().getProfileName(),
         null,
         null,
@@ -364,7 +364,7 @@ public class ProfileController {
         accountProfile.get().getIdentityKey(),
         UnidentifiedAccessChecksum.generateFor(accountProfile.get().getUnidentifiedAccessKey()),
         accountProfile.get().isUnrestrictedUnidentifiedAccess(),
-        new UserCapabilities(accountProfile.get().isGroupsV2Supported(), accountProfile.get().isGv1MigrationSupported()),
+        UserCapabilities.createForAccount(accountProfile.get()),
         username.orElse(null),
         null,
         null);

@@ -6,28 +6,26 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.amazonaws.ClientConfiguration;
-import com.amazonaws.auth.AWSStaticCredentialsProvider;
-import com.amazonaws.auth.BasicAWSCredentials;
-import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration;
-import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
-import com.amazonaws.services.dynamodbv2.document.DynamoDB;
-import com.amazonaws.services.dynamodbv2.document.Table;
-import com.amazonaws.services.dynamodbv2.model.AttributeDefinition;
-import com.amazonaws.services.dynamodbv2.model.CreateTableRequest;
-import com.amazonaws.services.dynamodbv2.model.KeySchemaElement;
-import com.amazonaws.services.dynamodbv2.model.KeyType;
-import com.amazonaws.services.dynamodbv2.model.LocalSecondaryIndex;
-import com.amazonaws.services.dynamodbv2.model.Projection;
-import com.amazonaws.services.dynamodbv2.model.ProjectionType;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 
 import io.dropwizard.Application;
 import io.dropwizard.cli.EnvironmentCommand;
 import io.dropwizard.setup.Environment;
 import net.sourceforge.argparse4j.inf.Namespace;
+import software.amazon.awssdk.core.waiters.WaiterResponse;
+import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
+import software.amazon.awssdk.services.dynamodb.model.AttributeDefinition;
+import software.amazon.awssdk.services.dynamodb.model.CreateTableRequest;
+import software.amazon.awssdk.services.dynamodb.model.DescribeTableResponse;
+import software.amazon.awssdk.services.dynamodb.model.KeySchemaElement;
+import software.amazon.awssdk.services.dynamodb.model.KeyType;
+import software.amazon.awssdk.services.dynamodb.model.LocalSecondaryIndex;
+import software.amazon.awssdk.services.dynamodb.model.Projection;
+import software.amazon.awssdk.services.dynamodb.model.ProjectionType;
+import software.amazon.awssdk.services.dynamodb.waiters.DynamoDbWaiter;
 import su.sres.shadowserver.WhisperServerConfiguration;
 import su.sres.shadowserver.configuration.MessageScyllaDbConfiguration;
+import su.sres.shadowserver.util.ScyllaDbFromConfig;
 
 public class CreateMessageDbCommand extends EnvironmentCommand<WhisperServerConfiguration> {
 
@@ -67,61 +65,65 @@ public class CreateMessageDbCommand extends EnvironmentCommand<WhisperServerConf
 
     MessageScyllaDbConfiguration scyllaMessageConfig = config.getMessageScyllaDbConfiguration();
 
-    AmazonDynamoDBClientBuilder clientBuilder = AmazonDynamoDBClientBuilder
-        .standard()
-        .withEndpointConfiguration(new EndpointConfiguration(scyllaMessageConfig.getEndpoint(), scyllaMessageConfig.getRegion()))
-        .withClientConfiguration(new ClientConfiguration().withClientExecutionTimeout(((int) scyllaMessageConfig.getClientExecutionTimeout().toMillis()))
-            .withRequestTimeout((int) scyllaMessageConfig.getClientRequestTimeout().toMillis()))
-        .withCredentials(new AWSStaticCredentialsProvider(new BasicAWSCredentials(scyllaMessageConfig.getAccessKey(), scyllaMessageConfig.getAccessSecret())));
+    String tableName = scyllaMessageConfig.getTableName();
 
-    DynamoDB messageDynamoDb = new DynamoDB(clientBuilder.build());
+    DynamoDbClient messageScyllaDb = ScyllaDbFromConfig.client(scyllaMessageConfig);
 
     List<AttributeDefinition> attributeDefinitions = new ArrayList<AttributeDefinition>();
-    attributeDefinitions.add(new AttributeDefinition().withAttributeName(KEY_PARTITION).withAttributeType("B"));
-    attributeDefinitions.add(new AttributeDefinition().withAttributeName(KEY_SORT).withAttributeType("B"));
-    attributeDefinitions.add(new AttributeDefinition().withAttributeName(LOCAL_INDEX_MESSAGE_UUID_KEY_SORT).withAttributeType("B"));
-    attributeDefinitions.add(new AttributeDefinition().withAttributeName(KEY_TYPE).withAttributeType("N"));
-    attributeDefinitions.add(new AttributeDefinition().withAttributeName(KEY_RELAY).withAttributeType("S"));
-    attributeDefinitions.add(new AttributeDefinition().withAttributeName(KEY_TIMESTAMP).withAttributeType("N"));
-    attributeDefinitions.add(new AttributeDefinition().withAttributeName(KEY_SOURCE).withAttributeType("S"));
-    attributeDefinitions.add(new AttributeDefinition().withAttributeName(KEY_SOURCE_UUID).withAttributeType("B"));
-    attributeDefinitions.add(new AttributeDefinition().withAttributeName(KEY_SOURCE_DEVICE).withAttributeType("N"));
-    attributeDefinitions.add(new AttributeDefinition().withAttributeName(KEY_MESSAGE).withAttributeType("B"));
-    attributeDefinitions.add(new AttributeDefinition().withAttributeName(KEY_CONTENT).withAttributeType("B"));
-    attributeDefinitions.add(new AttributeDefinition().withAttributeName(KEY_TTL).withAttributeType("N"));
+    attributeDefinitions.add(AttributeDefinition.builder().attributeName(KEY_PARTITION).attributeType("B").build());
+    attributeDefinitions.add(AttributeDefinition.builder().attributeName(KEY_SORT).attributeType("B").build());
+    attributeDefinitions.add(AttributeDefinition.builder().attributeName(LOCAL_INDEX_MESSAGE_UUID_KEY_SORT).attributeType("B").build());
+    attributeDefinitions.add(AttributeDefinition.builder().attributeName(KEY_TYPE).attributeType("N").build());
+    attributeDefinitions.add(AttributeDefinition.builder().attributeName(KEY_RELAY).attributeType("S").build());
+    attributeDefinitions.add(AttributeDefinition.builder().attributeName(KEY_TIMESTAMP).attributeType("N").build());
+    attributeDefinitions.add(AttributeDefinition.builder().attributeName(KEY_SOURCE).attributeType("S").build());
+    attributeDefinitions.add(AttributeDefinition.builder().attributeName(KEY_SOURCE_UUID).attributeType("B").build());
+    attributeDefinitions.add(AttributeDefinition.builder().attributeName(KEY_SOURCE_DEVICE).attributeType("N").build());
+    attributeDefinitions.add(AttributeDefinition.builder().attributeName(KEY_MESSAGE).attributeType("B").build());
+    attributeDefinitions.add(AttributeDefinition.builder().attributeName(KEY_CONTENT).attributeType("B").build());
+    attributeDefinitions.add(AttributeDefinition.builder().attributeName(KEY_TTL).attributeType("N").build());
 
     List<KeySchemaElement> keySchema = new ArrayList<KeySchemaElement>();
-    keySchema.add(new KeySchemaElement().withAttributeName(KEY_PARTITION).withKeyType(KeyType.HASH));
-    keySchema.add(new KeySchemaElement().withAttributeName(KEY_SORT).withKeyType(KeyType.RANGE));
+    keySchema.add(KeySchemaElement.builder().attributeName(KEY_PARTITION).keyType(KeyType.HASH).build());
+    keySchema.add(KeySchemaElement.builder().attributeName(KEY_SORT).keyType(KeyType.RANGE).build());
 
     List<KeySchemaElement> indexKeySchema = new ArrayList<KeySchemaElement>();
-    indexKeySchema.add(new KeySchemaElement().withAttributeName(KEY_PARTITION).withKeyType(KeyType.HASH));
-    indexKeySchema.add(new KeySchemaElement().withAttributeName(LOCAL_INDEX_MESSAGE_UUID_KEY_SORT).withKeyType(KeyType.RANGE));
+    indexKeySchema.add(KeySchemaElement.builder().attributeName(KEY_PARTITION).keyType(KeyType.HASH).build());
+    indexKeySchema.add(KeySchemaElement.builder().attributeName(LOCAL_INDEX_MESSAGE_UUID_KEY_SORT).keyType(KeyType.RANGE).build());
 
-    Projection projection = new Projection().withProjectionType(ProjectionType.INCLUDE);
     ArrayList<String> nonKeyAttributes = new ArrayList<String>();
     nonKeyAttributes.add("KEY_SORT");
-    projection.setNonKeyAttributes(nonKeyAttributes);
 
-    LocalSecondaryIndex index = new LocalSecondaryIndex()
-        .withIndexName(LOCAL_INDEX_MESSAGE_UUID_NAME)
-        .withKeySchema(indexKeySchema)
-        .withProjection(projection);
+    Projection projection = Projection.builder()
+        .projectionType(ProjectionType.INCLUDE)
+        .nonKeyAttributes(nonKeyAttributes)
+        .build();
 
-    CreateTableRequest request = new CreateTableRequest()
-        .withTableName(scyllaMessageConfig.getTableName())
-        .withKeySchema(keySchema)
-        .withAttributeDefinitions(attributeDefinitions)
-        .withLocalSecondaryIndexes(index)
-        .withBillingMode("PAY_PER_REQUEST");    
+    LocalSecondaryIndex index = LocalSecondaryIndex.builder()
+        .indexName(LOCAL_INDEX_MESSAGE_UUID_NAME)
+        .keySchema(indexKeySchema)
+        .projection(projection)
+        .build();
+
+    CreateTableRequest request = CreateTableRequest.builder()
+        .tableName(tableName)
+        .keySchema(keySchema)
+        .attributeDefinitions(attributeDefinitions)
+        .localSecondaryIndexes(index)
+        .billingMode("PAY_PER_REQUEST")
+        .build();
 
     logger.info("Creating the messagedb table...");
 
-    Table table = messageDynamoDb.createTable(request);
+    DynamoDbWaiter waiter = messageScyllaDb.waiter();
 
-    table.waitForActive();
+    messageScyllaDb.createTable(request);
 
-    logger.info("Done");
+    WaiterResponse<DescribeTableResponse> waiterResponse = waiter.waitUntilTableExists(r -> r.tableName(tableName));
+
+    if (waiterResponse.matched().response().isPresent()) {
+      logger.info("Done");
+    }
 
   }
 }

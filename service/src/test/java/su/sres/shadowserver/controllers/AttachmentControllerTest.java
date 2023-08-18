@@ -13,6 +13,7 @@ import org.junit.Test;
 import javax.ws.rs.core.Response;
 import java.io.IOException;
 import java.net.MalformedURLException;
+import java.util.Base64;
 
 import io.dropwizard.auth.PolymorphicAuthValueFactoryProvider;
 import io.dropwizard.testing.junit.ResourceTestRule;
@@ -29,7 +30,6 @@ import su.sres.shadowserver.limits.RateLimiter;
 import su.sres.shadowserver.limits.RateLimiters;
 import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.util.AuthHelper;
-import su.sres.shadowserver.util.Base64;
 import su.sres.shadowserver.util.SystemMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -87,7 +87,7 @@ public class AttachmentControllerTest {
     assertThat(descriptor.getPolicy()).isNotBlank();
     assertThat(descriptor.getSignature()).isNotBlank();
 
-    assertThat(new String(Base64.decode(descriptor.getPolicy()))).contains("[\"content-length-range\", 1, 104857600]");
+    assertThat(new String(Base64.getDecoder().decode(descriptor.getPolicy()))).contains("[\"content-length-range\", 1, 104857600]");
   }
 
   @Test

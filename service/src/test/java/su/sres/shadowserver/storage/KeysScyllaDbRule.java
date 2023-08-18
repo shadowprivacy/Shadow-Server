@@ -5,32 +5,37 @@
 
 package su.sres.shadowserver.storage;
 
-import com.amazonaws.services.dynamodbv2.document.DynamoDB;
-import com.amazonaws.services.dynamodbv2.model.AttributeDefinition;
-import com.amazonaws.services.dynamodbv2.model.CreateTableRequest;
-import com.amazonaws.services.dynamodbv2.model.KeySchemaElement;
-import com.amazonaws.services.dynamodbv2.model.ProvisionedThroughput;
-import com.amazonaws.services.dynamodbv2.model.ScalarAttributeType;
+import software.amazon.awssdk.services.dynamodb.model.AttributeDefinition;
+import software.amazon.awssdk.services.dynamodb.model.CreateTableRequest;
+import software.amazon.awssdk.services.dynamodb.model.KeySchemaElement;
+import software.amazon.awssdk.services.dynamodb.model.KeyType;
+import software.amazon.awssdk.services.dynamodb.model.ProvisionedThroughput;
+import software.amazon.awssdk.services.dynamodb.model.ScalarAttributeType;
 import su.sres.shadowserver.util.LocalDynamoDbRule;
 
 public class KeysScyllaDbRule extends LocalDynamoDbRule {
-    public static final String TABLE_NAME = "Signal_Keys_Test";
+    public static final String TABLE_NAME = "Shadow_Keys_Test";
 
     @Override
     protected void before() throws Throwable {
 	super.before();
 
-	final DynamoDB dynamoDB = getDynamoDB();
-
-	final CreateTableRequest createTableRequest = new CreateTableRequest()
-		.withTableName(TABLE_NAME)
-		.withKeySchema(new KeySchemaElement(KeysScyllaDb.KEY_ACCOUNT_UUID, "HASH"),
-			new KeySchemaElement(KeysScyllaDb.KEY_DEVICE_ID_KEY_ID, "RANGE"))
-		.withAttributeDefinitions(new AttributeDefinition(KeysScyllaDb.KEY_ACCOUNT_UUID, ScalarAttributeType.B),
-			new AttributeDefinition(KeysScyllaDb.KEY_DEVICE_ID_KEY_ID, ScalarAttributeType.B))
-		.withProvisionedThroughput(new ProvisionedThroughput(20L, 20L));
-
-	dynamoDB.createTable(createTableRequest);
+	getDynamoDbClient().createTable(CreateTableRequest.builder()
+        .tableName(TABLE_NAME)
+        .keySchema(
+            KeySchemaElement.builder().attributeName(KeysScyllaDb.KEY_ACCOUNT_UUID).keyType(KeyType.HASH).build(),
+            KeySchemaElement.builder().attributeName(KeysScyllaDb.KEY_DEVICE_ID_KEY_ID).keyType(KeyType.RANGE)
+                .build())
+        .attributeDefinitions(AttributeDefinition.builder()
+                .attributeName(KeysScyllaDb.KEY_ACCOUNT_UUID)
+                .attributeType(ScalarAttributeType.B)
+                .build(),
+            AttributeDefinition.builder()
+                .attributeName(KeysScyllaDb.KEY_DEVICE_ID_KEY_ID)
+                .attributeType(ScalarAttributeType.B)
+                .build())
+        .provisionedThroughput(ProvisionedThroughput.builder().readCapacityUnits(20L).writeCapacityUnits(20L).build())
+        .build());
     }
 
     @Override

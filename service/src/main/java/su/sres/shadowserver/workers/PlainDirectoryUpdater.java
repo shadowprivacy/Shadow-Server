@@ -23,6 +23,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Set;
 
+// TODO: Migrate to Scylla
 public class PlainDirectoryUpdater {
 
   private static final int CHUNK_SIZE = 1000;

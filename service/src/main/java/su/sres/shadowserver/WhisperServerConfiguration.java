@@ -10,6 +10,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import su.sres.websocket.configuration.WebSocketConfiguration;
 
 import javax.validation.Valid;
+import javax.validation.constraints.NotEmpty;
 import javax.validation.constraints.NotNull;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -23,7 +24,7 @@ import su.sres.shadowserver.configuration.*;
 
 /** @noinspection MismatchedQueryAndUpdateOfCollection, WeakerAccess */
 public class WhisperServerConfiguration extends Configuration {
-
+    
   @NotNull
   @Valid
   @JsonProperty
@@ -47,7 +48,12 @@ public class WhisperServerConfiguration extends Configuration {
   @NotNull
   @Valid
   @JsonProperty
-  private MicrometerConfiguration micrometer;
+  private WavefrontConfiguration wavefront;
+
+  @NotNull
+  @Valid
+  @JsonProperty
+  private DatadogConfiguration datadog;
 
   @NotNull
   @Valid
@@ -78,6 +84,11 @@ public class WhisperServerConfiguration extends Configuration {
   @Valid
   @JsonProperty
   private RedisClusterConfiguration pushSchedulerCluster;
+  
+  @NotNull
+  @Valid
+  @JsonProperty
+  private RedisClusterConfiguration rateLimitersCluster;
 
   @NotNull
   @Valid
@@ -98,6 +109,31 @@ public class WhisperServerConfiguration extends Configuration {
   @NotNull
   @JsonProperty
   private ScyllaDbConfiguration keysScyllaDb;
+  
+  @Valid
+  @NotNull
+  @JsonProperty
+  private AccountsScyllaDbConfiguration accountsScyllaDb;
+  
+  @Valid
+  @NotNull
+  @JsonProperty
+  private ScyllaDbConfiguration migrationDeletedAccountsScyllaDb;
+
+  @Valid
+  @NotNull
+  @JsonProperty
+  private ScyllaDbConfiguration migrationRetryAccountsScyllaDb;
+  
+  @Valid
+  @NotNull
+  @JsonProperty
+  private ScyllaDbConfiguration pushChallengeScyllaDb;
+  
+  @Valid
+  @NotNull
+  @JsonProperty
+  private ScyllaDbConfiguration reportMessageScyllaDb;
 
   @Valid
   @NotNull
@@ -211,9 +247,19 @@ public class WhisperServerConfiguration extends Configuration {
   @Valid
   @NotNull
   private GroupConfiguration group;
+  
+  @Valid
+  @NotNull
+  @JsonProperty
+  private MonitoredS3ObjectConfiguration torExitNodeList;
+
+  @Valid
+  @NotNull
+  @JsonProperty
+  private MonitoredS3ObjectConfiguration asnTable;
 
   private Map<String, String> transparentDataIndex = new HashMap<>();
-
+    
   public RecaptchaConfiguration getRecaptchaConfiguration() {
     return recaptcha;
   }
@@ -273,6 +319,10 @@ public class WhisperServerConfiguration extends Configuration {
   public RedisClusterConfiguration getPushSchedulerCluster() {
     return pushSchedulerCluster;
   }
+  
+  public RedisClusterConfiguration getRateLimitersCluster() {
+    return rateLimitersCluster;
+  }
 
   public MessageScyllaDbConfiguration getMessageScyllaDbConfiguration() {
     return messageScyllaDb;
@@ -289,7 +339,19 @@ public class WhisperServerConfiguration extends Configuration {
   public ScyllaDbConfiguration getGroupLogsScyllaDbConfiguration() {
     return groupLogsScyllaDb;
   }
+  
+  public AccountsScyllaDbConfiguration getAccountsScyllaDbConfiguration() {
+    return accountsScyllaDb;
+  }
 
+  public ScyllaDbConfiguration getMigrationDeletedAccountsScyllaDbConfiguration() {
+    return migrationDeletedAccountsScyllaDb;
+  }
+
+  public ScyllaDbConfiguration getMigrationRetryAccountsScyllaDbConfiguration() {
+    return migrationRetryAccountsScyllaDb;
+  }
+  
   public DatabaseConfiguration getAbuseDatabaseConfiguration() {
     return abuseDatabase;
   }
@@ -326,8 +388,12 @@ public class WhisperServerConfiguration extends Configuration {
     return cdn;
   }
 
-  public MicrometerConfiguration getMicrometerConfiguration() {
-    return micrometer;
+  public WavefrontConfiguration getWavefrontConfiguration() {
+    return wavefront;
+  }
+
+  public DatadogConfiguration getDatadogConfiguration() {
+    return datadog;
   }
 
   public UnidentifiedDeliveryConfiguration getDeliveryCertificate() {
@@ -380,5 +446,21 @@ public class WhisperServerConfiguration extends Configuration {
 
   public GroupConfiguration getGroupConfiguration() {
     return group;
+  }
+  
+  public ScyllaDbConfiguration getPushChallengeScyllaDbConfiguration() {
+    return pushChallengeScyllaDb;
+  }
+  
+  public ScyllaDbConfiguration getReportMessageScyllaDbConfiguration() {
+    return reportMessageScyllaDb;
+  }
+  
+  public MonitoredS3ObjectConfiguration getTorExitNodeListConfiguration() {
+    return torExitNodeList;
+  }
+
+  public MonitoredS3ObjectConfiguration getAsnTableConfiguration() {
+    return asnTable;
   }
 }

@@ -12,7 +12,6 @@ import org.apache.http.config.RegistryBuilder;
 import org.apache.http.conn.socket.ConnectionSocketFactory;
 import org.apache.http.conn.ssl.DefaultHostnameVerifier;
 import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
-import org.bouncycastle.openssl.PEMReader;
 import org.glassfish.jersey.client.ClientProperties;
 import org.glassfish.jersey.client.RequestEntityProcessing;
 import org.glassfish.jersey.client.authentication.HttpAuthenticationFeature;
@@ -37,6 +36,7 @@ import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.security.cert.CertificateException;
+import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.util.List;
 
@@ -199,8 +199,9 @@ public class FederatedClient {
       throws CertificateException
   {
     try {
-      PEMReader       reader      = new PEMReader(new InputStreamReader(new ByteArrayInputStream(pemCertificate.getBytes())));
-      X509Certificate certificate = (X509Certificate) reader.readObject();
+      final CertificateFactory certificateFactory = CertificateFactory.getInstance("X.509");
+      final ByteArrayInputStream pemInputStream = new ByteArrayInputStream(pemCertificate.getBytes());
+      X509Certificate certificate = (X509Certificate) certificateFactory.generateCertificate(pemInputStream);
 
       if (certificate == null) {
         throw new CertificateException("No certificate found in parsing!");

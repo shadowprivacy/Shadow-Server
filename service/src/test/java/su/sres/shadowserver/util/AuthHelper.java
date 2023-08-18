@@ -28,6 +28,7 @@ import su.sres.shadowserver.storage.AccountsManager;
 import su.sres.shadowserver.storage.Device;
 
 import java.security.Principal;
+import java.util.Base64;
 import java.util.Optional;
 import java.util.Random;
 import java.util.UUID;
@@ -206,11 +207,11 @@ public class AuthHelper {
   }
 
   public static String getAuthHeader(String number, String password) {
-    return "Basic " + Base64.encodeBytes((number + ":" + password).getBytes());
+    return "Basic " + Base64.getEncoder().encodeToString((number + ":" + password).getBytes());
   }
 
   public static String getUnidentifiedAccessHeader(byte[] key) {
-    return Base64.encodeBytes(key);
+    return Base64.getEncoder().encodeToString(key);
   }
 
   public static UUID getRandomUUID(Random random) {

@@ -27,6 +27,9 @@ public class Account implements Principal {
 
   @JsonProperty
   private String userLogin;
+  
+  @JsonProperty
+  private String VD;
 
   @JsonProperty
   private Set<Device> devices = new HashSet<>();
@@ -51,6 +54,9 @@ public class Account implements Principal {
 
   @JsonProperty("inCds")
   private boolean discoverableByUserLogin = true;
+  
+  @JsonProperty("_ddbV")
+  private int scyllaDbMigrationVersion;
 
   @JsonIgnore
   private Device authenticatedDevice;
@@ -137,6 +143,18 @@ public class Account implements Principal {
         .filter(Device::isEnabled)
         .allMatch(device -> device.getCapabilities() != null && device.getCapabilities().isGv1Migration());
   }
+  
+  public boolean isSenderKeySupported() {
+    return devices.stream()
+        .filter(Device::isEnabled)
+        .allMatch(device -> device.getCapabilities() != null && device.getCapabilities().isSenderKey());
+  }
+  
+  public boolean isAnnouncementGroupSupported() {
+    return devices.stream()
+        .filter(Device::isEnabled)
+        .allMatch(device -> device.getCapabilities() != null && device.getCapabilities().isAnnouncementGroup());
+  }
 
   public boolean isEnabled() {
     return getMasterDevice().map(Device::isEnabled).orElse(false);
@@ -217,7 +235,15 @@ public class Account implements Principal {
 
   public void setAvatar(String avatar) {
     this.avatar = avatar;
-  }  
+  }
+  
+  public String getVD() {
+    return VD;
+  }
+
+  public void setVD(String VD) {
+    this.VD = VD;
+  }
 
   public Optional<byte[]> getUnidentifiedAccessKey() {
     return Optional.ofNullable(unidentifiedAccessKey);
@@ -250,6 +276,14 @@ public class Account implements Principal {
 
   public void setDiscoverableByUserLogin(final boolean discoverableByUserLogin) {
     this.discoverableByUserLogin = discoverableByUserLogin;
+  }
+  
+  public int getScyllaDbMigrationVersion() {
+    return scyllaDbMigrationVersion;
+  }
+
+  public void setScyllaDbMigrationVersion(int scyllaDbMigrationVersion) {
+    this.scyllaDbMigrationVersion = scyllaDbMigrationVersion;
   }
 
   // Principal implementation

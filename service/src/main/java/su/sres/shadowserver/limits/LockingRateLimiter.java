@@ -22,13 +22,13 @@ import su.sres.shadowserver.util.Constants;
 public class LockingRateLimiter extends RateLimiter {
 
     private final Meter meter;
-
+    
     public LockingRateLimiter(FaultTolerantRedisCluster cacheCluster, String name, int bucketSize, double leakRatePerMinute) {
-	super(cacheCluster, name, bucketSize, leakRatePerMinute);
+      super(cacheCluster, name, bucketSize, leakRatePerMinute);
 
-	MetricRegistry metricRegistry = SharedMetricRegistries.getOrCreate(Constants.METRICS_NAME);
-	this.meter = metricRegistry.meter(name(getClass(), name, "locked"));
-    }
+      MetricRegistry metricRegistry = SharedMetricRegistries.getOrCreate(Constants.METRICS_NAME);
+      this.meter = metricRegistry.meter(name(getClass(), name, "locked"));
+    }    
 
     @Override
     public void validate(String key, int amount) throws RateLimitExceededException {

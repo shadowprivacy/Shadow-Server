@@ -11,8 +11,6 @@ import io.minio.MinioClient;
 import io.minio.errors.ErrorResponseException;
 import io.minio.errors.InsufficientDataException;
 import io.minio.errors.InternalException;
-import io.minio.errors.InvalidBucketNameException;
-import io.minio.errors.InvalidExpiresRangeException;
 import io.minio.errors.InvalidResponseException;
 import io.minio.errors.ServerException;
 import io.minio.errors.XmlParserException;
@@ -42,7 +40,7 @@ public class UrlSigner {
     this.endpoint = endpoint;    
   }
 
-  public URL getPreSignedUrl(long attachmentId, Method method) throws InvalidKeyException, ErrorResponseException, IllegalArgumentException, InsufficientDataException, InternalException, InvalidBucketNameException, InvalidExpiresRangeException, InvalidResponseException, NoSuchAlgorithmException, XmlParserException, ServerException, IOException {
+  public URL getPreSignedUrl(long attachmentId, Method method) throws InvalidKeyException, ErrorResponseException, IllegalArgumentException, InsufficientDataException, InternalException, InvalidResponseException, NoSuchAlgorithmException, XmlParserException, ServerException, IOException {
         
     Map<String,String> extraHeaders = Collections.singletonMap("Content-Type", "application/octet-stream");
     

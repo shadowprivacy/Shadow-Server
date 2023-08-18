@@ -29,8 +29,10 @@ import javax.annotation.Nullable;
 
 import static com.codahale.metrics.MetricRegistry.name;
 
-public class GroupLogsScyllaDb extends AbstractScyllaDbStore {
+public class GroupLogsScyllaDb // extends AbstractScyllaDbStore
+{
 
+  private final DynamoDB scyllaDb;
   private final Table table;
 
   static final String KEY_GROUP_ID = "ID";
@@ -42,8 +44,7 @@ public class GroupLogsScyllaDb extends AbstractScyllaDbStore {
   private static final Timer GET_FROM_VERSION_TIMER = Metrics.timer(name(GroupsScyllaDb.class, "getFromVersion"));
 
   public GroupLogsScyllaDb(final DynamoDB scyllaDb, final String tableName) {
-    super(scyllaDb);
-
+    this.scyllaDb = scyllaDb;
     this.table = scyllaDb.getTable(tableName);
   }
 

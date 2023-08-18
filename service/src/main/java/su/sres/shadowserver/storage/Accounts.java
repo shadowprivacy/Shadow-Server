@@ -12,7 +12,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import su.sres.shadowserver.util.SystemMapper;
-import su.sres.shadowserver.workers.VacuumCommand;
 import su.sres.shadowserver.storage.mappers.AccountRowMapper;
 import su.sres.shadowserver.util.Constants;
 
@@ -27,7 +26,7 @@ import org.slf4j.LoggerFactory;
 
 import static com.codahale.metrics.MetricRegistry.name;
 
-public class Accounts {
+public class Accounts implements AccountStore {
 
     private final Logger logger = LoggerFactory.getLogger(Accounts.class);
 
@@ -61,6 +60,7 @@ public class Accounts {
 	this.database.getDatabase().registerRowMapper(new AccountRowMapper());
     }
 
+    @Override
     public boolean create(Account account, long directoryVersion) {
 	return database.with(jdbi -> jdbi.inTransaction(TransactionIsolationLevel.SERIALIZABLE, handle -> {
 	    try (Timer.Context ignored = createTimer.time()) {
@@ -95,6 +95,7 @@ public class Accounts {
 	}));
     }
 
+    @Override
     public void update(Account account) {
 	database.use(jdbi -> jdbi.useHandle(handle -> {
 	    try (Timer.Context ignored = updateTimer.time()) {
@@ -109,6 +110,7 @@ public class Accounts {
 	}));
     }
 
+ /*  
     public void update(Account account, boolean isRemoval, long directoryVersion) {
 	database.use(jdbi -> jdbi.useHandle(handle -> {
 	    try (Timer.Context ignored = updateTimer.time()) {
@@ -133,8 +135,9 @@ public class Accounts {
 		throw new IllegalArgumentException(e);
 	    }
 	}));
-    }
+    } */
 
+    @Override
     public Optional<Account> get(String userLogin) {
 	return database.with(jdbi -> jdbi.withHandle(handle -> {
 	    try (Timer.Context ignored = getByUserLoginTimer.time()) {
@@ -146,6 +149,7 @@ public class Accounts {
 	}));
     }
 
+    @Override
     public Optional<Account> get(UUID uuid) {
 	return database.with(jdbi -> jdbi.withHandle(handle -> {
 	    try (Timer.Context ignored = getByUuidTimer.time()) {
@@ -193,6 +197,7 @@ public class Accounts {
 	}));
     }
 
+    @Override
     public void delete(final UUID uuid, long directoryVersion) {
 	database.use(jdbi -> jdbi.useHandle(handle -> {
 	    try (Timer.Context ignored = deleteTimer.time()) {
@@ -215,6 +220,7 @@ public class Accounts {
 	}));
     }
 
+    // TODO: migrate to Scylla via AccountsScyllaDb
     public Long restoreDirectoryVersion() {
 	return database.with(jdbi -> jdbi.withHandle(handle -> {
 	    return handle.createQuery("SELECT " + PAR_VAL + " FROM miscellaneous WHERE " + PAR + " = '" + DIR_VER + "'")		    

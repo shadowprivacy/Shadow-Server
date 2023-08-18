@@ -6,6 +6,8 @@ import java.security.KeyStore;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.Certificate;
+import java.util.Base64;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,7 +25,6 @@ import io.dropwizard.setup.Environment;
 import net.sourceforge.argparse4j.inf.Namespace;
 import net.sourceforge.argparse4j.inf.Subparser;
 import su.sres.shadowserver.WhisperServerConfiguration;
-import su.sres.shadowserver.util.Base64;
 import su.sres.shadowserver.util.ServerLicenseUtil;
 
 public class GenerateQRCodeCommand extends EnvironmentCommand<WhisperServerConfiguration> {
@@ -119,6 +120,6 @@ public class GenerateQRCodeCommand extends EnvironmentCommand<WhisperServerConfi
 
   private static String calculateCertHash(byte[] cert) throws NoSuchAlgorithmException {
     MessageDigest messageDigest = MessageDigest.getInstance("SHA-256");
-    return Base64.encodeBytes(messageDigest.digest(cert));
+    return Base64.getEncoder().encodeToString(messageDigest.digest(cert));
   }
 }

@@ -5,6 +5,8 @@
  */
 package su.sres.shadowserver.controllers;
 
+import static com.codahale.metrics.MetricRegistry.name;
+
 import com.codahale.metrics.annotation.Timed;
 
 import su.sres.shadowserver.auth.AmbiguousIdentifier;
@@ -32,12 +34,16 @@ import java.util.Map;
 import java.util.Optional;
 
 import io.dropwizard.auth.Auth;
+import io.micrometer.core.instrument.Metrics;
 import su.sres.shadowserver.entities.PreKey;
 import su.sres.shadowserver.entities.PreKeyCount;
 import su.sres.shadowserver.entities.PreKeyResponse;
 import su.sres.shadowserver.entities.PreKeyResponseItem;
 import su.sres.shadowserver.entities.PreKeyState;
 import su.sres.shadowserver.entities.SignedPreKey;
+import su.sres.shadowserver.limits.PreKeyRateLimiter;
+import su.sres.shadowserver.limits.RateLimitChallengeException;
+import su.sres.shadowserver.limits.RateLimitChallengeManager;
 // excluded federation, reserved for future use
 // import su.sres.shadowserver.federation.FederatedClientManager;
 // import su.sres.shadowserver.federation.NoSuchPeerException;
@@ -55,8 +61,12 @@ public class KeysController {
   private final KeysScyllaDb keysScyllaDb;
   private final AccountsManager accounts;
   
-  private static final String PREKEY_TARGET_IDENTIFIER_TAG_NAME =  "identifierType";
+  private final PreKeyRateLimiter preKeyRateLimiter;
+
+  private final RateLimitChallengeManager rateLimitChallengeManager;
   
+  private static final String RATE_LIMITED_GET_PREKEYS_COUNTER_NAME = name(KeysController.class, "rateLimitedGetPreKeys");
+      
   // excluded federation, reserved for future use
   // private final FederatedClientManager federatedClientManager;
 
@@ -69,10 +79,14 @@ public class KeysController {
    * = rateLimiters; this.keys = keys; this.accounts = accounts;
    * this.federatedClientManager = federatedClientManager; }
    */
-  public KeysController(RateLimiters rateLimiters, KeysScyllaDb keysScyllaDb, AccountsManager accounts) {
+  public KeysController(RateLimiters rateLimiters, KeysScyllaDb keysScyllaDb, AccountsManager accounts, PreKeyRateLimiter preKeyRateLimiter,      
+      RateLimitChallengeManager rateLimitChallengeManager) {
     this.rateLimiters = rateLimiters;
     this.keysScyllaDb = keysScyllaDb;
     this.accounts = accounts;
+    this.preKeyRateLimiter = preKeyRateLimiter;
+    
+    this.rateLimitChallengeManager = rateLimitChallengeManager;
   }
 
   @GET
@@ -161,10 +175,10 @@ public class KeysController {
   @GET
   @Path("/{identifier}/{device_id}")
   @Produces(MediaType.APPLICATION_JSON)
-  public Optional<PreKeyResponse> getDeviceKeys(@Auth Optional<Account> account,
+  public Response getDeviceKeys(@Auth Optional<Account> account,
       @HeaderParam(OptionalAccess.UNIDENTIFIED) Optional<Anonymous> accessKey,
-      @PathParam("identifier") AmbiguousIdentifier targetName, @PathParam("device_id") String deviceId)
-      throws RateLimitExceededException {
+      @PathParam("identifier") AmbiguousIdentifier targetName, @PathParam("device_id") String deviceId, @HeaderParam("User-Agent")                String userAgent)
+          throws RateLimitExceededException, RateLimitChallengeException {      
     if (!account.isPresent() && !accessKey.isPresent()) {
       throw new WebApplicationException(Response.Status.UNAUTHORIZED);
     }
@@ -173,11 +187,26 @@ public class KeysController {
     OptionalAccess.verify(account, accessKey, target, deviceId);
 
     assert (target.isPresent());
-
+    
     if (account.isPresent()) {
-      rateLimiters.getPreKeysLimiter().validate(account.get().getUserLogin() + "." + account.get().getAuthenticatedDevice().get().getId() + "__" + target.get().getUserLogin() + "." + deviceId);
-    }
+      rateLimiters.getPreKeysLimiter().validate(account.get().getUserLogin() + "." + account.get().getAuthenticatedDevice().get().getId() +  "__" + target.get().getUserLogin() + "." + deviceId);
 
+      try {
+        preKeyRateLimiter.validate(account.get());
+      } catch (RateLimitExceededException e) {
+
+        final boolean enforceLimit = rateLimitChallengeManager.shouldIssueRateLimitChallenge(userAgent);
+
+        Metrics.counter(RATE_LIMITED_GET_PREKEYS_COUNTER_NAME,            
+            "enforced", String.valueOf(enforceLimit))
+            .increment();
+
+        if (enforceLimit) {
+          throw new RateLimitChallengeException(account.get(), e.getRetryDuration());
+        }
+      }
+    }
+    
     Map<Long, PreKey> preKeysByDeviceId = getLocalKeys(target.get(), deviceId);
     List<PreKeyResponseItem> responseItems = new LinkedList<>();
 
@@ -192,10 +221,8 @@ public class KeysController {
       }
     }
 
-    if (responseItems.isEmpty())
-      return Optional.empty();
-    else
-      return Optional.of(new PreKeyResponse(target.get().getIdentityKey(), responseItems));
+    if (responseItems.isEmpty()) return Response.status(404).build();
+    else                         return Response.ok().entity(new PreKeyResponse(target.get().getIdentityKey(), responseItems)).build();
   }
 
   @Timed

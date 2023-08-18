@@ -15,6 +15,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.time.Duration;
+
+import javax.annotation.Nullable;
 
 import static com.codahale.metrics.MetricRegistry.name;
 
@@ -35,24 +38,19 @@ public class RateLimiter {
   protected final String name;
   private final int bucketSize;
   private final double leakRatePerMinute;
-  private final double leakRatePerMillis;
-  private final boolean reportLimits;
-
-  public RateLimiter(FaultTolerantRedisCluster cacheCluster, String name, int bucketSize, double leakRatePerMinute) {
-    this(cacheCluster, name, bucketSize, leakRatePerMinute, false);
-  }
-
-  public RateLimiter(FaultTolerantRedisCluster cacheCluster, String name, int bucketSize, double leakRatePerMinute, boolean reportLimits) {
+  private final double leakRatePerMillis;  
+  
+  public RateLimiter(FaultTolerantRedisCluster cacheCluster, String name, int bucketSize, double leakRatePerMinute)
+  {
     MetricRegistry metricRegistry = SharedMetricRegistries.getOrCreate(Constants.METRICS_NAME);
 
     this.meter = metricRegistry.meter(name(getClass(), name, "exceeded"));
     this.validateTimer = metricRegistry.timer(name(getClass(), name, "validate"));
-    this.cacheCluster = cacheCluster;
+    this.cacheCluster = cacheCluster;    
     this.name = name;
     this.bucketSize = bucketSize;
     this.leakRatePerMinute = leakRatePerMinute;
-    this.leakRatePerMillis = leakRatePerMinute / (60.0 * 1000.0);
-    this.reportLimits = reportLimits;
+    this.leakRatePerMillis = leakRatePerMinute / (60.0 * 1000.0);    
   }
 
   public void validate(String key, int amount) throws RateLimitExceededException {
@@ -71,9 +69,13 @@ public class RateLimiter {
   public void validate(String key) throws RateLimitExceededException {
     validate(key, 1);
   }
+  
+  public boolean hasAvailablePermits(final String key, final int permits) {
+    return getBucket(key).getTimeUntilSpaceAvailable(permits).equals(Duration.ZERO);
+  }
 
   public void clear(String key) {
-    cacheCluster.useCluster(connection -> connection.sync().del(getBucketName(key)));
+    cacheCluster.useCluster(connection -> connection.sync().del(getBucketName(key)));   
   }
 
   public int getBucketSize() {
@@ -85,6 +87,7 @@ public class RateLimiter {
   }
 
   private void setBucket(String key, LeakyBucket bucket) {
+        
     try {
       final String serialized = bucket.serialize(mapper);
       cacheCluster.useCluster(connection -> connection.sync().setex(getBucketName(key), (int) Math.ceil((bucketSize / leakRatePerMillis) / 1000), serialized));
@@ -102,7 +105,7 @@ public class RateLimiter {
       }
     } catch (IOException e) {
       logger.warn("Deserialization error", e);
-    }
+    }    
 
     return new LeakyBucket(bucketSize, leakRatePerMillis);
   }

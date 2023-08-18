@@ -1,21 +1,18 @@
 package su.sres.shadowserver.storage;
 
-import com.amazonaws.services.dynamodbv2.document.BatchWriteItemOutcome;
-import com.amazonaws.services.dynamodbv2.document.DynamoDB;
-import com.amazonaws.services.dynamodbv2.document.Item;
-import com.amazonaws.services.dynamodbv2.document.Page;
-import com.amazonaws.services.dynamodbv2.document.QueryOutcome;
-import com.amazonaws.services.dynamodbv2.document.Table;
-import com.amazonaws.services.dynamodbv2.document.TableWriteItems;
-import com.amazonaws.services.dynamodbv2.document.spec.QuerySpec;
-
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Timer;
+import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
+import software.amazon.awssdk.services.dynamodb.model.BatchWriteItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.BatchWriteItemResponse;
+import software.amazon.awssdk.services.dynamodb.model.WriteRequest;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
@@ -25,71 +22,58 @@ import static io.micrometer.core.instrument.Metrics.timer;
 
 public class AbstractScyllaDbStore {
 
-    private final DynamoDB scyllaDb;
+  private final DynamoDbClient scyllaDbClient;
 
-    private final Timer batchWriteItemsFirstPass = timer(name(getClass(), "batchWriteItems"), "firstAttempt", "true");
-    private final Timer batchWriteItemsRetryPass = timer(name(getClass(), "batchWriteItems"), "firstAttempt", "false");
-    private final Counter batchWriteItemsUnprocessed = counter(name(getClass(), "batchWriteItemsUnprocessed"));
+  private final Timer batchWriteItemsFirstPass = timer(name(getClass(), "batchWriteItems"), "firstAttempt", "true");
+  private final Timer batchWriteItemsRetryPass = timer(name(getClass(), "batchWriteItems"), "firstAttempt", "false");
+  private final Counter batchWriteItemsUnprocessed = counter(name(getClass(), "batchWriteItemsUnprocessed"));
 
-    private final Logger logger = LoggerFactory.getLogger(getClass());
+  private final Logger logger = LoggerFactory.getLogger(getClass());
 
-    private static final int MAX_ATTEMPTS_TO_SAVE_BATCH_WRITE = 25; // This was arbitrarily chosen and may be entirely too high.
-    public static final int DYNAMO_DB_MAX_BATCH_SIZE = 25; // This limit comes from Amazon Dynamo DB itself. It will reject batch writes
-							   // larger than this.
-    public static final int RESULT_SET_CHUNK_SIZE = 100;
+  private static final int MAX_ATTEMPTS_TO_SAVE_BATCH_WRITE = 25; // This was arbitrarily chosen and may be entirely too high.
+  public static final int DYNAMO_DB_MAX_BATCH_SIZE = 25; // This limit comes from Amazon Dynamo DB itself. It will reject batch writes
+  // larger than this.
+  public static final int RESULT_SET_CHUNK_SIZE = 100;
+    
+  public AbstractScyllaDbStore(final DynamoDbClient scyllaDbClient) {
+    this.scyllaDbClient = scyllaDbClient;
+  }
 
-    public AbstractScyllaDbStore(final DynamoDB scyllaDb) {
-	this.scyllaDb = scyllaDb;
+  protected DynamoDbClient db() {
+    return scyllaDbClient;
+  }
+
+  protected void executeTableWriteItemsUntilComplete(final Map<String, List<WriteRequest>> items) {
+    AtomicReference<BatchWriteItemResponse> outcome = new AtomicReference<>();
+    batchWriteItemsFirstPass.record(() -> outcome.set(scyllaDbClient.batchWriteItem(BatchWriteItemRequest.builder().requestItems(items).build())));
+
+    int attemptCount = 0;
+    while (!outcome.get().unprocessedItems().isEmpty() && attemptCount < MAX_ATTEMPTS_TO_SAVE_BATCH_WRITE) {
+      batchWriteItemsRetryPass.record(() -> outcome.set(scyllaDbClient.batchWriteItem(BatchWriteItemRequest.builder()
+          .requestItems(outcome.get().unprocessedItems())
+          .build())));
+      ++attemptCount;
     }
-
-    protected DynamoDB getScyllaDb() {
-	return scyllaDb;
+    if (!outcome.get().unprocessedItems().isEmpty()) {
+      int totalItems = outcome.get().unprocessedItems().values().stream().mapToInt(List::size).sum();
+      logger.error("Attempt count ({}) reached max ({}}) before applying all batch writes to scylla. {} unprocessed items remain.", attemptCount, MAX_ATTEMPTS_TO_SAVE_BATCH_WRITE, totalItems);
+      batchWriteItemsUnprocessed.increment(totalItems);
     }
+  }
 
-    protected void executeTableWriteItemsUntilComplete(final TableWriteItems items) {
-	AtomicReference<BatchWriteItemOutcome> outcome = new AtomicReference<>();
-	batchWriteItemsFirstPass.record(() -> outcome.set(scyllaDb.batchWriteItem(items)));
-	int attemptCount = 0;
-	while (!outcome.get().getUnprocessedItems().isEmpty() && attemptCount < MAX_ATTEMPTS_TO_SAVE_BATCH_WRITE) {
-	    batchWriteItemsRetryPass.record(() -> outcome.set(scyllaDb.batchWriteItemUnprocessed(outcome.get().getUnprocessedItems())));
-	    ++attemptCount;
-	}
-	if (!outcome.get().getUnprocessedItems().isEmpty()) {
-	    logger.error("Attempt count ({}) reached max ({}}) before applying all batch writes to dynamo. {} unprocessed items remain.", attemptCount, MAX_ATTEMPTS_TO_SAVE_BATCH_WRITE, outcome.get().getUnprocessedItems().size());
-	    batchWriteItemsUnprocessed.increment(outcome.get().getUnprocessedItems().size());
-	}
+  static <T> void writeInBatches(final Iterable<T> items, final Consumer<List<T>> action) {
+    final List<T> batch = new ArrayList<>(DYNAMO_DB_MAX_BATCH_SIZE);
+
+    for (T item : items) {
+      batch.add(item);
+
+      if (batch.size() == DYNAMO_DB_MAX_BATCH_SIZE) {
+        action.accept(batch);
+        batch.clear();
+      }
     }
-
-    protected long countItemsMatchingQuery(final Table table, final QuerySpec querySpec) {
-	// This is very confusing, but does appear to be the intended behavior. See:
-	//
-	// - https://github.com/aws/aws-sdk-java/issues/693
-	// - https://github.com/aws/aws-sdk-java/issues/915
-	// -
-	// https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Query.html#Query.Count
-
-	long matchingItems = 0;
-
-	for (final Page<Item, QueryOutcome> page : table.query(querySpec).pages()) {
-	    matchingItems += page.getLowLevelResult().getQueryResult().getCount();
-	}
-
-	return matchingItems;
+    if (!batch.isEmpty()) {
+      action.accept(batch);
     }
-
-    static <T> void writeInBatches(final Iterable<T> items, final Consumer<List<T>> action) {
-	final List<T> batch = new ArrayList<>(DYNAMO_DB_MAX_BATCH_SIZE);
-
-	for (T item : items) {
-	    batch.add(item);
-
-	    if (batch.size() == DYNAMO_DB_MAX_BATCH_SIZE) {
-		action.accept(batch);
-		batch.clear();
-	    }
-	}
-	if (!batch.isEmpty()) {
-	    action.accept(batch);
-	}
-    }
+  }
 }

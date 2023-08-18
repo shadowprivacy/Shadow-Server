@@ -67,7 +67,7 @@ public class MessagesScyllaDbTest {
 
     @Before
     public void setup() {
-	messagesScyllaDb = new MessagesScyllaDb(dynamoDbRule.getDynamoDB(), MessagesDynamoDbRule.TABLE_NAME, Duration.ofDays(7));
+	messagesScyllaDb = new MessagesScyllaDb(dynamoDbRule.getDynamoDbClient(), MessagesDynamoDbRule.TABLE_NAME, Duration.ofDays(7));
     }
 
     @Test

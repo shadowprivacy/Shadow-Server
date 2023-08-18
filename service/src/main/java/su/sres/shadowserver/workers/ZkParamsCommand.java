@@ -7,9 +7,11 @@ package su.sres.shadowserver.workers;
 
 import net.sourceforge.argparse4j.inf.Namespace;
 import net.sourceforge.argparse4j.inf.Subparser;
+
+import java.util.Base64;
+
 import org.signal.zkgroup.ServerPublicParams;
 import org.signal.zkgroup.ServerSecretParams;
-import su.sres.shadowserver.util.Base64;
 
 import io.dropwizard.cli.Command;
 import io.dropwizard.setup.Bootstrap;
@@ -30,8 +32,8 @@ public class ZkParamsCommand extends Command {
     ServerSecretParams serverSecretParams = ServerSecretParams.generate();
     ServerPublicParams serverPublicParams = serverSecretParams.getPublicParams();
 
-    System.out.println("Public: " + Base64.encodeBytesWithoutPadding(serverPublicParams.serialize()));
-    System.out.println("Private: " + Base64.encodeBytesWithoutPadding(serverSecretParams.serialize()));
+    System.out.println("Public: " + Base64.getEncoder().withoutPadding().encodeToString(serverPublicParams.serialize()));
+    System.out.println("Private: " + Base64.getEncoder().withoutPadding().encodeToString(serverSecretParams.serialize()));
   }
 
 }

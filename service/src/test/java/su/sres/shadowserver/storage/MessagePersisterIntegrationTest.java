@@ -5,14 +5,12 @@
  */
 package su.sres.shadowserver.storage;
 
-import com.amazonaws.services.dynamodbv2.document.DynamoDB;
-import com.amazonaws.services.dynamodbv2.document.Item;
-import com.amazonaws.services.dynamodbv2.document.ItemCollection;
-import com.amazonaws.services.dynamodbv2.document.ScanOutcome;
-import com.amazonaws.services.dynamodbv2.document.Table;
-import com.amazonaws.services.dynamodbv2.document.spec.ScanSpec;
 import com.google.protobuf.ByteString;
 import io.lettuce.core.cluster.SlotHash;
+import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
+import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
+import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
+
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.After;
 import org.junit.Before;
@@ -23,6 +21,7 @@ import su.sres.shadowserver.configuration.dynamic.DynamicConfiguration;
 import su.sres.shadowserver.entities.MessageProtos;
 import su.sres.shadowserver.metrics.PushLatencyManager;
 import su.sres.shadowserver.redis.AbstractRedisClusterTest;
+import su.sres.shadowserver.util.AttributeValues;
 import su.sres.shadowserver.util.MessagesDynamoDbRule;
 
 import java.nio.ByteBuffer;
@@ -30,6 +29,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
@@ -64,13 +64,13 @@ public class MessagePersisterIntegrationTest extends AbstractRedisClusterTest {
       connection.sync().upstream().commands().configSet("notify-keyspace-events", "K$glz");
     });
 
-    final MessagesScyllaDb messagesScyllaDb = new MessagesScyllaDb(messagesDynamoDbRule.getDynamoDB(), MessagesDynamoDbRule.TABLE_NAME, Duration.ofDays(7));
+    final MessagesScyllaDb messagesScyllaDb = new MessagesScyllaDb(messagesDynamoDbRule.getDynamoDbClient(), MessagesDynamoDbRule.TABLE_NAME, Duration.ofDays(7));
     final AccountsManager accountsManager = mock(AccountsManager.class);
     final DynamicConfiguration dynamicConfiguration = mock(DynamicConfiguration.class);
 
     notificationExecutorService = Executors.newSingleThreadExecutor();
     messagesCache = new MessagesCache(getRedisCluster(), getRedisCluster(), notificationExecutorService);
-    messagesManager = new MessagesManager(messagesScyllaDb, messagesCache, mock(PushLatencyManager.class));
+    messagesManager = new MessagesManager(messagesScyllaDb, messagesCache, mock(PushLatencyManager.class), mock(ReportMessageManager.class));
     messagePersister = new MessagePersister(messagesCache, messagesManager, accountsManager, dynamicConfiguration, PERSIST_DELAY);
 
     account = mock(Account.class);
@@ -143,16 +143,15 @@ public class MessagePersisterIntegrationTest extends AbstractRedisClusterTest {
 
     final List<MessageProtos.Envelope> persistedMessages = new ArrayList<>(messageCount);
 
-    DynamoDB dynamoDB = messagesDynamoDbRule.getDynamoDB();
-    Table table = dynamoDB.getTable(MessagesDynamoDbRule.TABLE_NAME);
-    final ItemCollection<ScanOutcome> scan = table.scan(new ScanSpec());
-    for (Item item : scan) {
+    DynamoDbClient dynamoDB = messagesDynamoDbRule.getDynamoDbClient();
+    for (Map<String, AttributeValue> item : dynamoDB
+        .scan(ScanRequest.builder().tableName(MessagesDynamoDbRule.TABLE_NAME).build()).items()) {
       persistedMessages.add(MessageProtos.Envelope.newBuilder()
-          .setServerGuid(convertBinaryToUuid(item.getBinary("U")).toString())
-          .setType(MessageProtos.Envelope.Type.valueOf(item.getInt("T")))
-          .setTimestamp(item.getLong("TS"))
-          .setServerTimestamp(extractServerTimestamp(item.getBinary("S")))
-          .setContent(ByteString.copyFrom(item.getBinary("C")))
+          .setServerGuid(AttributeValues.getUUID(item, "U", null).toString())
+          .setType(MessageProtos.Envelope.Type.valueOf(AttributeValues.getInt(item, "T", -1)))
+          .setTimestamp(AttributeValues.getLong(item, "TS", -1))
+          .setServerTimestamp(extractServerTimestamp(AttributeValues.getByteArray(item, "S", null)))
+          .setContent(ByteString.copyFrom(AttributeValues.getByteArray(item, "C", null)))
           .build());
     }
 

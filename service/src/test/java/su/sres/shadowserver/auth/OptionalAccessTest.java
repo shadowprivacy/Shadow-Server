@@ -9,9 +9,10 @@ import org.junit.Test;
 import su.sres.shadowserver.auth.Anonymous;
 import su.sres.shadowserver.auth.OptionalAccess;
 import su.sres.shadowserver.storage.Account;
-import su.sres.shadowserver.util.Base64;
 
 import javax.ws.rs.WebApplicationException;
+
+import java.util.Base64;
 import java.util.Optional;
 
 import static junit.framework.TestCase.assertEquals;
@@ -39,7 +40,7 @@ public class OptionalAccessTest {
     when(account.getUnidentifiedAccessKey()).thenReturn(Optional.of("1234".getBytes()));
 
     try {
-      OptionalAccess.verify(Optional.empty(), Optional.of(new Anonymous(Base64.encodeBytes("1234".getBytes()))), Optional.of(account), "10");
+      OptionalAccess.verify(Optional.empty(), Optional.of(new Anonymous(Base64.getEncoder().encodeToString("1234".getBytes()))), Optional.of(account), "10");
     } catch (WebApplicationException e) {
       assertEquals(e.getResponse().getStatus(), 401);
     }
@@ -53,7 +54,7 @@ public class OptionalAccessTest {
     when(account.getUnidentifiedAccessKey()).thenReturn(Optional.of("1234".getBytes()));
 
     try {
-      OptionalAccess.verify(Optional.empty(), Optional.of(new Anonymous(Base64.encodeBytes("1234".getBytes()))), Optional.of(account), "$$");
+      OptionalAccess.verify(Optional.empty(), Optional.of(new Anonymous(Base64.getEncoder().encodeToString("1234".getBytes()))), Optional.of(account), "$$");
     } catch (WebApplicationException e) {
       assertEquals(e.getResponse().getStatus(), 422);
     }
@@ -67,7 +68,7 @@ public class OptionalAccessTest {
     when(account.getUnidentifiedAccessKey()).thenReturn(Optional.of("1234".getBytes()));
 
     try {
-      OptionalAccess.verify(Optional.empty(), Optional.of(new Anonymous(Base64.encodeBytes("5678".getBytes()))), Optional.of(account));
+      OptionalAccess.verify(Optional.empty(), Optional.of(new Anonymous(Base64.getEncoder().encodeToString("5678".getBytes()))), Optional.of(account));
       throw new AssertionError("should fail");
     } catch (WebApplicationException e) {
       assertEquals(e.getResponse().getStatus(), 401);
@@ -115,7 +116,7 @@ public class OptionalAccessTest {
     Account account = mock(Account.class);
     when(account.getUnidentifiedAccessKey()).thenReturn(Optional.of("1234".getBytes()));
     when(account.isEnabled()).thenReturn(true);
-    OptionalAccess.verify(Optional.empty(), Optional.of(new Anonymous(Base64.encodeBytes("1234".getBytes()))), Optional.of(account));
+    OptionalAccess.verify(Optional.empty(), Optional.of(new Anonymous(Base64.getEncoder().encodeToString("1234".getBytes()))), Optional.of(account));
   }
 
   @Test
@@ -125,7 +126,7 @@ public class OptionalAccessTest {
     when(account.isEnabled()).thenReturn(false);
 
     try {
-      OptionalAccess.verify(Optional.empty(), Optional.of(new Anonymous(Base64.encodeBytes("1234".getBytes()))), Optional.of(account));
+      OptionalAccess.verify(Optional.empty(), Optional.of(new Anonymous(Base64.getEncoder().encodeToString("1234".getBytes()))), Optional.of(account));
       throw new AssertionError();
     } catch (WebApplicationException e) {
       assertEquals(e.getResponse().getStatus(), 401);
@@ -138,6 +139,6 @@ public class OptionalAccessTest {
     Account target = mock(Account.class);
     when(target.isEnabled()).thenReturn(true);
     when(source.isEnabled()).thenReturn(true);
-    OptionalAccess.verify(Optional.of(source), Optional.empty(), Optional.of(target));;
+    OptionalAccess.verify(Optional.of(source), Optional.empty(), Optional.of(target));
   }
 }

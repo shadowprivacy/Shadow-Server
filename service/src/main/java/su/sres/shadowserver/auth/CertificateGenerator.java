@@ -13,10 +13,10 @@ import su.sres.shadowserver.entities.MessageProtos.SenderCertificate;
 import su.sres.shadowserver.entities.MessageProtos.ServerCertificate;
 import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.storage.Device;
-import su.sres.shadowserver.util.Base64;
 
 import java.io.IOException;
 import java.security.InvalidKeyException;
+import java.util.Base64;
 import java.util.concurrent.TimeUnit;
 
 public class CertificateGenerator {
@@ -36,7 +36,7 @@ public class CertificateGenerator {
 	SenderCertificate.Certificate.Builder builder = SenderCertificate.Certificate.newBuilder()
 		.setSenderDevice(Math.toIntExact(device.getId()))
 		.setExpires(System.currentTimeMillis() + TimeUnit.DAYS.toMillis(expiresDays))
-		.setIdentityKey(ByteString.copyFrom(Base64.decode(account.getIdentityKey())))
+		.setIdentityKey(ByteString.copyFrom(Base64.getDecoder().decode(account.getIdentityKey())))
 		.setSigner(serverCertificate)
                 .setSenderUuid(account.getUuid().toString());
 

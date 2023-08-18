@@ -28,7 +28,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
-
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 
 import javax.ws.rs.client.Entity;
@@ -226,6 +226,8 @@ class AccountControllerTest {
         gcmSender,
         // apnSender,
         usernamesManager);
+    
+    clearInvocations(AuthHelper.DISABLED_DEVICE);
   }
 
   @Test
@@ -262,6 +264,55 @@ class AccountControllerTest {
     assertThat(captor.getValue().getChallengeData().get().length()).isEqualTo(32);
     assertThat(captor.getValue().getMessage())
         .contains("\"challenge\" : \"" + captor.getValue().getChallengeData().get() + "\"");
+    assertThat(captor.getValue().isVoip()).isTrue();
+
+    verifyNoMoreInteractions(gcmSender);
+  }
+
+  @Test
+  @Disabled
+  // until we support iOS
+  void testGetApnPreauthExplicitVoip() throws Exception {
+    Response response = resources.getJerseyTest()
+        .target("/v1/accounts/apn/preauth/mytoken/+14152222222")
+        .queryParam("voip", "true")
+        .request()
+        .get();
+
+    assertThat(response.getStatus()).isEqualTo(200);
+
+    ArgumentCaptor<ApnMessage> captor = ArgumentCaptor.forClass(ApnMessage.class);
+
+    // verify(apnSender, times(1)).sendMessage(captor.capture());
+    assertThat(captor.getValue().getApnId()).isEqualTo("mytoken");
+    assertThat(captor.getValue().getChallengeData().isPresent()).isTrue();
+    assertThat(captor.getValue().getChallengeData().get().length()).isEqualTo(32);
+    assertThat(captor.getValue().getMessage()).contains("\"challenge\" : \"" + captor.getValue().getChallengeData().get() + "\"");
+    assertThat(captor.getValue().isVoip()).isTrue();
+
+    verifyNoMoreInteractions(gcmSender);
+  }
+
+  @Test
+  @Disabled
+  // until we support iOS
+  void testGetApnPreauthExplicitNoVoip() throws Exception {
+    Response response = resources.getJerseyTest()
+        .target("/v1/accounts/apn/preauth/mytoken/+14152222222")
+        .queryParam("voip", "false")
+        .request()
+        .get();
+
+    assertThat(response.getStatus()).isEqualTo(200);
+
+    ArgumentCaptor<ApnMessage> captor = ArgumentCaptor.forClass(ApnMessage.class);
+
+    // verify(apnSender, times(1)).sendMessage(captor.capture());
+    assertThat(captor.getValue().getApnId()).isEqualTo("mytoken");
+    assertThat(captor.getValue().getChallengeData().isPresent()).isTrue();
+    assertThat(captor.getValue().getChallengeData().get().length()).isEqualTo(32);
+    assertThat(captor.getValue().getMessage()).contains("\"challenge\" : \"" + captor.getValue().getChallengeData().get() + "\"");
+    assertThat(captor.getValue().isVoip()).isFalse();
 
     verifyNoMoreInteractions(gcmSender);
   }
@@ -540,6 +591,23 @@ class AccountControllerTest {
     verify(AuthHelper.DISABLED_DEVICE, times(1)).setVoipApnId(eq("second"));
     verify(accountsManager, times(1)).update(eq(AuthHelper.DISABLED_ACCOUNT));
   }
+  
+  @Test
+  void testSetApnIdNoVoip() throws Exception {
+    Response response =
+        resources.getJerseyTest()
+            .target("/v1/accounts/apn/")
+            .request()
+            .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.DISABLED_NUMBER, AuthHelper.DISABLED_PASSWORD))
+            .put(Entity.json(new ApnRegistrationId("first", null)));
+
+    assertThat(response.getStatus()).isEqualTo(204);
+
+    verify(AuthHelper.DISABLED_DEVICE, times(1)).setApnId(eq("first"));
+    verify(AuthHelper.DISABLED_DEVICE, times(1)).setVoipApnId(null);
+    verify(accountsManager, times(1)).update(eq(AuthHelper.DISABLED_ACCOUNT));
+  }
+
 
   @Test
   void testSetApnIdByUuid() throws Exception {
@@ -556,7 +624,7 @@ class AccountControllerTest {
   }
 
   @ParameterizedTest
-  @CsvSource("/v1/accounts/whoami/, /v1/accounts/me/")
+  @ValueSource(strings = {"/v1/accounts/whoami/", "/v1/accounts/me/"})
   void testWhoAmI(final String path) {
     AccountCreationResult response = resources.getJerseyTest().target(path).request()
         .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))

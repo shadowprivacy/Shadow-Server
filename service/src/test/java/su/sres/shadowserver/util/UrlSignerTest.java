@@ -8,8 +8,6 @@ package su.sres.shadowserver.util;
 import io.minio.errors.ErrorResponseException;
 import io.minio.errors.InsufficientDataException;
 import io.minio.errors.InternalException;
-import io.minio.errors.InvalidBucketNameException;
-import io.minio.errors.InvalidExpiresRangeException;
 import io.minio.errors.InvalidResponseException;
 import io.minio.errors.ServerException;
 import io.minio.errors.XmlParserException;
@@ -28,7 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class UrlSignerTest {
 
   @Test
-  public void testTransferUnaccelerated() throws InvalidKeyException, ErrorResponseException, IllegalArgumentException, InsufficientDataException, InternalException, InvalidBucketNameException, InvalidExpiresRangeException, InvalidResponseException, NoSuchAlgorithmException, XmlParserException, ServerException, IOException {
+  public void testTransferUnaccelerated() throws InvalidKeyException, ErrorResponseException, IllegalArgumentException, InsufficientDataException, InternalException, InvalidResponseException, NoSuchAlgorithmException, XmlParserException, ServerException, IOException {
     UrlSigner signer = new UrlSigner("foo", "bar", "attachments-test", "https://minio.example.com");
     URL url = signer.getPreSignedUrl(1234, Method.GET);
 

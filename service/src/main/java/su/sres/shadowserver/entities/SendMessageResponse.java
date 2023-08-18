@@ -16,6 +16,5 @@ public class SendMessageResponse {
 
   public SendMessageResponse(boolean needsSync) {
     this.needsSync = needsSync;
-  }
-
+  }  
 }

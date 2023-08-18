@@ -14,25 +14,25 @@ import com.fasterxml.jackson.databind.JsonSerializer;
 import com.fasterxml.jackson.databind.SerializerProvider;
 import org.signal.zkgroup.InvalidInputException;
 import org.signal.zkgroup.profiles.ProfileKeyCommitment;
-import su.sres.shadowserver.util.Base64;
 
 import java.io.IOException;
+import java.util.Base64;
 
 public class ProfileKeyCommitmentAdapter {
 
   public static class Serializing extends JsonSerializer<ProfileKeyCommitment> {
     @Override
     public void serialize(ProfileKeyCommitment value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
-      gen.writeString(Base64.encodeBytes(value.serialize()));
+      gen.writeString(Base64.getEncoder().encodeToString(value.serialize()));
     }
   }
 
   public static class Deserializing extends JsonDeserializer<ProfileKeyCommitment> {
 
     @Override
-    public ProfileKeyCommitment deserialize(JsonParser p, DeserializationContext ctxt) throws IOException, JsonProcessingException {
+    public ProfileKeyCommitment deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
       try {
-        return new ProfileKeyCommitment(Base64.decode(p.getValueAsString()));
+        return new ProfileKeyCommitment(Base64.getDecoder().decode(p.getValueAsString()));
       } catch (InvalidInputException e) {
         throw new IOException(e);
       }

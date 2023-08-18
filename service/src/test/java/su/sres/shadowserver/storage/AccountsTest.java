@@ -35,6 +35,7 @@ import java.util.UUID;
 
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
+import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -62,10 +63,17 @@ public class AccountsTest {
 
     long directoryVersion = 10;
 
-    accounts.create(account, directoryVersion);
+    boolean freshUser = accounts.create(account, directoryVersion);
+    assertThat(freshUser).isTrue();;
 
     PreparedStatement statement = db.getTestDatabase().getConnection().prepareStatement("SELECT * FROM accounts WHERE number = ?");
     verifyStoredState(statement, "johndoe", account.getUuid(), account);
+    
+    freshUser = accounts.create(account, directoryVersion + 1L);
+    assertThat(freshUser).isTrue();
+
+    statement = db.getTestDatabase().getConnection().prepareStatement("SELECT * FROM accounts WHERE number = ?");
+    verifyStoredState(statement, "+14151112222", account.getUuid(), account);
   }
 
   @Test
@@ -131,7 +139,7 @@ public class AccountsTest {
     UUID firstUuid = UUID.randomUUID();
     Account account = generateAccount("johndoe", firstUuid, Collections.singleton(device));
 
-    long directoryVersion = 10;
+    long directoryVersion = 10L;
 
     accounts.create(account, directoryVersion);
 
@@ -143,8 +151,14 @@ public class AccountsTest {
     device = generateDevice(1);
     account = generateAccount("johndoe", secondUuid, Collections.singleton(device));
 
-    accounts.create(account, directoryVersion + 1L);
+    final boolean freshUser = accounts.create(account, directoryVersion + 1L);
+    assertThat(freshUser).isFalse();
     verifyStoredState(statement, "johndoe", firstUuid, account);
+    
+    device = generateDevice(1);
+    Account invalidAccount = generateAccount("+14151113333", firstUuid, Collections.singleton(device));
+
+    assertThatThrownBy(() -> accounts.create(invalidAccount, directoryVersion + 2L));
   }
 
   @Test
@@ -212,16 +226,29 @@ public class AccountsTest {
     long directoryVersion = 10;
 
     accounts.create(deletedAccount, directoryVersion);
-    accounts.create(retainedAccount, directoryVersion);
+    accounts.create(retainedAccount, directoryVersion + 1);
 
     assertThat(accounts.get(deletedAccount.getUuid())).isPresent();
     assertThat(accounts.get(retainedAccount.getUuid())).isPresent();
 
-    accounts.delete(deletedAccount.getUuid(), directoryVersion);
+    accounts.delete(deletedAccount.getUuid(), directoryVersion + 2);
 
     assertThat(accounts.get(deletedAccount.getUuid())).isNotPresent();
 
     verifyStoredState(retainedAccount.getUserLogin(), retainedAccount.getUuid(), accounts.get(retainedAccount.getUuid()).get(), retainedAccount);
+    
+    {
+      final Account recreatedAccount = generateAccount(deletedAccount.getUserLogin(), UUID.randomUUID(),
+          Collections.singleton(generateDevice(1)));
+
+      final boolean freshUser = accounts.create(recreatedAccount, directoryVersion + 3L);
+
+      assertThat(freshUser).isTrue();
+
+      assertThat(accounts.get(recreatedAccount.getUuid())).isPresent();
+      verifyStoredState(recreatedAccount.getUserLogin(), recreatedAccount.getUuid(),
+          accounts.get(recreatedAccount.getUuid()).get(), recreatedAccount);
+    }
   }
 
   @Test
@@ -305,8 +332,8 @@ public class AccountsTest {
   private Device generateDevice(long id) {
     Random random = new Random(System.currentTimeMillis());
     SignedPreKey signedPreKey = new SignedPreKey(random.nextInt(), "testPublicKey-" + random.nextInt(), "testSignature-" + random.nextInt());
-    return new Device(id, "testName-" + random.nextInt(), "testAuthToken-" + random.nextInt(), "testSalt-" + random.nextInt(), "testGcmId-" + random.nextInt(), "testApnId-" + random.nextInt(), "testVoipApnId-" + random.nextInt(), random.nextBoolean(), random.nextInt(), signedPreKey, random.nextInt(), random.nextInt(), "testUserAgent-" + random.nextInt(), 0,
-        new Device.DeviceCapabilities(random.nextBoolean(), random.nextBoolean(), random.nextBoolean(), random.nextBoolean(), random.nextBoolean(), random.nextBoolean()));
+    return new Device(id, "testName-" + random.nextInt(), "testAuthToken-" + random.nextInt(), "testSalt-" + random.nextInt(), "testGcmId-" + random.nextInt(), "testApnId-" + random.nextInt(), "testVoipApnId-" + random.nextInt(), random.nextBoolean(), random.nextInt(), signedPreKey, random.nextInt(), random.nextInt(), "testUserAgent-" + random.nextInt() , 0, new Device.DeviceCapabilities(random.nextBoolean(), random.nextBoolean(), random.nextBoolean(), random.nextBoolean(), random.nextBoolean(), random.nextBoolean(),
+        random.nextBoolean(), random.nextBoolean()));
 
   }
 

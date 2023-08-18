@@ -12,7 +12,6 @@ import com.amazonaws.services.dynamodbv2.document.KeyAttribute;
 import com.amazonaws.services.dynamodbv2.document.PrimaryKey;
 import com.amazonaws.services.dynamodbv2.document.Table;
 import com.amazonaws.services.dynamodbv2.document.spec.UpdateItemSpec;
-import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
 
 import io.micrometer.core.instrument.Metrics;
@@ -23,14 +22,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
-
-
 import javax.annotation.Nullable;
 
 import static com.codahale.metrics.MetricRegistry.name;
 
-public class GroupsScyllaDb extends AbstractScyllaDbStore {
+public class GroupsScyllaDb // extends AbstractScyllaDbStore
+{
 
+  private final DynamoDB scyllaDb;
   private final Table table;
 
   static final String KEY_GROUP_ID = "ID";
@@ -42,8 +41,7 @@ public class GroupsScyllaDb extends AbstractScyllaDbStore {
   private static final Timer UPDATE_TIMER = Metrics.timer(name(GroupsScyllaDb.class, "update"));
 
   public GroupsScyllaDb(final DynamoDB scyllaDb, final String tableName) {
-    super(scyllaDb);
-
+    this.scyllaDb = scyllaDb;
     this.table = scyllaDb.getTable(tableName);
   }
  

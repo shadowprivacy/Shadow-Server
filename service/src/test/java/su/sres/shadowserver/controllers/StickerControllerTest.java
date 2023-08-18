@@ -23,11 +23,11 @@ import su.sres.shadowserver.limits.RateLimiter;
 import su.sres.shadowserver.limits.RateLimiters;
 import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.util.AuthHelper;
-import su.sres.shadowserver.util.Base64;
 import su.sres.shadowserver.util.SystemMapper;
 
 import javax.ws.rs.core.Response;
 import java.io.IOException;
+import java.util.Base64;
 
 import io.dropwizard.auth.PolymorphicAuthValueFactoryProvider;
 import io.dropwizard.testing.junit.ResourceTestRule;
@@ -64,7 +64,7 @@ public class StickerControllerTest {
         .isEqualTo("stickers/" + attributes.getPackId() + "/manifest.proto");
     assertThat(attributes.getManifest().getAcl()).isEqualTo("private");
     assertThat(attributes.getManifest().getPolicy()).isNotEmpty();
-    assertThat(new String(Base64.decode(attributes.getManifest().getPolicy()))).contains("[\"content-length-range\", 1, 10240]");
+    assertThat(new String(Base64.getDecoder().decode(attributes.getManifest().getPolicy()))).contains("[\"content-length-range\", 1, 10240]");
     assertThat(attributes.getManifest().getSignature()).isNotEmpty();
     assertThat(attributes.getManifest().getAlgorithm()).isEqualTo("AWS4-HMAC-SHA256");
     assertThat(attributes.getManifest().getCredential()).isNotEmpty();
@@ -78,7 +78,7 @@ public class StickerControllerTest {
           .isEqualTo("stickers/" + attributes.getPackId() + "/full/" + i);
       assertThat(attributes.getStickers().get(i).getAcl()).isEqualTo("private");
       assertThat(attributes.getStickers().get(i).getPolicy()).isNotEmpty();
-      assertThat(new String(Base64.decode(attributes.getStickers().get(i).getPolicy()))).contains("[\"content-length-range\", 1, 307200]");
+      assertThat(new String(Base64.getDecoder().decode(attributes.getStickers().get(i).getPolicy()))).contains("[\"content-length-range\", 1, 307200]");
       assertThat(attributes.getStickers().get(i).getSignature()).isNotEmpty();
       assertThat(attributes.getStickers().get(i).getAlgorithm()).isEqualTo("AWS4-HMAC-SHA256");
       assertThat(attributes.getStickers().get(i).getCredential()).isNotEmpty();

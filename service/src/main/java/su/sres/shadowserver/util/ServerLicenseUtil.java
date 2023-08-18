@@ -16,6 +16,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.util.Base64;
 import java.util.Map;
 
 import javax.annotation.Nullable;
@@ -195,7 +196,7 @@ public class ServerLicenseUtil {
 
     public static String calculateHash(String domain) throws NoSuchAlgorithmException {
 	MessageDigest messageDigest = MessageDigest.getInstance("SHA-256");
-	return Base64.encodeBytes(messageDigest.digest(domain.getBytes(StandardCharsets.UTF_8)));
+	return Base64.getEncoder().encodeToString(messageDigest.digest(domain.getBytes(StandardCharsets.UTF_8)));
     }
 
     public static String getDomain(String keystore, String password) throws KeyStoreException, NoSuchAlgorithmException, CertificateException, IOException {

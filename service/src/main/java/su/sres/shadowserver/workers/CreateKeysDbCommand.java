@@ -10,21 +10,23 @@ import com.amazonaws.ClientConfiguration;
 import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.auth.BasicAWSCredentials;
 import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration;
-import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
-import com.amazonaws.services.dynamodbv2.document.DynamoDB;
-import com.amazonaws.services.dynamodbv2.document.Table;
-import com.amazonaws.services.dynamodbv2.model.AttributeDefinition;
-import com.amazonaws.services.dynamodbv2.model.CreateTableRequest;
-import com.amazonaws.services.dynamodbv2.model.KeySchemaElement;
-import com.amazonaws.services.dynamodbv2.model.KeyType;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 
 import io.dropwizard.Application;
 import io.dropwizard.cli.EnvironmentCommand;
 import io.dropwizard.setup.Environment;
 import net.sourceforge.argparse4j.inf.Namespace;
+import software.amazon.awssdk.core.waiters.WaiterResponse;
+import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
+import software.amazon.awssdk.services.dynamodb.model.AttributeDefinition;
+import software.amazon.awssdk.services.dynamodb.model.CreateTableRequest;
+import software.amazon.awssdk.services.dynamodb.model.DescribeTableResponse;
+import software.amazon.awssdk.services.dynamodb.model.KeySchemaElement;
+import software.amazon.awssdk.services.dynamodb.model.KeyType;
+import software.amazon.awssdk.services.dynamodb.waiters.DynamoDbWaiter;
 import su.sres.shadowserver.WhisperServerConfiguration;
 import su.sres.shadowserver.configuration.ScyllaDbConfiguration;
+import su.sres.shadowserver.util.ScyllaDbFromConfig;
 
 public class CreateKeysDbCommand extends EnvironmentCommand<WhisperServerConfiguration> {
 
@@ -53,37 +55,39 @@ public class CreateKeysDbCommand extends EnvironmentCommand<WhisperServerConfigu
 
     ScyllaDbConfiguration scyllaKeysConfig = config.getKeysScyllaDbConfiguration();
 
-    AmazonDynamoDBClientBuilder clientBuilder = AmazonDynamoDBClientBuilder
-        .standard()
-        .withEndpointConfiguration(new EndpointConfiguration(scyllaKeysConfig.getEndpoint(), scyllaKeysConfig.getRegion()))
-        .withClientConfiguration(new ClientConfiguration().withClientExecutionTimeout(((int) scyllaKeysConfig.getClientExecutionTimeout().toMillis()))
-            .withRequestTimeout((int) scyllaKeysConfig.getClientRequestTimeout().toMillis()))
-        .withCredentials(new AWSStaticCredentialsProvider(new BasicAWSCredentials(scyllaKeysConfig.getAccessKey(), scyllaKeysConfig.getAccessSecret())));
+    String tableName = scyllaKeysConfig.getTableName();
 
-    DynamoDB keysDynamoDb = new DynamoDB(clientBuilder.build());
+    DynamoDbClient keysScyllaDb = ScyllaDbFromConfig.client(scyllaKeysConfig);
 
     List<AttributeDefinition> attributeDefinitions = new ArrayList<AttributeDefinition>();
-    attributeDefinitions.add(new AttributeDefinition().withAttributeName(KEY_ACCOUNT_UUID).withAttributeType("B"));
-    attributeDefinitions.add(new AttributeDefinition().withAttributeName(KEY_DEVICE_ID_KEY_ID).withAttributeType("B"));
-    attributeDefinitions.add(new AttributeDefinition().withAttributeName(KEY_PUBLIC_KEY).withAttributeType("S"));
+    attributeDefinitions.add(AttributeDefinition.builder().attributeName(KEY_ACCOUNT_UUID).attributeType("B").build());
+    attributeDefinitions.add(AttributeDefinition.builder().attributeName(KEY_DEVICE_ID_KEY_ID).attributeType("B").build());
+    attributeDefinitions.add(AttributeDefinition.builder().attributeName(KEY_PUBLIC_KEY).attributeType("S").build());
 
     List<KeySchemaElement> keySchema = new ArrayList<KeySchemaElement>();
-    keySchema.add(new KeySchemaElement().withAttributeName(KEY_ACCOUNT_UUID).withKeyType(KeyType.HASH));
-    keySchema.add(new KeySchemaElement().withAttributeName(KEY_DEVICE_ID_KEY_ID).withKeyType(KeyType.RANGE));
+    keySchema.add(KeySchemaElement.builder().attributeName(KEY_ACCOUNT_UUID).keyType(KeyType.HASH).build());
+    keySchema.add(KeySchemaElement.builder().attributeName(KEY_DEVICE_ID_KEY_ID).keyType(KeyType.RANGE).build());
 
-    CreateTableRequest request = new CreateTableRequest()
-        .withTableName(scyllaKeysConfig.getTableName())
-        .withKeySchema(keySchema)
-        .withAttributeDefinitions(attributeDefinitions)
-        .withBillingMode("PAY_PER_REQUEST");
+    CreateTableRequest request = CreateTableRequest.builder()
+        .tableName(tableName)
+        .keySchema(keySchema)
+        .attributeDefinitions(attributeDefinitions)
+        .billingMode("PAY_PER_REQUEST")
+        .build();
 
     logger.info("Creating the keysdb table...");
 
-    Table table = keysDynamoDb.createTable(request);
+    DynamoDbWaiter waiter = keysScyllaDb.waiter();
 
-    table.waitForActive();
+    keysScyllaDb.createTable(request);
 
-    logger.info("Done");
+    WaiterResponse<DescribeTableResponse> waiterResponse = waiter.waitUntilTableExists(r -> r.tableName(tableName));
+
+    if (waiterResponse.matched().response().isPresent()) {
+
+      logger.info("Done");
+
+    }
 
   }
 }

@@ -7,8 +7,8 @@ package su.sres.shadowserver.auth;
 
 
 import java.io.IOException;
+import java.util.Base64;
 
-import su.sres.shadowserver.util.Base64;
 import su.sres.shadowserver.util.Util;
 
 public class AuthorizationHeader {
@@ -50,7 +50,7 @@ public class AuthorizationHeader {
         throw new InvalidAuthorizationHeaderException("Unsupported authorization method: " + headerParts[0]);
       }
 
-      String concatenatedValues = new String(Base64.decode(headerParts[1]));
+      String concatenatedValues = new String(Base64.getDecoder().decode(headerParts[1]));
 
       if (Util.isEmpty(concatenatedValues)) {
         throw new InvalidAuthorizationHeaderException("Bad decoded value: " + concatenatedValues);
@@ -63,8 +63,8 @@ public class AuthorizationHeader {
       }
 
       return fromUserAndPassword(credentialParts[0], credentialParts[1]);
-    } catch (IOException ioe) {
-      throw new InvalidAuthorizationHeaderException(ioe);
+    } catch (IllegalArgumentException e) {
+      throw new InvalidAuthorizationHeaderException(e);
     }
   }
 

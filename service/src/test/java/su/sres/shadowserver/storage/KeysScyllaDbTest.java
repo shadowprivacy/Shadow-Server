@@ -8,6 +8,8 @@ package su.sres.shadowserver.storage;
 import org.junit.Before;
 import org.junit.ClassRule;
 import org.junit.Test;
+
+import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import su.sres.shadowserver.entities.PreKey;
 
 import java.util.Collections;
@@ -18,6 +20,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -35,7 +38,7 @@ public class KeysScyllaDbTest {
 
   @Before
   public void setup() {
-    keysDynamoDb = new KeysScyllaDb(dynamoDbRule.getDynamoDB(), KeysScyllaDbRule.TABLE_NAME);
+    keysDynamoDb = new KeysScyllaDb(dynamoDbRule.getDynamoDbClient(), KeysScyllaDbRule.TABLE_NAME);
 
     account = mock(Account.class);
     when(account.getUserLogin()).thenReturn(ACCOUNT_NUMBER);
@@ -133,5 +136,11 @@ public class KeysScyllaDbTest {
 
     assertEquals(0, keysDynamoDb.getCount(account, DEVICE_ID));
     assertEquals(1, keysDynamoDb.getCount(account, DEVICE_ID + 1));
+  }
+  
+  @Test
+  public void testSortKeyPrefix() {
+    AttributeValue got = KeysScyllaDb.getSortKeyPrefix(123);
+    assertArrayEquals(new byte[]{0, 0, 0, 0, 0, 0, 0, 123}, got.b().asByteArray());
   }
 }

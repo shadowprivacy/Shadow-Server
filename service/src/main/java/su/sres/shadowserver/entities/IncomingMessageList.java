@@ -5,6 +5,8 @@
  */
 package su.sres.shadowserver.entities;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonInclude.Include;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import javax.validation.Valid;
@@ -16,6 +18,7 @@ public class IncomingMessageList {
   @JsonProperty
   @NotNull
   @Valid
+  @JsonInclude(Include.NON_NULL)
   private List<IncomingMessage> messages;
 
  // excluded federation, reserved for future purposes 

@@ -19,6 +19,9 @@ import com.codahale.metrics.Timer;
 import com.fasterxml.jackson.core.JsonEncoding;
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonGenerator;
+
+import su.sres.shadowserver.util.HostnameUtil;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -84,7 +87,7 @@ public class JsonMetricsReporter extends ScheduledReporter {
 	    throws UnknownHostException {
 	super(registry, "json-reporter", filter, rateUnit, durationUnit, Executors.newSingleThreadScheduledExecutor(new NamedThreadFactory("json-reporter")), true, disabledMetricAttributes);
 	this.httpClient = HttpClient.newBuilder().version(HttpClient.Version.HTTP_2).build();
-	this.uri = UriBuilder.fromUri(uri).queryParam("h", InetAddress.getLocalHost().getHostName()).build();
+	this.uri        = UriBuilder.fromUri(uri).queryParam("h", HostnameUtil.getLocalHostname()).build();
     }
 
     @Override

@@ -57,7 +57,7 @@ public class AccountCleaner extends AccountDatabaseCrawlerListener {
 
   @Override
   protected void onCrawlChunk(Optional<UUID> fromUuid, List<Account> chunkAccounts) {
-          
+              
     int accountUpdateCount = 0;
     int deletableAccountCount = 0;
     HashSet<Account> accountsToDelete = new HashSet<Account>();
@@ -86,6 +86,9 @@ public class AccountCleaner extends AccountDatabaseCrawlerListener {
         
       } else {
         // noop; we should not fall here
+        
+        // remove after testing
+        logger.info("List empty at " + System.currentTimeMillis());
       }      
       
     }

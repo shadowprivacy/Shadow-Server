@@ -10,9 +10,9 @@ import org.junit.Test;
 import io.lettuce.core.RedisException;
 import io.lettuce.core.cluster.api.sync.RedisAdvancedClusterCommands;
 import su.sres.shadowserver.redis.FaultTolerantRedisCluster;
-import su.sres.shadowserver.util.Base64;
 import su.sres.shadowserver.util.RedisClusterHelper;
 
+import java.util.Base64;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -38,7 +38,7 @@ public class ProfilesManagerTest {
 
     UUID uuid = UUID.randomUUID();
 
-    when(commands.hget(eq("profiles::" + uuid.toString()), eq("someversion"))).thenReturn("{\"version\": \"someversion\", \"name\": \"somename\", \"avatar\": \"someavatar\", \"commitment\":\"" + Base64.encodeBytes("somecommitment".getBytes()) + "\"}");
+    when(commands.hget(eq("profiles::" + uuid.toString()), eq("someversion"))).thenReturn("{\"version\": \"someversion\", \"name\": \"somename\", \"avatar\": \"someavatar\", \"commitment\":\"" + Base64.getEncoder().encodeToString("somecommitment".getBytes()) + "\"}");
 
     ProfilesManager profilesManager = new ProfilesManager(profiles, cacheCluster);
     Optional<VersionedProfile> profile = profilesManager.get(uuid, "someversion");

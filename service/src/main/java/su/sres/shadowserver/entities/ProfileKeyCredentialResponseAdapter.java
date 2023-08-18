@@ -14,29 +14,27 @@ import com.fasterxml.jackson.databind.JsonSerializer;
 import com.fasterxml.jackson.databind.SerializerProvider;
 import org.signal.zkgroup.InvalidInputException;
 import org.signal.zkgroup.profiles.ProfileKeyCredentialResponse;
-import su.sres.shadowserver.util.Base64;
 
 import java.io.IOException;
+import java.util.Base64;
 
 public class ProfileKeyCredentialResponseAdapter {
 
   public static class Serializing extends JsonSerializer<ProfileKeyCredentialResponse> {
     @Override
     public void serialize(ProfileKeyCredentialResponse response, JsonGenerator jsonGenerator, SerializerProvider serializerProvider)
-        throws IOException, JsonProcessingException
-    {
+        throws IOException {
       if (response == null) jsonGenerator.writeNull();
-      else                  jsonGenerator.writeString(Base64.encodeBytes(response.serialize()));
+      else                  jsonGenerator.writeString(Base64.getEncoder().encodeToString(response.serialize()));
     }
   }
 
   public static class Deserializing extends JsonDeserializer<ProfileKeyCredentialResponse> {
     @Override
     public ProfileKeyCredentialResponse deserialize(JsonParser jsonParser, DeserializationContext deserializationContext)
-        throws IOException, JsonProcessingException
-    {
+        throws IOException {
       try {
-        return new ProfileKeyCredentialResponse(Base64.decode(jsonParser.getValueAsString()));
+        return new ProfileKeyCredentialResponse(Base64.getDecoder().decode(jsonParser.getValueAsString()));
       } catch (InvalidInputException e) {
         throw new IOException(e);
       }

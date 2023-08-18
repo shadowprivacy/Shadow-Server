@@ -15,24 +15,22 @@ import com.fasterxml.jackson.databind.JsonSerializer;
 import com.fasterxml.jackson.databind.SerializerProvider;
 
 import java.io.IOException;
+import java.util.Base64;
 
 public class ByteArrayAdapter {
 
   public static class Serializing extends JsonSerializer<byte[]> {
     @Override
     public void serialize(byte[] bytes, JsonGenerator jsonGenerator, SerializerProvider serializerProvider)
-        throws IOException, JsonProcessingException
-    {
-      jsonGenerator.writeString(Base64.encodeBytesWithoutPadding(bytes));
+        throws IOException {
+      jsonGenerator.writeString(Base64.getEncoder().withoutPadding().encodeToString(bytes));
     }
   }
 
   public static class Deserializing extends JsonDeserializer<byte[]> {
     @Override
-    public byte[] deserialize(JsonParser jsonParser, DeserializationContext deserializationContext)
-        throws IOException, JsonProcessingException
-    {
-      return Base64.decodeWithoutPadding(jsonParser.getValueAsString());
+    public byte[] deserialize(JsonParser jsonParser, DeserializationContext deserializationContext) throws IOException {
+      return Base64.getDecoder().decode(jsonParser.getValueAsString());
     }
   }
 }

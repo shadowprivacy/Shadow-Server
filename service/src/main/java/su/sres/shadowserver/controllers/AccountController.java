@@ -147,7 +147,8 @@ public class AccountController {
   @GET
   @Path("/{type}/preauth/{token}/{number}")
   public Response getPreAuth(@PathParam("type") String pushType, @PathParam("token") String pushToken,
-      @PathParam("number") String userLogin) {
+      @PathParam("number") String userLogin,
+      @QueryParam("voip")  Optional<Boolean> useVoip) {
 
     if (!"apn".equals(pushType) && !"fcm".equals(pushType)) {
       return Response.status(400).build();
@@ -174,7 +175,7 @@ public class AccountController {
       gcmSender.sendMessage(new GcmMessage(pushToken, userLogin, 0, GcmMessage.Type.CHALLENGE,
           Optional.of(presetVerificationCode.get().getPushCode())));
 //    } else if ("apn".equals(pushType)) {
-//      apnSender.sendMessage(new ApnMessage(pushToken, number, 0, true, Optional.of(presetVerificationCode.get().getPushCode())));
+//      apnSender.sendMessage(new ApnMessage(pushToken, number, 0, useVoip.orElse(true), ApnMessage.Type.CHALLENGE, Optional.of(presetVerificationCode.get().getPushCode())));
     } else {
       throw new AssertionError();
     }
@@ -274,7 +275,7 @@ public class AccountController {
 
       Optional<Account> existingAccount = accounts.get(userLogin);
 
-      // TODO: remove this after sogt-deletion is abandoned on the client side
+      // TODO: remove this after soft-deletion is abandoned on the client side
       if (existingAccount.isPresent() && System.currentTimeMillis() - existingAccount.get().getLastSeen() < TimeUnit.DAYS.toMillis(7)) {
         rateLimiters.getVerifyLimiter().clear(userLogin);        
       }

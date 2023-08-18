@@ -11,6 +11,13 @@ public class DynamicConfiguration {
   @JsonProperty
   @Valid
   private DynamicRateLimitsConfiguration limits = new DynamicRateLimitsConfiguration();
+  
+  @JsonProperty
+  private DynamicAccountsScyllaDbMigrationConfiguration accountsScyllaDbMigration = new DynamicAccountsScyllaDbMigrationConfiguration();
+  
+  @JsonProperty
+  @Valid
+  private DynamicRateLimitChallengeConfiguration rateLimitChallenge = new DynamicRateLimitChallengeConfiguration();
 
   @JsonProperty
   @Valid
@@ -37,5 +44,13 @@ public class DynamicConfiguration {
 
   public Set<String> getActiveFeatureFlags() {
     return featureFlags;
+  }
+  
+  public DynamicAccountsScyllaDbMigrationConfiguration getAccountsScyllaDbMigrationConfiguration() {
+    return accountsScyllaDbMigration;
+  }
+  
+  public DynamicRateLimitChallengeConfiguration getRateLimitChallengeConfiguration() {
+    return rateLimitChallenge;
   }
 }

@@ -23,8 +23,6 @@ import io.dropwizard.auth.Auth;
 import io.minio.errors.ErrorResponseException;
 import io.minio.errors.InsufficientDataException;
 import io.minio.errors.InternalException;
-import io.minio.errors.InvalidBucketNameException;
-import io.minio.errors.InvalidExpiresRangeException;
 import io.minio.errors.InvalidResponseException;
 import io.minio.errors.ServerException;
 import io.minio.errors.XmlParserException;
@@ -63,7 +61,7 @@ public class AttachmentControllerV1 extends AttachmentControllerBase {
   @GET
   @Produces(MediaType.APPLICATION_JSON)
   public AttachmentDescriptorV1 allocateAttachment(@Auth Account account)
-      throws RateLimitExceededException, InvalidKeyException, ErrorResponseException, IllegalArgumentException, InsufficientDataException, InternalException, InvalidBucketNameException, InvalidExpiresRangeException, InvalidResponseException, NoSuchAlgorithmException, XmlParserException, ServerException, IOException {
+      throws RateLimitExceededException, InvalidKeyException, ErrorResponseException, IllegalArgumentException, InsufficientDataException, InternalException, InvalidResponseException, NoSuchAlgorithmException, XmlParserException, ServerException, IOException {
     if (account.isRateLimited()) {
       rateLimiters.getAttachmentLimiter().validate(account.getUserLogin());
     }
@@ -83,7 +81,7 @@ public class AttachmentControllerV1 extends AttachmentControllerBase {
       @PathParam("attachmentId") long attachmentId)
       // excluded federation, reserved for future purposes
       // @QueryParam("relay") Optional<String> relay)
-      throws IOException, InvalidKeyException, ErrorResponseException, IllegalArgumentException, InsufficientDataException, InternalException, InvalidBucketNameException, InvalidExpiresRangeException, InvalidResponseException, NoSuchAlgorithmException, XmlParserException, ServerException {
+      throws IOException, InvalidKeyException, ErrorResponseException, IllegalArgumentException, InsufficientDataException, InternalException, InvalidResponseException, NoSuchAlgorithmException, XmlParserException, ServerException {
     /*
      * excluded federation, reserved for future purposes
      *

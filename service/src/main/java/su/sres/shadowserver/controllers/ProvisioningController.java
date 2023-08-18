@@ -17,13 +17,13 @@ import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 import java.io.IOException;
+import java.util.Base64;
 
 import io.dropwizard.auth.Auth;
 import su.sres.shadowserver.entities.ProvisioningMessage;
 import su.sres.shadowserver.limits.RateLimiters;
 import su.sres.shadowserver.push.ProvisioningManager;
 import su.sres.shadowserver.storage.Account;
-import su.sres.shadowserver.util.Base64;
 import su.sres.shadowserver.websocket.InvalidWebsocketAddressException;
 import su.sres.shadowserver.websocket.ProvisioningAddress;
 
@@ -50,7 +50,8 @@ public class ProvisioningController {
 	rateLimiters.getMessagesLimiter().validate(source.getUserLogin());
 
 	if (!provisioningManager.sendProvisioningMessage(new ProvisioningAddress(destinationName, 0),
-		Base64.decode(message.getBody()))) {
+	    Base64.getDecoder().decode(message.getBody())))
+	{
 	    throw new WebApplicationException(Response.Status.NOT_FOUND);
 	}
     }

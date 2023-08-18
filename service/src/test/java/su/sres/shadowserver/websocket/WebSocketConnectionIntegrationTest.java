@@ -15,6 +15,7 @@ import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.stubbing.Answer;
 import su.sres.shadowserver.entities.MessageProtos;
+import su.sres.shadowserver.entities.MessageProtos.Envelope;
 import su.sres.shadowserver.metrics.PushLatencyManager;
 import su.sres.shadowserver.push.ReceiptSender;
 import su.sres.shadowserver.redis.AbstractRedisClusterTest;
@@ -23,6 +24,7 @@ import su.sres.shadowserver.storage.Device;
 import su.sres.shadowserver.storage.MessagesCache;
 import su.sres.shadowserver.storage.MessagesManager;
 import su.sres.shadowserver.storage.MessagesScyllaDb;
+import su.sres.shadowserver.storage.ReportMessageManager;
 import su.sres.shadowserver.util.MessagesDynamoDbRule;
 import su.sres.websocket.WebSocketClient;
 import su.sres.websocket.messages.WebSocketResponseMessage;
@@ -39,8 +41,10 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -61,6 +65,7 @@ public class WebSocketConnectionIntegrationTest extends AbstractRedisClusterTest
   private ExecutorService executorService;
   private MessagesScyllaDb messagesScyllaDb;
   private MessagesCache messagesCache;
+  private ReportMessageManager reportMessageManager;
   private Account account;
   private Device device;
   private WebSocketClient webSocketClient;
@@ -76,7 +81,8 @@ public class WebSocketConnectionIntegrationTest extends AbstractRedisClusterTest
 
     executorService = Executors.newSingleThreadExecutor();
     messagesCache = new MessagesCache(getRedisCluster(), getRedisCluster(), executorService);
-    messagesScyllaDb = new MessagesScyllaDb(messagesDynamoDbRule.getDynamoDB(), MessagesDynamoDbRule.TABLE_NAME, Duration.ofDays(7));
+    messagesScyllaDb = new MessagesScyllaDb(messagesDynamoDbRule.getDynamoDbClient(), MessagesDynamoDbRule.TABLE_NAME, Duration.ofDays(7));
+    reportMessageManager = mock(ReportMessageManager.class);
     account = mock(Account.class);
     device = mock(Device.class);
     webSocketClient = mock(WebSocketClient.class);
@@ -88,7 +94,7 @@ public class WebSocketConnectionIntegrationTest extends AbstractRedisClusterTest
 
     webSocketConnection = new WebSocketConnection(
         mock(ReceiptSender.class),
-        new MessagesManager(messagesScyllaDb, messagesCache, mock(PushLatencyManager.class)),
+        new MessagesManager(messagesScyllaDb, messagesCache, mock(PushLatencyManager.class), reportMessageManager),
         account,
         device,
         webSocketClient,
@@ -121,7 +127,7 @@ public class WebSocketConnectionIntegrationTest extends AbstractRedisClusterTest
         final MessageProtos.Envelope envelope = generateRandomMessage(UUID.randomUUID());
 
         persistedMessages.add(envelope);
-        expectedMessages.add(envelope.toBuilder().clearServerGuid().build());
+        expectedMessages.add(envelope);
       }
 
       messagesScyllaDb.store(persistedMessages, account.getUuid(), device.getId());
@@ -132,7 +138,7 @@ public class WebSocketConnectionIntegrationTest extends AbstractRedisClusterTest
       final MessageProtos.Envelope envelope = generateRandomMessage(messageGuid);
 
       messagesCache.insert(messageGuid, account.getUuid(), device.getId(), envelope);
-      expectedMessages.add(envelope.toBuilder().clearServerGuid().build());
+      expectedMessages.add(envelope);
     }
 
     final WebSocketResponseMessage successResponse = mock(WebSocketResponseMessage.class);
@@ -183,12 +189,16 @@ public class WebSocketConnectionIntegrationTest extends AbstractRedisClusterTest
   public void testProcessStoredMessagesClientClosed() {
     final int persistedMessageCount = 207;
     final int cachedMessageCount = 173;
+    
+    final List<MessageProtos.Envelope> expectedMessages = new ArrayList<>(persistedMessageCount + cachedMessageCount);
 
     {
       final List<MessageProtos.Envelope> persistedMessages = new ArrayList<>(persistedMessageCount);
 
       for (int i = 0; i < persistedMessageCount; i++) {
-        persistedMessages.add(generateRandomMessage(UUID.randomUUID()));
+        final MessageProtos.Envelope envelope = generateRandomMessage(UUID.randomUUID());
+        persistedMessages.add(envelope);
+        expectedMessages.add(envelope);
       }
 
       messagesScyllaDb.store(persistedMessages, account.getUuid(), device.getId());
@@ -196,15 +206,34 @@ public class WebSocketConnectionIntegrationTest extends AbstractRedisClusterTest
 
     for (int i = 0; i < cachedMessageCount; i++) {
       final UUID messageGuid = UUID.randomUUID();
-      messagesCache.insert(messageGuid, account.getUuid(), device.getId(), generateRandomMessage(messageGuid));
+      final MessageProtos.Envelope envelope = generateRandomMessage(messageGuid);
+      messagesCache.insert(messageGuid, account.getUuid(), device.getId(), envelope);
+
+      expectedMessages.add(envelope);
     }
 
     when(webSocketClient.sendRequest(eq("PUT"), eq("/api/v1/message"), anyList(), any())).thenReturn(CompletableFuture.failedFuture(new IOException("Connection closed")));
 
     webSocketConnection.processStoredMessages();
 
-    verify(webSocketClient, atMost(persistedMessageCount + cachedMessageCount)).sendRequest(eq("PUT"), eq("/api/v1/message"), anyList(), any());
+    //noinspection unchecked
+    ArgumentCaptor<Optional<byte[]>> messageBodyCaptor = ArgumentCaptor.forClass(Optional.class);
+
+    verify(webSocketClient, atMost(persistedMessageCount + cachedMessageCount)).sendRequest(eq("PUT"), eq("/api/v1/message"), anyList(), messageBodyCaptor.capture());
     verify(webSocketClient, never()).sendRequest(eq("PUT"), eq("/api/v1/queue/empty"), anyList(), eq(Optional.empty()));
+    
+    final List<MessageProtos.Envelope> sentMessages = messageBodyCaptor.getAllValues().stream()
+        .map(Optional::get)
+        .map(messageBytes -> {
+            try {
+                return Envelope.parseFrom(messageBytes);
+            } catch (InvalidProtocolBufferException e) {
+                throw new RuntimeException(e);
+            }
+        })
+        .collect(Collectors.toList());
+
+    assertTrue(expectedMessages.containsAll(sentMessages));
   }
 
   private MessageProtos.Envelope generateRandomMessage(final UUID messageGuid) {

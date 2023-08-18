@@ -6,6 +6,8 @@
 package su.sres.shadowserver.configuration;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.google.common.annotations.VisibleForTesting;
+
 import javax.validation.constraints.NotEmpty;
 
 public class CdnConfiguration {
@@ -27,7 +29,7 @@ public class CdnConfiguration {
 
 	@NotEmpty
 	@JsonProperty
-	private String region;
+    protected String region;
 
 	public String getUri() {
 		return uri;
@@ -48,5 +50,10 @@ public class CdnConfiguration {
 	public String getRegion() {
 		return region;
 	}
+	
+	@VisibleForTesting
+	public void setRegion(final String region) {
+	    this.region = region;
+	}  
 
 }
