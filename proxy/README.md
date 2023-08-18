@@ -20,3 +20,7 @@ Update the files, then restart your Docker containers:
 docker-compose down
 docker-compose up --detach
 ```
+
+## Note:
+
+Depending on the OS distribution, the command may be "docker-compose" or "docker compose"
