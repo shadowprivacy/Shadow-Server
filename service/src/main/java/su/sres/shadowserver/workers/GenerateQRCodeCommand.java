@@ -8,6 +8,8 @@ import java.security.NoSuchAlgorithmException;
 import java.security.cert.Certificate;
 import java.util.Base64;
 
+import javax.annotation.Nullable;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,6 +36,7 @@ public class GenerateQRCodeCommand extends EnvironmentCommand<WhisperServerConfi
   private static final String SERVER_URL = "SRVURL";
   private static final String SERVER_CERTIFICATE_HASH = "SRVCH";
   private static final String FCM_SENDER_ID = "FCMSID";
+  private static final String PROXY = "PRX";
   private static final String LINEBREAK = "\n";
 
   private static final String QR_PATH = "qrcode.png";
@@ -58,6 +61,11 @@ public class GenerateQRCodeCommand extends EnvironmentCommand<WhisperServerConfi
         .required(false)
         .setDefault(0)
         .help("The port on which your Shadow server is accessible from the Internet");
+    subparser.addArgument("-x", "--proxy")
+    .dest("proxy")
+    .type(String.class)
+    .required(false)   
+    .help("Hostname of your proxy module (optional)");
   }
 
   @Override
@@ -75,6 +83,7 @@ public class GenerateQRCodeCommand extends EnvironmentCommand<WhisperServerConfi
       String domain = ServerLicenseUtil.getDomain(keystore, password);
 
       Integer port = namespace.getInt("port");
+      @Nullable String proxy = namespace.getString("proxy");
       String serverUrl;
 
       if (port != 0) {
@@ -99,9 +108,17 @@ public class GenerateQRCodeCommand extends EnvironmentCommand<WhisperServerConfi
 
       String fcmId = config.getServiceConfiguration().getFcmSenderId();
 
-      String toEncode = SERVER_URL + "," + SERVER_CERTIFICATE_HASH + "," + FCM_SENDER_ID
-          + LINEBREAK
-          + serverUrl + "," + hash + "," + fcmId;
+      String toEncode;
+      
+      if (proxy != null) {
+        toEncode = SERVER_URL + "," + SERVER_CERTIFICATE_HASH + "," + FCM_SENDER_ID + "," + PROXY
+            + LINEBREAK
+            + serverUrl + "," + hash + "," + fcmId + "," + proxy;
+      } else {
+        toEncode = SERVER_URL + "," + SERVER_CERTIFICATE_HASH + "," + FCM_SENDER_ID
+            + LINEBREAK
+            + serverUrl + "," + hash + "," + fcmId;
+      }
 
       QRCodeWriter barcodeWriter = new QRCodeWriter();
       BitMatrix bitMatrix = barcodeWriter.encode(toEncode, BarcodeFormat.QR_CODE, 300, 300);
