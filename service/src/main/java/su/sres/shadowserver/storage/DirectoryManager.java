@@ -24,7 +24,7 @@ public class DirectoryManager {
   private final Logger logger = LoggerFactory.getLogger(DirectoryManager.class);
 
   static final String DIRECTORY_PLAIN = "DirectoryPlain";
-  static final String DIRECTORY_VERSION = "DirectoryVersion";
+  public static final String DIRECTORY_VERSION = "DirectoryVersion";
 
   // TODO: to be deprecated
   private static final String CURRENT_UPDATE = "CurrentUpdate";

@@ -1,21 +1,21 @@
 package su.sres.shadowserver.workers;
 
+import static su.sres.shadowserver.storage.DirectoryManager.DIRECTORY_VERSION;
+
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.amazonaws.ClientConfiguration;
-import com.amazonaws.auth.AWSStaticCredentialsProvider;
-import com.amazonaws.auth.BasicAWSCredentials;
-import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 
 import io.dropwizard.Application;
 import io.dropwizard.cli.EnvironmentCommand;
 import io.dropwizard.setup.Environment;
 import net.sourceforge.argparse4j.inf.Namespace;
+import redis.clients.jedis.Jedis;
 import software.amazon.awssdk.core.waiters.WaiterResponse;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeDefinition;
@@ -23,15 +23,23 @@ import software.amazon.awssdk.services.dynamodb.model.CreateTableRequest;
 import software.amazon.awssdk.services.dynamodb.model.DescribeTableResponse;
 import software.amazon.awssdk.services.dynamodb.model.KeySchemaElement;
 import software.amazon.awssdk.services.dynamodb.model.KeyType;
+import software.amazon.awssdk.services.dynamodb.model.Put;
+import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.TransactWriteItem;
+import software.amazon.awssdk.services.dynamodb.model.TransactWriteItemsRequest;
 import software.amazon.awssdk.services.dynamodb.waiters.DynamoDbWaiter;
 import su.sres.shadowserver.WhisperServerConfiguration;
 import su.sres.shadowserver.configuration.AccountsScyllaDbConfiguration;
 import su.sres.shadowserver.configuration.ScyllaDbConfiguration;
+import su.sres.shadowserver.providers.RedisClientFactory;
+import su.sres.shadowserver.redis.ReplicatedJedisPool;
+import su.sres.shadowserver.storage.DirectoryManager;
+import su.sres.shadowserver.util.AttributeValues;
 import su.sres.shadowserver.util.ScyllaDbFromConfig;
 
 public class CreateAccountsDbCommand extends EnvironmentCommand<WhisperServerConfiguration> {
 
-  private final Logger logger = LoggerFactory.getLogger(CreateKeysDbCommand.class);
+  private final Logger logger = LoggerFactory.getLogger(CreateAccountsDbCommand.class);
 
   static final String KEY_ACCOUNT_UUID = "U";
   static final String ATTR_ACCOUNT_USER_LOGIN = "P";
@@ -41,6 +49,8 @@ public class CreateAccountsDbCommand extends EnvironmentCommand<WhisperServerCon
 
   static final String KEY_PARAMETER_NAME = "PN";
   static final String ATTR_PARAMETER_VALUE = "PV";
+
+  static final String DIRECTORY_VERSION_PARAMETER_NAME = "directory_version";
 
   public CreateAccountsDbCommand() {
     super(new Application<WhisperServerConfiguration>() {
@@ -88,7 +98,7 @@ public class CreateAccountsDbCommand extends EnvironmentCommand<WhisperServerCon
     attributeDefinitionsMisc.add(AttributeDefinition.builder().attributeName(ATTR_PARAMETER_VALUE).attributeType("S").build());
 
     List<AttributeDefinition> attributeDefinitionsMigration = new ArrayList<AttributeDefinition>();
-    attributeDefinitionsAccount.add(AttributeDefinition.builder().attributeName(KEY_ACCOUNT_UUID).attributeType("B").build());
+    attributeDefinitionsMigration.add(AttributeDefinition.builder().attributeName(KEY_ACCOUNT_UUID).attributeType("B").build());
 
     List<KeySchemaElement> keySchemaAccount = new ArrayList<KeySchemaElement>();
     keySchemaAccount.add(KeySchemaElement.builder().attributeName(KEY_ACCOUNT_UUID).keyType(KeyType.HASH).build());
@@ -135,7 +145,7 @@ public class CreateAccountsDbCommand extends EnvironmentCommand<WhisperServerCon
         .build();
 
     DynamoDbWaiter waiter = accountsScyllaDb.waiter();
-    
+
     logger.info("Creating the accounts table...");
     accountsScyllaDb.createTable(requestAccount);
 
@@ -157,6 +167,26 @@ public class CreateAccountsDbCommand extends EnvironmentCommand<WhisperServerCon
 
     log(waiterResponse);
 
+    logger.info("Filling the directory version...");
+
+    ReplicatedJedisPool redisClient = new RedisClientFactory("create_accounts_db_command", config.getDirectoryConfiguration().getUrl(), config.getDirectoryConfiguration().getReplicaUrls(), config.getDirectoryConfiguration().getCircuitBreakerConfiguration()).getRedisClientPool();
+    DirectoryManager directory = new DirectoryManager(redisClient);
+
+    Jedis jedis = directory.accessDirectoryCache().getWriteResource();
+    long currentVersion = Long.parseLong(jedis.get(DIRECTORY_VERSION));
+    jedis.close();  
+    
+    PutItemRequest req =  PutItemRequest.builder()
+        .tableName(miscTableName)
+        .item(Map.of(
+                    KEY_PARAMETER_NAME, AttributeValues.fromString(DIRECTORY_VERSION_PARAMETER_NAME),
+                    ATTR_PARAMETER_VALUE, AttributeValues.fromString(String.valueOf(currentVersion))))
+        .build();
+    
+    accountsScyllaDb.putItem(req);    
+
+    logger.info("...Done");
+
     logger.info("Creating the migration deleted table...");
     accountsScyllaDb.createTable(requestMigrationDeleted);
 
@@ -172,12 +202,12 @@ public class CreateAccountsDbCommand extends EnvironmentCommand<WhisperServerCon
     log(waiterResponse);
 
   }
-  
-  private void log (WaiterResponse<DescribeTableResponse> resp) {
-    
+
+  private void log(WaiterResponse<DescribeTableResponse> resp) {
+
     if (resp.matched().response().isPresent()) {
       logger.info("Done");
     }
-    
+
   }
 }
