@@ -157,6 +157,7 @@ import su.sres.shadowserver.workers.LicenseHashCommand;
 import su.sres.shadowserver.workers.ServerVersionCommand;
 import su.sres.shadowserver.workers.SetCrawlerAccelerationTask;
 import su.sres.shadowserver.workers.SetRequestLoggingEnabledTask;
+import su.sres.shadowserver.workers.ShowLicenseCommand;
 import su.sres.shadowserver.workers.VacuumCommand;
 import su.sres.shadowserver.workers.ZkParamsCommand;
 
@@ -182,22 +183,22 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
   @Override
   public void initialize(Bootstrap<WhisperServerConfiguration> bootstrap) {
    
+    bootstrap.addCommand(new CertificateCommand());
     bootstrap.addCommand(new CreateAccountsDbCommand());
-    bootstrap.addCommand(new DirectoryCommand());
-    bootstrap.addCommand(new LicenseHashCommand());
-    bootstrap.addCommand(new VacuumCommand());
-    bootstrap.addCommand(new CreatePendingAccountCommand());
-    bootstrap.addCommand(new DeleteUserCommand());
-    bootstrap.addCommand(new CertificateCommand());   
-  
-    bootstrap.addCommand(new CreateMessageDbCommand());
-    bootstrap.addCommand(new CreateKeysDbCommand());
     bootstrap.addCommand(new CreateGroupDbCommand());
     bootstrap.addCommand(new CreateGroupLogsDbCommand());
-    bootstrap.addCommand(new GenerateQRCodeCommand());    
+    bootstrap.addCommand(new CreateKeysDbCommand());
+    bootstrap.addCommand(new CreateMessageDbCommand());
+    bootstrap.addCommand(new CreatePendingAccountCommand());
     bootstrap.addCommand(new CreatePushChallengeDbCommand());
     bootstrap.addCommand(new CreateReportMessageDbCommand());
+    bootstrap.addCommand(new DeleteUserCommand());
+    bootstrap.addCommand(new DirectoryCommand());
+    bootstrap.addCommand(new GenerateQRCodeCommand());
+    bootstrap.addCommand(new LicenseHashCommand());   
     bootstrap.addCommand(new ServerVersionCommand());
+    bootstrap.addCommand(new ShowLicenseCommand());
+    bootstrap.addCommand(new VacuumCommand());
     bootstrap.addCommand(new ZkParamsCommand());
 
     bootstrap.addBundle(new ProtobufBundle<WhisperServerConfiguration>());
