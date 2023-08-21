@@ -30,7 +30,7 @@ import su.sres.shadowserver.util.ScyllaDbFromConfig;
 
 public class CreateReportMessageDbCommand extends EnvironmentCommand<WhisperServerConfiguration> {
 
-  private final Logger logger = LoggerFactory.getLogger(CreateKeysDbCommand.class);
+  private final Logger logger = LoggerFactory.getLogger(CreateReportMessageDbCommand.class);
 
   static final String KEY_HASH = "H";
   static final String ATTR_TTL = "E";

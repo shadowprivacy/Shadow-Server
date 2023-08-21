@@ -27,7 +27,7 @@ import su.sres.shadowserver.util.ScyllaDbFromConfig;
 
 public class CreatePushChallengeDbCommand extends EnvironmentCommand<WhisperServerConfiguration> {
 
-  private final Logger logger = LoggerFactory.getLogger(CreateKeysDbCommand.class);
+  private final Logger logger = LoggerFactory.getLogger(CreatePushChallengeDbCommand.class);
 
   static final String KEY_ACCOUNT_UUID = "U";
   static final String ATTR_CHALLENGE_TOKEN = "C";
