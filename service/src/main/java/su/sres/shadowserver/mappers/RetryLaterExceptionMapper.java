@@ -21,7 +21,7 @@ import java.time.Duration;
 public class RetryLaterExceptionMapper implements ExceptionMapper<RetryLaterException> {
   @Override
   public Response toResponse(RetryLaterException e) {
-    return Response.status(413)
+    return Response.status(403)
                    .header("Retry-After", e.getBackoffDuration().toSeconds())
                    .build();
   }

@@ -8,7 +8,7 @@ package su.sres.shadowserver.util;
 import org.junit.jupiter.api.Test;
 
 import io.minio.MinioClient;
-import su.sres.shadowserver.configuration.MonitoredS3ObjectConfiguration;
+import su.sres.shadowserver.configuration.MinioConfiguration;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -29,7 +29,7 @@ class AsnManagerTest {
 
   @Test
   void getAsn() throws IOException {
-    final MonitoredS3ObjectConfiguration configuration = mock(MonitoredS3ObjectConfiguration.class);
+    final MinioConfiguration configuration = mock(MinioConfiguration.class);
     configuration.setRegion("ap-northeast-3");
     
     when(configuration.getUri()).thenReturn("https://example.com");

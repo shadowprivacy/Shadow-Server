@@ -84,7 +84,7 @@ class ChallengeControllerTest {
         .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
         .put(Entity.json(pushChallengeJson));
 
-    assertEquals(413, response.getStatus());
+    assertEquals(403, response.getStatus());
     assertEquals(String.valueOf(retryAfter.toSeconds()), response.getHeaderString("Retry-After"));
   }
 
@@ -123,7 +123,7 @@ class ChallengeControllerTest {
         .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
         .put(Entity.json(recaptchaChallengeJson));
 
-    assertEquals(413, response.getStatus());
+    assertEquals(403, response.getStatus());
     assertEquals(String.valueOf(retryAfter.toSeconds()), response.getHeaderString("Retry-After"));
   }
 

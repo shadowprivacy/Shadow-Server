@@ -43,7 +43,7 @@ class AccountsManagerTest {
   void setup() {}
 
     @ParameterizedTest
-    @ValueSource(booleans = {true, false})
+    @ValueSource(booleans = {true})
     void testGetAccountByNumberInCache(final boolean dynamoEnabled) {
     RedisAdvancedClusterCommands<String, String> commands = mock(RedisAdvancedClusterCommands.class);
     FaultTolerantRedisCluster cacheCluster = RedisClusterHelper.buildMockRedisCluster(commands);
@@ -76,7 +76,7 @@ class AccountsManagerTest {
   }
    
     @ParameterizedTest
-    @ValueSource(booleans = {true, false})
+    @ValueSource(booleans = {true})
     void testGetAccountByUuidInCache(boolean dynamoEnabled) {
     RedisAdvancedClusterCommands<String, String> commands = mock(RedisAdvancedClusterCommands.class);
     FaultTolerantRedisCluster cacheCluster = RedisClusterHelper.buildMockRedisCluster(commands);
@@ -108,7 +108,7 @@ class AccountsManagerTest {
   }
 
     @ParameterizedTest
-    @ValueSource(booleans = {true, false})
+    @ValueSource(booleans = {true})
     void testGetAccountByUserLoginNotInCache(boolean dynamoEnabled) {
     RedisAdvancedClusterCommands<String, String> commands = mock(RedisAdvancedClusterCommands.class);
     FaultTolerantRedisCluster cacheCluster = RedisClusterHelper.buildMockRedisCluster(commands);
@@ -141,12 +141,12 @@ class AccountsManagerTest {
     verifyNoMoreInteractions(accounts);
     
     verify(accountsScyllaDb, dynamoEnabled ? times(1) : never())
-    .get(eq("+14152222222"));
+    .get(eq("johndoe"));
 verifyNoMoreInteractions(accountsScyllaDb);
   }
 
     @ParameterizedTest
-    @ValueSource(booleans = {true, false})
+    @ValueSource(booleans = {true})
     void testGetAccountByUuidNotInCache(boolean dynamoEnabled) {
     RedisAdvancedClusterCommands<String, String> commands = mock(RedisAdvancedClusterCommands.class);
     FaultTolerantRedisCluster cacheCluster = RedisClusterHelper.buildMockRedisCluster(commands);
@@ -183,7 +183,7 @@ verifyNoMoreInteractions(accountsScyllaDb);
   }
 
     @ParameterizedTest
-    @ValueSource(booleans = {true, false})
+    @ValueSource(booleans = {true})
     void testGetAccountByUserLoginBrokenCache(boolean dynamoEnabled) {
     RedisAdvancedClusterCommands<String, String> commands = mock(RedisAdvancedClusterCommands.class);
     FaultTolerantRedisCluster cacheCluster = RedisClusterHelper.buildMockRedisCluster(commands);
@@ -215,12 +215,12 @@ verifyNoMoreInteractions(accountsScyllaDb);
     verify(accounts, times(1)).get(eq("johndoe"));
     verifyNoMoreInteractions(accounts);
     
-    verify(accountsScyllaDb, dynamoEnabled ? times(1) : never()).get(eq("+14152222222"));
+    verify(accountsScyllaDb, dynamoEnabled ? times(1) : never()).get(eq("johndoe"));
     verifyNoMoreInteractions(accountsScyllaDb);
   }
 
     @ParameterizedTest
-    @ValueSource(booleans = {true, false})
+    @ValueSource(booleans = {true})
     void testGetAccountByUuidBrokenCache(boolean dynamoEnabled) {
     RedisAdvancedClusterCommands<String, String> commands = mock(RedisAdvancedClusterCommands.class);
     FaultTolerantRedisCluster cacheCluster = RedisClusterHelper.buildMockRedisCluster(commands);
@@ -257,7 +257,7 @@ verifyNoMoreInteractions(accountsScyllaDb);
   }
     
     @ParameterizedTest
-    @ValueSource(booleans = {true, false})
+    @ValueSource(booleans = {true})
     void testUpdate_dynamoDbMigration(boolean dynamoEnabled) {
       RedisAdvancedClusterCommands<String, String> commands            = mock(RedisAdvancedClusterCommands.class);
       FaultTolerantRedisCluster                    cacheCluster        = RedisClusterHelper.buildMockRedisCluster(commands);

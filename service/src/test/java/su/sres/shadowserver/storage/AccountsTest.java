@@ -73,7 +73,7 @@ public class AccountsTest {
     assertThat(freshUser).isTrue();
 
     statement = db.getTestDatabase().getConnection().prepareStatement("SELECT * FROM accounts WHERE number = ?");
-    verifyStoredState(statement, "+14151112222", account.getUuid(), account);
+    verifyStoredState(statement, "johndoe", account.getUuid(), account);
   }
 
   @Test

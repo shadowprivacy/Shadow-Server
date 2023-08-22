@@ -8,7 +8,8 @@ package su.sres.shadowserver.util;
 import com.github.tomakehurst.wiremock.junit.WireMockRule;
 import org.junit.Rule;
 import org.junit.Test;
-import su.sres.shadowserver.configuration.MonitoredS3ObjectConfiguration;
+
+import su.sres.shadowserver.configuration.MinioConfiguration;
 import su.sres.shadowserver.redis.AbstractRedisClusterTest;
 
 import java.io.ByteArrayInputStream;
@@ -27,7 +28,7 @@ public class TorExitNodeManagerTest extends AbstractRedisClusterTest {
   
   @Test
   public void testIsTorExitNode() {
-    final MonitoredS3ObjectConfiguration configuration = new MonitoredS3ObjectConfiguration();
+    final MinioConfiguration configuration = new MinioConfiguration();
     
     final TorExitNodeManager torExitNodeManager =
         new TorExitNodeManager(mock(ScheduledExecutorService.class), configuration);

@@ -25,16 +25,14 @@ class DynamicRateLimitsTest {
 
   @BeforeEach
   void setup() {
-    this.dynamicConfig = mock(DynamicConfiguration.class);
-    this.redisCluster  = mock(FaultTolerantRedisCluster.class);
-
-    DynamicConfiguration defaultConfig = new DynamicConfiguration();
-   
+    this.dynamicConfig = new DynamicConfiguration();
+    this.redisCluster  = mock(FaultTolerantRedisCluster.class);   
   }
 
   @Test
   void testUnchangingConfiguration() {
-    RateLimiters rateLimiters = new RateLimiters(new RateLimitsConfiguration(), dynamicConfig.getLimits(), redisCluster);
+    DynamicRateLimitsConfiguration limitsConfiguration = new DynamicRateLimitsConfiguration();
+    RateLimiters rateLimiters = new RateLimiters(new RateLimitsConfiguration(), limitsConfiguration, redisCluster);
 
     RateLimiter limiter = rateLimiters.getUnsealedIpLimiter();
 
@@ -60,7 +58,7 @@ class DynamicRateLimitsTest {
     when(limitsConfiguration.getUnsealedSenderIp()).thenReturn(initialRateLimitConfiguration);
     when(limitsConfiguration.getRateLimitReset()).thenReturn(initialRateLimitConfiguration);
    
-    RateLimiters rateLimiters = new RateLimiters(new RateLimitsConfiguration(), dynamicConfig.getLimits(), redisCluster);
+    RateLimiters rateLimiters = new RateLimiters(new RateLimitsConfiguration(), limitsConfiguration, redisCluster);
 
     CardinalityRateLimiter limiter = rateLimiters.getUnsealedSenderCardinalityLimiter();
 

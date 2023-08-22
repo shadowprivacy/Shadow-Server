@@ -206,7 +206,8 @@ public class MessageController {
       @HeaderParam("X-Forwarded-For")           String forwardedFor,
       @PathParam("destination") AmbiguousIdentifier destinationName,
       @Valid IncomingMessageList messages)
-          throws RateLimitExceededException, RateLimitChallengeException {
+          throws RateLimitExceededException, RateLimitChallengeException {    
+        
     if (source.isEmpty() && accessKey.isEmpty()) {
       throw new WebApplicationException(Response.Status.UNAUTHORIZED);
     }    
@@ -221,7 +222,7 @@ public class MessageController {
         Metrics.counter(UNSEALED_SENDER_WITHOUT_PUSH_TOKEN_COUNTER_NAME).increment();
       }           
       
-    }
+    }    
 
     final String senderType;
 
@@ -252,7 +253,7 @@ public class MessageController {
         rejectOver256kibMessageMeter.mark();
         return Response.status(Response.Status.REQUEST_ENTITY_TOO_LARGE).build();
       }
-    }
+    }    
 
     try {
       boolean isSyncMessage = source.isPresent() && source.get().isFor(destinationName);
@@ -270,7 +271,7 @@ public class MessageController {
       if (source.isPresent() && !source.get().isFor(destinationName)) {
         rateLimiters.getMessagesLimiter().validate(source.get().getUserLogin() + "__" + destination.get().getUuid());
         
-        try {
+        try {          
           unsealedSenderRateLimiter.validate(source.get(), destination.get());
         } catch (final RateLimitExceededException e) {
 

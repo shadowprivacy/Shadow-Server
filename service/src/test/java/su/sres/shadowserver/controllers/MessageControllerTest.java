@@ -123,7 +123,7 @@ class MessageControllerTest {
   private Account internationalAccount;
 
   @SuppressWarnings("unchecked")
-  private final RedisAdvancedClusterCommands<String, String> redisCommands = mock(RedisAdvancedClusterCommands.class);
+  private static final RedisAdvancedClusterCommands<String, String> redisCommands = mock(RedisAdvancedClusterCommands.class);
 
   private static final MessageSender messageSender = mock(MessageSender.class);
   private static final ReceiptSender receiptSender = mock(ReceiptSender.class);
@@ -193,6 +193,8 @@ class MessageControllerTest {
     when(accountsManager.get(argThat((ArgumentMatcher<AmbiguousIdentifier>) identifier -> identifier != null
         && identifier.hasUserLogin() && identifier.getUserLogin().equals(MULTI_DEVICE_RECIPIENT))))
             .thenReturn(Optional.of(multiDeviceAccount));
+    when(accountsManager.get(INTERNATIONAL_RECIPIENT)).thenReturn(Optional.of(internationalAccount));
+    when(accountsManager.get(argThat((ArgumentMatcher<AmbiguousIdentifier>) identifier -> identifier != null && identifier.hasUserLogin() && identifier.getUserLogin().equals(INTERNATIONAL_RECIPIENT)))).thenReturn(Optional.of(internationalAccount));
 
     when(rateLimiters.getMessagesLimiter()).thenReturn(rateLimiter);
 
@@ -215,6 +217,7 @@ class MessageControllerTest {
         rateLimiter,
         unsealedSenderRateLimiter,
         apnFallbackManager,
+        dynamicConfiguration,
         rateLimitChallengeManager,
         reportMessageManager,
         metricsCluster,
@@ -251,7 +254,7 @@ class MessageControllerTest {
   }
 
   @ParameterizedTest
-  @CsvSource({ "true, 5.1.0, 413", "true, 5.6.4, 428", "false, 5.6.4, 200" })
+  @CsvSource({ "true, 5.1.0, 403", "true, 5.6.4, 428", "false, 5.6.4, 200" })
   void testUnsealedSenderCardinalityRateLimited(final boolean rateLimited, final String clientVersion, final int expectedStatusCode) throws Exception {
     final DynamicConfiguration dynamicConfiguration = mock(DynamicConfiguration.class);
     final DynamicMessageRateConfiguration messageRateConfiguration = mock(DynamicMessageRateConfiguration.class);
@@ -276,11 +279,10 @@ class MessageControllerTest {
     when(redisCommands.evalsha(any(), any(), any(), any())).thenReturn(List.of(1L, 1L));
 
     if (rateLimited) {
-      doThrow(new RateLimitExceededException(Duration.ofHours(1)))
-          .when(unsealedSenderRateLimiter).validate(eq(AuthHelper.VALID_ACCOUNT), eq(internationalAccount));
+      doThrow(new RateLimitExceededException(Duration.ofHours(1))).when(unsealedSenderRateLimiter).validate(eq(AuthHelper.VALID_ACCOUNT), eq(internationalAccount));
 
       when(rateLimitChallengeManager.shouldIssueRateLimitChallenge(String.format("Shadow-Android/%s Android/30", clientVersion)))
-          .thenReturn(true);
+          .thenReturn(true);      
     }
 
     Response response = resources.getJerseyTest()
@@ -307,7 +309,7 @@ class MessageControllerTest {
     doThrow(new RateLimitExceededException(retryAfter))
         .when(unsealedSenderRateLimiter).validate(any(), any());
 
-    when(rateLimitChallengeManager.shouldIssueRateLimitChallenge("Signal-Android/5.1.2 Android/30")).thenReturn(true);
+    when(rateLimitChallengeManager.shouldIssueRateLimitChallenge("Shadow-Android/5.1.2 Android/30")).thenReturn(true);
     when(rateLimitChallengeManager.getChallengeOptions(AuthHelper.VALID_ACCOUNT))
         .thenReturn(List.of(RateLimitChallengeManager.OPTION_PUSH_CHALLENGE, RateLimitChallengeManager.OPTION_RECAPTCHA));
 
@@ -315,7 +317,7 @@ class MessageControllerTest {
         .target(String.format("/v1/messages/%s", INTERNATIONAL_RECIPIENT))
         .request()
         .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
-        .header("User-Agent", "Signal-Android/5.1.2 Android/30")
+        .header("User-Agent", "Shadow-Android/5.1.2 Android/30")
         .put(Entity.entity(mapper.readValue(jsonFixture("fixtures/current_message_single_device.json"), IncomingMessageList.class),
             MediaType.APPLICATION_JSON_TYPE));
 

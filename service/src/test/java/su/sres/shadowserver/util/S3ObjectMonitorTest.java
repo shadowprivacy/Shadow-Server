@@ -6,7 +6,7 @@ import io.minio.MinioClient;
 import io.minio.StatObjectArgs;
 import io.minio.StatObjectResponse;
 import io.minio.errors.MinioException;
-import su.sres.shadowserver.configuration.MonitoredS3ObjectConfiguration;
+import su.sres.shadowserver.configuration.MinioConfiguration;
 
 import org.junit.jupiter.api.Test;
 
@@ -71,7 +71,7 @@ class S3ObjectMonitorTest {
     final InputStream bis = new ByteArrayInputStream(new byte[1]);
      
     final StatObjectResponse sResponse = mock(StatObjectResponse.class);
-    final MonitoredS3ObjectConfiguration tenConfig = mock(MonitoredS3ObjectConfiguration.class);
+    final MinioConfiguration tenConfig = mock(MinioConfiguration.class);
 
     final String bucket = "s3bucket";
     final String objectKey = "greatest-smooth-jazz-hits-of-all-time.zip";
