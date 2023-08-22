@@ -34,6 +34,7 @@ public class TorExitNodeManagerTest extends AbstractRedisClusterTest {
         new TorExitNodeManager(mock(ScheduledExecutorService.class), configuration);
     
     when(configuration.getRegion()).thenReturn("ap-northeast-3");
+    when(configuration.getUri()).thenReturn("http://localhost:9000");
     
     assertFalse(torExitNodeManager.isTorExitNode("10.0.0.1"));
     assertFalse(torExitNodeManager.isTorExitNode("10.0.0.2"));

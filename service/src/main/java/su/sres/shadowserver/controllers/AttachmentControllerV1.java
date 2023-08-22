@@ -29,9 +29,6 @@ import io.minio.errors.XmlParserException;
 import io.minio.http.Method;
 import su.sres.shadowserver.entities.AttachmentDescriptorV1;
 import su.sres.shadowserver.entities.AttachmentUri;
-// excluded federation, reserved for future purposes
-// import su.sres.shadowserver.federation.FederatedClientManager;
-// import su.sres.shadowserver.federation.NoSuchPeerException;
 import su.sres.shadowserver.limits.RateLimiters;
 import su.sres.shadowserver.s3.UrlSigner;
 import su.sres.shadowserver.storage.Account;
@@ -42,18 +39,12 @@ public class AttachmentControllerV1 extends AttachmentControllerBase {
   @SuppressWarnings("unused")
   private final Logger logger = LoggerFactory.getLogger(AttachmentControllerV1.class);
 
-  private final RateLimiters rateLimiters;
-  // excluded federation, reserved for future purposes
-  // private final FederatedClientManager federatedClientManager;
+  private final RateLimiters rateLimiters;  
   private final UrlSigner urlSigner;
 
-  public AttachmentControllerV1(RateLimiters rateLimiters, String accessKey, String accessSecret, String bucket, String endpoint) {
-    // excluded federation, reserved for future purposes
-    // FederatedClientManager federatedClientManager,
+  public AttachmentControllerV1(RateLimiters rateLimiters, String accessKey, String accessSecret, String bucket, String endpoint) {   
 
-    this.rateLimiters = rateLimiters;
-    // excluded federation, reserved for future purposes
-    // this.federatedClientManager = federatedClientManager;
+    this.rateLimiters = rateLimiters;    
     this.urlSigner = new UrlSigner(accessKey, accessSecret, bucket, endpoint);
   }
 

@@ -7,25 +7,33 @@ package su.sres.shadowserver.controllers;
 
 import com.google.common.collect.ImmutableSet;
 import org.glassfish.jersey.test.grizzly.GrizzlyWebTestContainerFactory;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.ClassRule;
 import org.junit.Test;
 
 import javax.ws.rs.core.Response;
 import java.io.IOException;
-import java.net.MalformedURLException;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
 
 import io.dropwizard.auth.PolymorphicAuthValueFactoryProvider;
 import io.dropwizard.testing.junit.ResourceTestRule;
-
+import io.findify.s3mock.S3Mock;
+import io.minio.MakeBucketArgs;
+import io.minio.MinioClient;
+import io.minio.errors.ErrorResponseException;
+import io.minio.errors.InsufficientDataException;
+import io.minio.errors.InternalException;
+import io.minio.errors.InvalidResponseException;
+import io.minio.errors.MinioException;
+import io.minio.errors.ServerException;
+import io.minio.errors.XmlParserException;
 import su.sres.shadowserver.auth.DisabledPermittedAccount;
 import su.sres.shadowserver.entities.AttachmentDescriptorV1;
 import su.sres.shadowserver.entities.AttachmentDescriptorV2;
 import su.sres.shadowserver.entities.AttachmentUri;
-
-// federation excluded, reserved for future use
-// import su.sres.shadowserver.federation.FederatedClientManager;
-
 import su.sres.shadowserver.limits.RateLimiter;
 import su.sres.shadowserver.limits.RateLimiters;
 import su.sres.shadowserver.storage.Account;
@@ -38,15 +46,32 @@ import static org.mockito.Mockito.when;
 
 public class AttachmentControllerTest {
 
-  // federation excluded, reserved for future use
-  // private static FederatedClientManager federatedClientManager =
-  // mock(FederatedClientManager.class );
+  private static final String KEY = "accessKey";
+  private static final String SECRET = "accessSecret";
+  private static final String ENDPOINT = "http://localhost:9000";
+  private static final String BUCKET = "attachment-bucket";
+
   private static RateLimiters rateLimiters = mock(RateLimiters.class);
   private static RateLimiter rateLimiter = mock(RateLimiter.class);
 
-  static {
+  final S3Mock api = S3Mock.create(9000);
 
+  static {
     when(rateLimiters.getAttachmentLimiter()).thenReturn(rateLimiter);
+  }
+
+  @Before
+  public void init() throws MinioException, InvalidKeyException, NoSuchAlgorithmException, IllegalArgumentException, IOException {
+
+    api.start();
+
+    MinioClient client = MinioClient.builder().credentials(KEY, SECRET).endpoint(ENDPOINT).build();
+    client.makeBucket(MakeBucketArgs.builder().bucket(BUCKET).build());
+  }
+
+  @After
+  public void stop() {
+    api.stop();
   }
 
   @ClassRule
@@ -55,11 +80,8 @@ public class AttachmentControllerTest {
       .addProvider(new PolymorphicAuthValueFactoryProvider.Binder<>(ImmutableSet.of(Account.class, DisabledPermittedAccount.class)))
       .setMapper(SystemMapper.getMapper())
       .setTestContainerFactory(new GrizzlyWebTestContainerFactory())
-      // federation excluded, reserved for future use
-      // .addResource(new AttachmentController(rateLimiters, federatedClientManager,
-      // urlSigner))
-      .addResource(new AttachmentControllerV1(rateLimiters, "accessKey", "accessSecret", "attachment-bucket", "https://minio.example.com"))
-      .addResource(new AttachmentControllerV2(rateLimiters, "accessKey", "accessSecret", "us-east-1", "attachmentv2-bucket"))
+      .addResource(new AttachmentControllerV1(rateLimiters, KEY, SECRET, BUCKET, ENDPOINT))
+      .addResource(new AttachmentControllerV2(rateLimiters, KEY, SECRET, "us-east-1", "attachmentv2-bucket"))
       .build();
 
   @Test
@@ -103,25 +125,27 @@ public class AttachmentControllerTest {
 
   @Test
   public void testUnacceleratedPut() {
+
     AttachmentDescriptorV1 descriptor = resources.getJerseyTest()
         .target("/v1/attachments/")
         .request()
         .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER_TWO, AuthHelper.VALID_PASSWORD_TWO))
         .get(AttachmentDescriptorV1.class);
 
-    assertThat(descriptor.getLocation()).startsWith("https://minio.example.com");
+    assertThat(descriptor.getLocation()).startsWith("http://localhost");
     assertThat(descriptor.getId()).isGreaterThan(0);
     assertThat(descriptor.getIdString()).isNotBlank();
   }
 
   @Test
-  public void testUnacceleratedGet() throws MalformedURLException {
+  public void testUnacceleratedGet() throws InvalidKeyException, ErrorResponseException, InsufficientDataException, InternalException, InvalidResponseException, NoSuchAlgorithmException, ServerException, XmlParserException, IllegalArgumentException, IOException {
+
     AttachmentUri uri = resources.getJerseyTest()
         .target("/v1/attachments/1234")
         .request()
         .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER_TWO, AuthHelper.VALID_PASSWORD_TWO))
         .get(AttachmentUri.class);
 
-    assertThat(uri.getLocation().getHost()).isEqualTo("minio.example.com");
+    assertThat(uri.getLocation().getHost()).isEqualTo("localhost");
   }
 }

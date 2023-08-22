@@ -89,6 +89,21 @@ class AccountsScyllaDbTest {
         .build();
 
     dynamoDbExtension.getDynamoDbClient().createTable(createNumbersTableRequest);
+    
+    CreateTableRequest createMiscTableRequest = CreateTableRequest.builder()
+        .tableName(MISC_TABLE_NAME)
+        .keySchema(KeySchemaElement.builder()
+            .attributeName(AccountsScyllaDb.KEY_PARAMETER_NAME)
+            .keyType(KeyType.HASH)
+            .build())
+        .attributeDefinitions(AttributeDefinition.builder()
+            .attributeName(AccountsScyllaDb.ATTR_PARAMETER_VALUE)
+            .attributeType(ScalarAttributeType.S)
+            .build())
+        .provisionedThroughput(DynamoDbExtension.DEFAULT_PROVISIONED_THROUGHPUT)
+        .build();
+
+    dynamoDbExtension.getDynamoDbClient().createTable(createMiscTableRequest);
 
     final CreateTableRequest createMigrationDeletedAccountsTableRequest = CreateTableRequest.builder()
         .tableName(MIGRATION_DELETED_ACCOUNTS_TABLE_NAME)
