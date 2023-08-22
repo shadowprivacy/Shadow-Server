@@ -19,8 +19,7 @@ import java.util.stream.Collectors;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Metrics;
 import io.micrometer.core.instrument.Timer;
-import io.minio.GetObjectResponse;
-import su.sres.shadowserver.configuration.MonitoredS3ObjectConfiguration;
+import su.sres.shadowserver.configuration.MinioConfiguration;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,14 +47,14 @@ public class TorExitNodeManager implements Managed {
 
   public TorExitNodeManager(
       final ScheduledExecutorService scheduledExecutorService,
-      final MonitoredS3ObjectConfiguration config) {
+      final MinioConfiguration config) {
 
     this.exitListMonitor = new S3ObjectMonitor(
         config,
-        config.getObjectKey(),
-        config.getMaxSize(),
+        config.getTorExitNodeListObject(),
+        config.getTorExitNodeListMaxSize(),
         scheduledExecutorService,
-        config.getRefreshInterval(),
+        config.getTorRefreshInterval(),
         this::handleExitListChanged);
   }
 

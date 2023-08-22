@@ -12,6 +12,8 @@ import io.dropwizard.lifecycle.Managed;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Metrics;
 import io.micrometer.core.instrument.Timer;
+import su.sres.shadowserver.configuration.MinioConfiguration;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -23,7 +25,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.zip.GZIPInputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import su.sres.shadowserver.configuration.MonitoredS3ObjectConfiguration;
 
 public class AsnManager implements Managed {
 
@@ -38,14 +39,14 @@ public class AsnManager implements Managed {
 
   public AsnManager(
       final ScheduledExecutorService scheduledExecutorService,
-      final MonitoredS3ObjectConfiguration configuration) {
+      final MinioConfiguration configuration) {
 
     this.asnTableMonitor = new S3ObjectMonitor(
         configuration,        
-        configuration.getObjectKey(),
-        configuration.getMaxSize(),
+        configuration.getAsnListObject(),
+        configuration.getAsnListMaxSize(),
         scheduledExecutorService,
-        configuration.getRefreshInterval(),
+        configuration.getAsnRefreshInterval(),
         this::handleAsnTableChanged);
   }
 

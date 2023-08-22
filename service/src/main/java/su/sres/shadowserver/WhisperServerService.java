@@ -71,6 +71,7 @@ import su.sres.shadowserver.auth.TurnTokenGenerator;
 import su.sres.shadowserver.configuration.AccountsScyllaDbConfiguration;
 import su.sres.shadowserver.configuration.LocalParametersConfiguration;
 import su.sres.shadowserver.configuration.MessageScyllaDbConfiguration;
+import su.sres.shadowserver.configuration.MinioConfiguration;
 import su.sres.shadowserver.configuration.ScyllaDbConfiguration;
 import su.sres.shadowserver.configuration.dynamic.DynamicConfiguration;
 import su.sres.shadowserver.controllers.*;
@@ -360,6 +361,8 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     }
 
     // end validation
+    
+    final MinioConfiguration minioConfig = config.getMinioConfiguration();
 
     Jdbi abuseJdbi = jdbiFactory.build(environment, config.getAbuseDatabaseConfiguration(), "abusedb");
 
@@ -509,8 +512,8 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     DynamicConfiguration dynamicConfig = new DynamicConfiguration();
     RateLimiters rateLimiters = new RateLimiters(config.getLimitsConfiguration(), dynamicConfig.getLimits(), rateLimitersCluster);
     ProvisioningManager provisioningManager = new ProvisioningManager(pubSubManager);
-    TorExitNodeManager torExitNodeManager = new TorExitNodeManager(recurringJobExecutor, config.getTorExitNodeListConfiguration());
-    AsnManager asnManager = new AsnManager(recurringJobExecutor, config.getAsnTableConfiguration());
+    TorExitNodeManager torExitNodeManager = new TorExitNodeManager(recurringJobExecutor, minioConfig);
+    AsnManager asnManager = new AsnManager(recurringJobExecutor, minioConfig);
 
     AccountAuthenticator accountAuthenticator = new AccountAuthenticator(accountsManager);
     DisabledPermittedAccountAuthenticator disabledPermittedAccountAuthenticator = new DisabledPermittedAccountAuthenticator(accountsManager);
@@ -571,12 +574,12 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     environment.lifecycle().manage(asnManager);
 
     MinioClient minioClient = MinioClient.builder()
-        .endpoint(config.getCdnConfiguration().getUri())
-        .credentials(config.getCdnConfiguration().getAccessKey(), config.getCdnConfiguration().getAccessSecret())
+        .endpoint(minioConfig.getUri())
+        .credentials(minioConfig.getAccessKey(), minioConfig.getAccessSecret())
         .build();
 
-    PostPolicyGenerator profileCdnPolicyGenerator = new PostPolicyGenerator(config.getCdnConfiguration().getRegion(), config.getCdnConfiguration().getBucket(), config.getCdnConfiguration().getAccessKey());
-    PolicySigner profileCdnPolicySigner = new PolicySigner(config.getCdnConfiguration().getAccessSecret(), config.getCdnConfiguration().getRegion());
+    PostPolicyGenerator profileCdnPolicyGenerator = new PostPolicyGenerator(minioConfig.getRegion(), minioConfig.getProfileBucket(), minioConfig.getAccessKey());
+    PolicySigner profileCdnPolicySigner = new PolicySigner(minioConfig.getAccessSecret(), minioConfig.getRegion());
         
     ServerSecretParams zkSecretParams = new ServerSecretParams(config.getZkConfig().getServerSecret());
     ServerZkProfileOperations zkProfileOperations = new ServerZkProfileOperations(zkSecretParams);
@@ -599,14 +602,13 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     GroupUserAuthenticator groupUserAuthenticator = new GroupUserAuthenticator(new ServerZkAuthOperations(zkSecretParams));
     ExternalGroupCredentialGenerator externalGroupCredentialGenerator = new ExternalGroupCredentialGenerator(config.getGroupConfiguration().getExternalServiceSecret());
     
-    AttachmentControllerV1 attachmentControllerV1 = new AttachmentControllerV1(rateLimiters, config.getAwsAttachmentsConfiguration().getAccessKey(), config.getAwsAttachmentsConfiguration().getAccessSecret(), config.getAwsAttachmentsConfiguration().getBucket(), config.getAwsAttachmentsConfiguration().getUri());
-    AttachmentControllerV2 attachmentControllerV2 = new AttachmentControllerV2(rateLimiters, config.getAwsAttachmentsConfiguration().getAccessKey(), config.getAwsAttachmentsConfiguration().getAccessSecret(), config.getAwsAttachmentsConfiguration().getRegion(),
-        config.getAwsAttachmentsConfiguration().getBucket());
-    DebugLogController debugLogController = new DebugLogController(rateLimiters, config.getDebugLogsConfiguration().getAccessKey(), config.getDebugLogsConfiguration().getAccessSecret(), config.getDebugLogsConfiguration().getRegion(), config.getDebugLogsConfiguration().getBucket());
+    AttachmentControllerV1 attachmentControllerV1 = new AttachmentControllerV1(rateLimiters, minioConfig.getAccessKey(), minioConfig.getAccessSecret(), minioConfig.getAttachmentBucket(), minioConfig.getUri());
+    AttachmentControllerV2 attachmentControllerV2 = new AttachmentControllerV2(rateLimiters, minioConfig.getAccessKey(), minioConfig.getAccessSecret(), minioConfig.getRegion(), minioConfig.getAttachmentBucket());
+    DebugLogController debugLogController = new DebugLogController(rateLimiters, minioConfig.getAccessKey(), minioConfig.getAccessSecret(), minioConfig.getRegion(), minioConfig.getDebuglogBucket());
     KeysController keysController = new KeysController(rateLimiters, keysScyllaDb, accountsManager, preKeyRateLimiter, rateLimitChallengeManager);
     MessageController messageController = new MessageController(rateLimiters, messageSender, receiptSender, accountsManager, messagesManager, unsealedSenderRateLimiter, null, dynamicConfig, rateLimitChallengeManager, reportMessageManager, metricsCluster, declinedMessageReceiptExecutor);
-    ProfileController profileController = new ProfileController(rateLimiters, accountsManager, profilesManager, usernamesManager, minioClient, profileCdnPolicyGenerator, profileCdnPolicySigner, config.getCdnConfiguration().getBucket(), zkProfileOperations, isZkEnabled);
-    StickerController stickerController = new StickerController(rateLimiters, config.getCdnConfiguration().getAccessKey(), config.getCdnConfiguration().getAccessSecret(), config.getCdnConfiguration().getRegion(), config.getCdnConfiguration().getBucket());
+    ProfileController profileController = new ProfileController(rateLimiters, accountsManager, profilesManager, usernamesManager, minioClient, profileCdnPolicyGenerator, profileCdnPolicySigner, minioConfig.getProfileBucket(), zkProfileOperations, isZkEnabled);
+    StickerController stickerController = new StickerController(rateLimiters, minioConfig.getAccessKey(), minioConfig.getAccessSecret(), minioConfig.getRegion(), minioConfig.getProfileBucket());
     RemoteConfigController remoteConfigController = new RemoteConfigController(remoteConfigsManager, config.getRemoteConfigConfiguration().getAuthorizedTokens(), config.getRemoteConfigConfiguration().getGlobalConfig());
     ChallengeController    challengeController       = new ChallengeController(rateLimitChallengeManager);
 

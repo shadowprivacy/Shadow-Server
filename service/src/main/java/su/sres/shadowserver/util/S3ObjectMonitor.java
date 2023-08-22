@@ -13,7 +13,7 @@ import io.minio.MinioClient;
 import io.minio.StatObjectArgs;
 import io.minio.StatObjectResponse;
 import io.minio.errors.MinioException;
-import su.sres.shadowserver.configuration.CdnConfiguration;
+import su.sres.shadowserver.configuration.MinioConfiguration;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -52,7 +52,7 @@ public class S3ObjectMonitor implements Managed {
   private static final Logger log = LoggerFactory.getLogger(S3ObjectMonitor.class);
 
   public S3ObjectMonitor(
-      final CdnConfiguration config,
+      final MinioConfiguration config,
       final String objectKey,
       final long maxObjectSize,
       final ScheduledExecutorService refreshExecutorService,
@@ -64,7 +64,7 @@ public class S3ObjectMonitor implements Managed {
         .credentials(config.getAccessKey(), config.getAccessSecret())
         .region(config.getRegion())
         .build(),
-        config.getBucket(),
+        config.getServiceBucket(),
         objectKey,
         maxObjectSize,
         refreshExecutorService,

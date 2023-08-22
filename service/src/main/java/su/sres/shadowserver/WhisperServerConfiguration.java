@@ -28,22 +28,12 @@ public class WhisperServerConfiguration extends Configuration {
   @NotNull
   @Valid
   @JsonProperty
-  private PushConfiguration push;
+  private PushConfiguration push; 
 
   @NotNull
   @Valid
   @JsonProperty
-  private AwsAttachmentsConfiguration awsAttachments;
-
-  @NotNull
-  @Valid
-  @JsonProperty
-  private AwsAttachmentsConfiguration debuglogs;
-
-  @NotNull
-  @Valid
-  @JsonProperty
-  private CdnConfiguration cdn;
+  private MinioConfiguration minio;
 
   @NotNull
   @Valid
@@ -248,16 +238,6 @@ public class WhisperServerConfiguration extends Configuration {
   @NotNull
   private GroupConfiguration group;
   
-  @Valid
-  @NotNull
-  @JsonProperty
-  private MonitoredS3ObjectConfiguration torExitNodeList;
-
-  @Valid
-  @NotNull
-  @JsonProperty
-  private MonitoredS3ObjectConfiguration asnTable;
-
   private Map<String, String> transparentDataIndex = new HashMap<>();
     
   public RecaptchaConfiguration getRecaptchaConfiguration() {
@@ -274,14 +254,6 @@ public class WhisperServerConfiguration extends Configuration {
 
   public JerseyClientConfiguration getJerseyClientConfiguration() {
     return httpClient;
-  }
-
-  public AwsAttachmentsConfiguration getAwsAttachmentsConfiguration() {
-    return awsAttachments;
-  }
-
-  public AwsAttachmentsConfiguration getDebugLogsConfiguration() {
-    return debuglogs;
   }
 
   public RedisClusterConfiguration getCacheClusterConfiguration() {
@@ -384,8 +356,8 @@ public class WhisperServerConfiguration extends Configuration {
     return apn;
   }
 
-  public CdnConfiguration getCdnConfiguration() {
-    return cdn;
+  public MinioConfiguration getMinioConfiguration() {
+    return minio;
   }
 
   public WavefrontConfiguration getWavefrontConfiguration() {
@@ -454,13 +426,5 @@ public class WhisperServerConfiguration extends Configuration {
   
   public ScyllaDbConfiguration getReportMessageScyllaDbConfiguration() {
     return reportMessageScyllaDb;
-  }
-  
-  public MonitoredS3ObjectConfiguration getTorExitNodeListConfiguration() {
-    return torExitNodeList;
-  }
-
-  public MonitoredS3ObjectConfiguration getAsnTableConfiguration() {
-    return asnTable;
-  }
+  }  
 }

@@ -1,26 +1,19 @@
 push:                         # FCM push server configuration
   queueSize:                                                            # Size of the push pending queue (can be left empty)
 
-awsAttachments:               # private cloud access configuration for attachments
-  uri: "https://localhost:9000"                                         # Minio URL as seen by the Shadow server
-  accessKey: minio_shadow                                               # Minio service access key
-  accessSecret: your_service_password                                   # Minio service secret key configured when installing Minio  
-  bucket: attachments
-  region: us-east-1
-
-cdn:                          # private cloud access configuration for profiles, groups and sticker uploads
+minio:                        # private cloud access configuration
   uri: "https://localhost:9000"                                         # Minio URL as seen by the Shadow server
   accessKey: minio_shadow                                               # Minio service access key
   accessSecret: your_service_password                                   # Minio service secret key configured when installing Minio
-  bucket: profiles
   region: us-east-1
-
-debuglogs:                    # private cloud access configuration for debug logs
-  uri: "https://localhost:9000"                                         # Minio URL as seen by the Shadow server 
-  accessKey: minio_shadow                                               # Minio service access key
-  accessSecret: your_service_password                                   # Minio service secret key configured when installing Minio  
-  bucket: debuglogs
-  region: us-east-1
+  attachmentBucket: attachments
+  profileBucket: profiles
+  debuglogBucket: debuglogs
+  serviceBucket: service
+  torExitNodeListObject:                                                # filename 
+  torExitListMaxSize:                                                   # default 16MB, can be left empty    
+  asnListObject:                                                        # filename
+  asnListMaxSize:                                                       # default 16MB, can be left empty
 
 accountDatabaseCrawler:       # account database crawler configuration
   chunkSize: 1000                                                       # accounts per run
@@ -29,7 +22,6 @@ accountDatabaseCrawler:       # account database crawler configuration
 metricsCluster:               # Redis server configuration for metrics cluster 
   urls:
     - "redis://localhost:6379/"
-
 
 cacheCluster:                 # Redis server configuration for cache cluster
   urls:
@@ -63,7 +55,7 @@ pubsub:                       # Redis server configuration for publisher/subscri
               
 rateLimitersCluster:          # Redis server configuration for rate limiters cluster
   urls:
-    - redis://redis.example.com:6379/
+    - "redis://redis.example.com:6379/"
 
 server:
   applicationConnectors:      # Shadow service configuration
@@ -183,8 +175,7 @@ gcm:
   apiKey: GoogleFCMKey                                                  # the server key of your Firebase project     
 
 wavefront:                    # Wavefront micrometer metrics config, not used currently
-  uri: "https://metrics.example.com/"                                   # fake/unused
-  batchSize:                                                            # Number of measurements to send per request, default 10000
+  uri: "https://metrics.example.com/"                                   # fake/unused  
   
 datadog:                      # Datadog config, not used currently
   apiKey: 12345                                                         # fake/unused
@@ -227,18 +218,6 @@ paymentsService:
     - USD
     - RUB
 
-torExitNodeList:
-  s3Region: us-east-1
-  s3Bucket: service
-  objectKey:                                                            # filename
-  maxSize:                                                              # default 16MB, can be left empty
-
-asnTable:
-  s3Region: us-east-1
-  s3Bucket: service
-  objectKey:                                                            # filename
-  maxSize:                                                              # default 16MB, can be left empty
-
 storageService:
   userAuthenticationTokenSharedSecret: 6730674e1bd4f3a9cfdb2645159230b1 # fake/unused
   
@@ -265,8 +244,8 @@ serviceConfiguration:         # client-server parameters
  fcmSenderId: 12345                                                     # the sender ID of your Firebase project 
  certsVersion: 1                                                        # should be 1 if certificate rotation is not used
  supportEmail: shadow@example.com                                       # email address whither debug reports will be sent
- # maxImageSize: 100                                                    # (TBA) image attachment size limit (MB)
- # maxAudioSize: 100                                                    # (TBA) audio attachment size limit (MB)  
- # maxVideoSize: 100                                                    # (TBA) video attachment size limit (MB)
- # maxDocSize: 100                                                      # (TBA) document attachment size limit (MB)
+ # maxImageSize: 100                                                    # (optional) image attachment size limit (MB)
+ # maxAudioSize: 100                                                    # (optional) audio attachment size limit (MB)  
+ # maxVideoSize: 100                                                    # (optional) video attachment size limit (MB)
+ # maxDocSize: 100                                                      # (optional) document attachment size limit (MB)
  updatesAllowed: true                                                   # whether clients are allowed to update 
