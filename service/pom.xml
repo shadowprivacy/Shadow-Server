@@ -477,6 +477,12 @@
       <artifactId>s3mock_2.13</artifactId>
       <version>0.2.6</version>
       <scope>test</scope>
+      <exclusions>
+        <exclusion>
+          <groupId>org.reactivestreams</groupId>
+          <artifactId>reactive-streams</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
 
   </dependencies>
