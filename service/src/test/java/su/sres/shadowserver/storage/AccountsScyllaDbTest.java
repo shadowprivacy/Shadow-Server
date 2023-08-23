@@ -97,7 +97,7 @@ class AccountsScyllaDbTest {
             .keyType(KeyType.HASH)
             .build())
         .attributeDefinitions(AttributeDefinition.builder()
-            .attributeName(AccountsScyllaDb.ATTR_PARAMETER_VALUE)
+            .attributeName(AccountsScyllaDb.KEY_PARAMETER_NAME)
             .attributeType(ScalarAttributeType.S)
             .build())
         .provisionedThroughput(DynamoDbExtension.DEFAULT_PROVISIONED_THROUGHPUT)
@@ -225,14 +225,13 @@ class AccountsScyllaDbTest {
 
   @Test
   void testOverwrite() {
-    Device  device  = generateDevice (1                                            );
+    Device  device  = generateDevice (1);
     UUID    firstUuid = UUID.randomUUID();
     Account account   = generateAccount("+14151112222", firstUuid, Collections.singleton(device));
     long directoryVersion = 10L;
 
-    final boolean freshUser = accountsScyllaDb.create(account, directoryVersion);
-    assertThat(freshUser).isFalse();
-
+    accountsScyllaDb.create(account, directoryVersion);
+    
     verifyStoredState("+14151112222", account.getUuid(), account);
 
     UUID secondUuid = UUID.randomUUID();
@@ -240,7 +239,8 @@ class AccountsScyllaDbTest {
     device = generateDevice(1);
     account = generateAccount("+14151112222", secondUuid, Collections.singleton(device));
 
-    accountsScyllaDb.create(account, directoryVersion + 1);
+    final boolean freshUser = accountsScyllaDb.create(account, directoryVersion + 1);
+    assertThat(freshUser).isFalse();
     verifyStoredState("+14151112222", firstUuid, account);
 
     device = generateDevice(1);

@@ -12,6 +12,7 @@ import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.CancellationReason;
+import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
 import software.amazon.awssdk.services.dynamodb.model.DeleteItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.GetItemResponse;
@@ -50,22 +51,21 @@ public class AccountsScyllaDb extends AbstractScyllaDbStore implements AccountSt
 
   static final String ATTR_MIGRATION_VERSION = "V";
   static final String ATTR_ACCOUNT_VD = "VD";
-  
-  
+
   static final String KEY_PARAMETER_NAME = "PN";
-  static final String ATTR_PARAMETER_VALUE = "PV";  
+  static final String ATTR_PARAMETER_VALUE = "PV";
   static final String DIRECTORY_VERSION_PARAMETER_NAME = "directory_version";
 
   private final DynamoDbClient client;
   private final DynamoDbAsyncClient asyncClient;
 
   private final ThreadPoolExecutor migrationThreadPool;
-  
+
   private final MigrationDeletedAccounts migrationDeletedAccounts;
   private final MigrationRetryAccounts migrationRetryAccounts;
-  
+
   // this table stores userLogin to UUID pairs
-  private final String userLoginsTableName; 
+  private final String userLoginsTableName;
   private final String accountsTableName;
   private final String miscTableName;
 
@@ -74,7 +74,7 @@ public class AccountsScyllaDb extends AbstractScyllaDbStore implements AccountSt
   private static final Timer GET_BY_USER_LOGIN_TIMER = Metrics.timer(name(AccountsScyllaDb.class, "getByUserLogin"));
   private static final Timer GET_BY_UUID_TIMER = Metrics.timer(name(AccountsScyllaDb.class, "getByUuid"));
   private static final Timer DELETE_TIMER = Metrics.timer(name(AccountsScyllaDb.class, "delete"));
-  
+
   private final Logger logger = LoggerFactory.getLogger(AccountsScyllaDb.class);
 
   public AccountsScyllaDb(DynamoDbClient client, DynamoDbAsyncClient asyncClient,
@@ -83,13 +83,13 @@ public class AccountsScyllaDb extends AbstractScyllaDbStore implements AccountSt
     super(client);
 
     this.client = client;
-    this.accountsTableName = accountsTableName;    
-    this.userLoginsTableName = userLoginsTableName;    
+    this.accountsTableName = accountsTableName;
+    this.userLoginsTableName = userLoginsTableName;
     this.miscTableName = miscTableName;
-    
+
     this.asyncClient = asyncClient;
     this.migrationThreadPool = migrationThreadPool;
-    
+
     this.migrationDeletedAccounts = migrationDeletedAccounts;
     this.migrationRetryAccounts = accountsMigrationErrors;
   }
@@ -101,45 +101,41 @@ public class AccountsScyllaDb extends AbstractScyllaDbStore implements AccountSt
 
       try {
         PutItemRequest userLoginConstraintPut = buildPutWriteItemForUserLoginConstraint(account, account.getUuid());
-        
+
         PutItemRequest accountPut = buildPutWriteItemForAccount(account, account.getUuid(), PutItemRequest.builder()
             .conditionExpression("attribute_not_exists(#number) OR #number = :number")
             .expressionAttributeNames(Map.of("#number", ATTR_ACCOUNT_USER_LOGIN))
             .expressionAttributeValues(Map.of(":number", AttributeValues.fromString(account.getUserLogin()))));
-                
-        PutItemRequest miscPut = buildPutWriteItemForMisc(directoryVersion);        
+
+        PutItemRequest miscPut = buildPutWriteItemForMisc(directoryVersion);
+
+        try {
+          client.putItem(accountPut);
+        } catch (ConditionalCheckFailedException e) {
+          throw new IllegalArgumentException("uuid present with different user login");
+        }
 
         try {
           client.putItem(userLoginConstraintPut);
-          client.putItem(accountPut);
-          client.putItem(miscPut);
-        } catch (TransactionCanceledException e) {
+        } catch (ConditionalCheckFailedException e) {
 
-          final CancellationReason accountCancellationReason = e.cancellationReasons().get(1);
+          // if the user login is found with an uuid that differs that means that the
+          // account is not new, and the new uuid is reset to the old one
 
-          if ("ConditionalCheckFailed".equals(accountCancellationReason.code())) {
-            throw new IllegalArgumentException("uuid present with different user login");
-          }
-
-          final CancellationReason userLoginConstraintCancellationReason = e.cancellationReasons().get(0);
-
-          // if the user login is found with an uuid that differs that means that the account is not new, and the new uuid is reset to the old one
-          
-          // TODO: if directory holds more than just usernames in future we shall need to update the directory version as well.
+          // TODO: if directory holds more than just usernames in future we shall need to
+          // update the directory version as well.
           // Meanwhile the account is updated without incrementing the directory version
-          if ("ConditionalCheckFailed".equals(userLoginConstraintCancellationReason.code())) {
 
-            ByteBuffer actualAccountUuid = userLoginConstraintCancellationReason.item().get(KEY_ACCOUNT_UUID).b().asByteBuffer();
-            account.setUuid(UUIDUtil.fromByteBuffer(actualAccountUuid));
+          Optional<Account> exAcc = get(account.getUserLogin());
+          UUID uuid = exAcc.get().getUuid();
+          account.setUuid(uuid);
+          update(account);
 
-            update(account);
-
-            return false;
-          }
-
-          // this shouldn’t happen
-          throw new RuntimeException("could not create account: " + extractCancellationReasonCodes(e));
+          return false;
         }
+
+        client.putItem(miscPut);
+
       } catch (JsonProcessingException e) {
         throw new IllegalArgumentException(e);
       }
@@ -149,40 +145,40 @@ public class AccountsScyllaDb extends AbstractScyllaDbStore implements AccountSt
   }
 
   private PutItemRequest buildPutWriteItemForAccount(Account account, UUID uuid, PutItemRequest.Builder putBuilder) throws JsonProcessingException {
-    return putBuilder        
-            .tableName(accountsTableName)
-            .item(Map.of(
-                    KEY_ACCOUNT_UUID, AttributeValues.fromUUID(uuid),
-                    ATTR_ACCOUNT_USER_LOGIN, AttributeValues.fromString(account.getUserLogin()),
-                    ATTR_ACCOUNT_VD, AttributeValues.fromString("default"),
-                    ATTR_ACCOUNT_DATA, AttributeValues.fromByteArray(SystemMapper.getMapper().writeValueAsBytes(account)),
-                    ATTR_MIGRATION_VERSION, AttributeValues.fromInt(account.getScyllaDbMigrationVersion())))                
+    return putBuilder
+        .tableName(accountsTableName)
+        .item(Map.of(
+            KEY_ACCOUNT_UUID, AttributeValues.fromUUID(uuid),
+            ATTR_ACCOUNT_USER_LOGIN, AttributeValues.fromString(account.getUserLogin()),
+            ATTR_ACCOUNT_VD, AttributeValues.fromString("default"),
+            ATTR_ACCOUNT_DATA, AttributeValues.fromByteArray(SystemMapper.getMapper().writeValueAsBytes(account)),
+            ATTR_MIGRATION_VERSION, AttributeValues.fromInt(account.getScyllaDbMigrationVersion())))
         .build();
   }
 
   private PutItemRequest buildPutWriteItemForUserLoginConstraint(Account account, UUID uuid) {
-    return PutItemRequest.builder()        
-                .tableName(userLoginsTableName)
-                .item(Map.of(
-                    ATTR_ACCOUNT_USER_LOGIN, AttributeValues.fromString(account.getUserLogin()),
-                    KEY_ACCOUNT_UUID, AttributeValues.fromUUID(uuid)))
-                .conditionExpression(
-                    "attribute_not_exists(#number) OR (attribute_exists(#number) AND #uuid = :uuid)")
-                .expressionAttributeNames(
-                    Map.of("#uuid", KEY_ACCOUNT_UUID,
-                        "#number", ATTR_ACCOUNT_USER_LOGIN))
-                .expressionAttributeValues(
-                    Map.of(":uuid", AttributeValues.fromUUID(uuid)))
-                .returnValuesOnConditionCheckFailure(ReturnValuesOnConditionCheckFailure.ALL_OLD)                
+    return PutItemRequest.builder()
+        .tableName(userLoginsTableName)
+        .item(Map.of(
+            ATTR_ACCOUNT_USER_LOGIN, AttributeValues.fromString(account.getUserLogin()),
+            KEY_ACCOUNT_UUID, AttributeValues.fromUUID(uuid)))
+        .conditionExpression(
+            "attribute_not_exists(#number) OR (attribute_exists(#number) AND #uuid = :uuid)")
+        .expressionAttributeNames(
+            Map.of("#uuid", KEY_ACCOUNT_UUID,
+                "#number", ATTR_ACCOUNT_USER_LOGIN))
+        .expressionAttributeValues(
+            Map.of(":uuid", AttributeValues.fromUUID(uuid)))
+        .returnValuesOnConditionCheckFailure(ReturnValuesOnConditionCheckFailure.ALL_OLD)
         .build();
   }
-  
+
   private PutItemRequest buildPutWriteItemForMisc(long directoryVersion) {
-    return PutItemRequest.builder()        
-                .tableName(miscTableName)
-                .item(Map.of(
-                    KEY_PARAMETER_NAME, AttributeValues.fromString(DIRECTORY_VERSION_PARAMETER_NAME),
-                    ATTR_PARAMETER_VALUE, AttributeValues.fromString(String.valueOf(directoryVersion))))        
+    return PutItemRequest.builder()
+        .tableName(miscTableName)
+        .item(Map.of(
+            KEY_PARAMETER_NAME, AttributeValues.fromString(DIRECTORY_VERSION_PARAMETER_NAME),
+            ATTR_PARAMETER_VALUE, AttributeValues.fromString(String.valueOf(directoryVersion))))
         .build();
   }
 
@@ -229,7 +225,7 @@ public class AccountsScyllaDb extends AbstractScyllaDbStore implements AccountSt
           .map(AccountsScyllaDb::fromItem);
     });
   }
-  
+
   private Map<String, AttributeValue> accountByUuid(AttributeValue uuid) {
     GetItemResponse r = client.getItem(GetItemRequest.builder()
         .tableName(accountsTableName)
@@ -241,11 +237,10 @@ public class AccountsScyllaDb extends AbstractScyllaDbStore implements AccountSt
 
   @Override
   public Optional<Account> get(UUID uuid) {
-    return GET_BY_UUID_TIMER.record(() ->
-    Optional.ofNullable(accountByUuid(AttributeValues.fromUUID(uuid)))
+    return GET_BY_UUID_TIMER.record(() -> Optional.ofNullable(accountByUuid(AttributeValues.fromUUID(uuid)))
         .map(AccountsScyllaDb::fromItem));
   }
-  
+
   // TODO: getAll(offset. length)
 
   @Override
@@ -266,30 +261,29 @@ public class AccountsScyllaDb extends AbstractScyllaDbStore implements AccountSt
 
     maybeAccount.ifPresent(account -> {
 
-      DeleteItemRequest userLoginDelete = DeleteItemRequest.builder()          
-              .tableName(userLoginsTableName)
-              .key(Map.of(ATTR_ACCOUNT_USER_LOGIN, AttributeValues.fromString(account.getUserLogin())))              
+      DeleteItemRequest userLoginDelete = DeleteItemRequest.builder()
+          .tableName(userLoginsTableName)
+          .key(Map.of(ATTR_ACCOUNT_USER_LOGIN, AttributeValues.fromString(account.getUserLogin())))
           .build();
 
-      DeleteItemRequest accountDelete = DeleteItemRequest.builder()          
-              .tableName(accountsTableName)
-              .key(Map.of(KEY_ACCOUNT_UUID, AttributeValues.fromUUID(uuid)))          
+      DeleteItemRequest accountDelete = DeleteItemRequest.builder()
+          .tableName(accountsTableName)
+          .key(Map.of(KEY_ACCOUNT_UUID, AttributeValues.fromUUID(uuid)))
           .build();
-      
+
       client.deleteItem(userLoginDelete);
-      client.deleteItem(accountDelete);    
-     
-        
-        if (updateDirectoryVersion) {
-          PutItemRequest miscPut = buildPutWriteItemForMisc(directoryVersion);
-          client.putItem(miscPut);           
-        } 
+      client.deleteItem(accountDelete);
+
+      if (updateDirectoryVersion) {
+        PutItemRequest miscPut = buildPutWriteItemForMisc(directoryVersion);
+        client.putItem(miscPut);
+      }
     });
   }
-  
+
   private static final Counter MIGRATED_COUNTER = Metrics.counter(name(AccountsScyllaDb.class, "migration", "count"));
   private static final Counter ERROR_COUNTER = Metrics.counter(name(AccountsScyllaDb.class, "migration", "error"));
-  
+
   public CompletableFuture<Void> migrate(List<Account> accounts, int threads) {
 
     if (threads > migrationThreadPool.getMaximumPoolSize()) {
@@ -300,21 +294,21 @@ public class AccountsScyllaDb extends AbstractScyllaDbStore implements AccountSt
       migrationThreadPool.setMaximumPoolSize(threads);
     }
 
-       final List<CompletableFuture<?>> futures = accounts.stream()
-          .map(this::migrate)
-           .map(f -> f.whenComplete((migrated, e) -> {
-             if (e == null) {
-               MIGRATED_COUNTER.increment(migrated ? 1 : 0);
-             } else {
-               ERROR_COUNTER.increment();
-             }
-           }))
-          .collect(Collectors.toList());
+    final List<CompletableFuture<?>> futures = accounts.stream()
+        .map(this::migrate)
+        .map(f -> f.whenComplete((migrated, e) -> {
+          if (e == null) {
+            MIGRATED_COUNTER.increment(migrated ? 1 : 0);
+          } else {
+            ERROR_COUNTER.increment();
+          }
+        }))
+        .collect(Collectors.toList());
 
-       CompletableFuture<Void> migrationBatch = CompletableFuture.allOf(futures.toArray(new CompletableFuture[]{}));
+    CompletableFuture<Void> migrationBatch = CompletableFuture.allOf(futures.toArray(new CompletableFuture[] {}));
 
-       return migrationBatch.whenComplete((result, exception) -> deleteRecentlyDeletedUuids());
-    }
+    return migrationBatch.whenComplete((result, exception) -> deleteRecentlyDeletedUuids());
+  }
 
   public void deleteRecentlyDeletedUuids() {
 
@@ -327,7 +321,7 @@ public class AccountsScyllaDb extends AbstractScyllaDbStore implements AccountSt
     migrationDeletedAccounts.delete(recentlyDeletedUuids);
   }
 
-    public CompletableFuture<Boolean> migrate(Account account) {
+  public CompletableFuture<Boolean> migrate(Account account) {
     try {
       PutItemRequest userLoginConstraintPut = buildPutWriteItemForUserLoginConstraint(account, account.getUuid());
 
@@ -337,71 +331,64 @@ public class AccountsScyllaDb extends AbstractScyllaDbStore implements AccountSt
               "#uuid", KEY_ACCOUNT_UUID,
               "#version", ATTR_MIGRATION_VERSION))
           .expressionAttributeValues(Map.of(
-              ":version", AttributeValues.fromInt(account.getScyllaDbMigrationVersion()))));      
+              ":version", AttributeValues.fromInt(account.getScyllaDbMigrationVersion()))));
 
       final CompletableFuture<Boolean> resultFuture1 = new CompletableFuture<>();
       final CompletableFuture<Boolean> resultFuture2 = new CompletableFuture<>();
-      final CompletableFuture<Boolean> combinedFuture = new CompletableFuture<>();           
-      
+      final CompletableFuture<Boolean> combinedFuture = new CompletableFuture<>();
+
       asyncClient.putItem(accountPut).whenCompleteAsync((result, exception) -> {
         if (result != null) {
           resultFuture1.complete(true);
           return;
         }
         if (exception instanceof CompletionException) {
-          // whenCompleteAsync can wrap exceptions in a CompletionException; unwrap it to get to the root cause.
+          // whenCompleteAsync can wrap exceptions in a CompletionException; unwrap it to
+          // get to the root cause.
           exception = exception.getCause();
         }
-        if (exception instanceof TransactionCanceledException) {
+        if (exception instanceof ConditionalCheckFailedException) {
           // account is already migrated
           resultFuture1.complete(false);
           return;
         }
         try {
-          migrationRetryAccounts.put(account.getUuid()); 
+          migrationRetryAccounts.put(account.getUuid());
         } catch (final Exception e) {
           logger.error("Could not store account {}", account.getUuid());
         }
         resultFuture1.completeExceptionally(exception);
-      });                 
-      
+      });
+
       asyncClient.putItem(userLoginConstraintPut).whenCompleteAsync((result, exception) -> {
         if (result != null) {
           resultFuture2.complete(true);
           return;
         }
-        if (exception instanceof CompletionException) {          
+        if (exception instanceof CompletionException) {
           exception = exception.getCause();
         }
-        if (exception instanceof TransactionCanceledException) {
+        if (exception instanceof ConditionalCheckFailedException) {
           // account is already migrated
           resultFuture2.complete(false);
           return;
         }
         try {
-          migrationRetryAccounts.put(account.getUuid()); 
+          migrationRetryAccounts.put(account.getUuid());
         } catch (final Exception e) {
           logger.error("Could not store account {}", account.getUuid());
         }
         resultFuture2.completeExceptionally(exception);
-      });      
-      
+      });
+
       combinedFuture.complete(resultFuture1.join() && resultFuture2.join());
-      
-      return combinedFuture;     
+
+      return combinedFuture;
 
     } catch (Exception e) {
       return CompletableFuture.failedFuture(e);
     }
-    
   }
-    
-    private static String extractCancellationReasonCodes(final TransactionCanceledException exception) {
-      return exception.cancellationReasons().stream()
-          .map(CancellationReason::code)
-          .collect(Collectors.joining(", "));
-    }
-
 
   // TODO: extract VD
   @VisibleForTesting
