@@ -19,7 +19,6 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.junit.jupiter.params.provider.ValueSource;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatcher;
@@ -64,8 +63,6 @@ import su.sres.shadowserver.entities.StaleDevices;
 import su.sres.shadowserver.entities.MessageProtos.Envelope;
 import su.sres.shadowserver.limits.CardinalityRateLimiter;
 import su.sres.shadowserver.limits.RateLimitChallengeManager;
-// federation excluded, reserved for future use
-// import su.sres.shadowserver.federation.FederatedClientManager;
 import su.sres.shadowserver.limits.RateLimiter;
 import su.sres.shadowserver.limits.RateLimiters;
 import su.sres.shadowserver.limits.UnsealedSenderRateLimiter;
@@ -127,9 +124,6 @@ class MessageControllerTest {
 
   private static final MessageSender messageSender = mock(MessageSender.class);
   private static final ReceiptSender receiptSender = mock(ReceiptSender.class);
-  // federation excluded, reserved for future use
-  // private final FederatedClientManager federatedClientManager =
-  // mock(FederatedClientManager.class);
   private static final AccountsManager accountsManager = mock(AccountsManager.class);
   private static final MessagesManager messagesManager = mock(MessagesManager.class);
   private static final RateLimiters rateLimiters = mock(RateLimiters.class);
@@ -151,11 +145,7 @@ class MessageControllerTest {
           ImmutableSet.of(Account.class, DisabledPermittedAccount.class)))
       .addProvider(new RateLimitChallengeExceptionMapper(rateLimitChallengeManager))
       .setTestContainerFactory(new GrizzlyWebTestContainerFactory())
-      .addResource(new MessageController(rateLimiters, messageSender, receiptSender, accountsManager,
-          // federation excluded, reserved for future use
-          // messagesManager, federatedClientManager,
-          // apnFallbackManager))
-          messagesManager, unsealedSenderRateLimiter, apnFallbackManager, dynamicConfiguration, rateLimitChallengeManager, reportMessageManager, metricsCluster, receiptExecutor))
+      .addResource(new MessageController(rateLimiters, messageSender, receiptSender, accountsManager, messagesManager, unsealedSenderRateLimiter, apnFallbackManager, dynamicConfiguration, rateLimitChallengeManager, reportMessageManager, metricsCluster, receiptExecutor))
       .build();
 
   @BeforeEach
@@ -254,7 +244,7 @@ class MessageControllerTest {
   }
 
   @ParameterizedTest
-  @CsvSource({ "true, 5.1.0, 403", "true, 5.6.4, 428", "false, 5.6.4, 200" })
+  @CsvSource({ "true, 5.1.0, 429", "true, 5.6.4, 428", "false, 5.6.4, 200" })
   void testUnsealedSenderCardinalityRateLimited(final boolean rateLimited, final String clientVersion, final int expectedStatusCode) throws Exception {
     final DynamicConfiguration dynamicConfiguration = mock(DynamicConfiguration.class);
     final DynamicMessageRateConfiguration messageRateConfiguration = mock(DynamicMessageRateConfiguration.class);
@@ -277,7 +267,7 @@ class MessageControllerTest {
         .thenReturn(Optional.of(new Semver("5.5.0")));
 
     when(redisCommands.evalsha(any(), any(), any(), any())).thenReturn(List.of(1L, 1L));
-
+    
     if (rateLimited) {
       doThrow(new RateLimitExceededException(Duration.ofHours(1))).when(unsealedSenderRateLimiter).validate(eq(AuthHelper.VALID_ACCOUNT), eq(internationalAccount));
 

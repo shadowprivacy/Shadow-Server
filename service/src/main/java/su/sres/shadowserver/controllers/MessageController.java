@@ -83,10 +83,6 @@ import su.sres.shadowserver.entities.MessageProtos.Envelope;
 import su.sres.shadowserver.entities.MessageProtos.Envelope.Type;
 import su.sres.shadowserver.limits.RateLimitChallengeException;
 import su.sres.shadowserver.limits.RateLimitChallengeManager;
-// excluded federation, reserved for future use
-// import su.sres.shadowserver.federation.FederatedClient;
-// import su.sres.shadowserver.federation.FederatedClientManager;
-// import su.sres.shadowserver.federation.NoSuchPeerException;
 import su.sres.shadowserver.limits.RateLimiters;
 import su.sres.shadowserver.limits.UnsealedSenderRateLimiter;
 import su.sres.shadowserver.metrics.UserAgentTagUtil;
@@ -96,7 +92,6 @@ import su.sres.shadowserver.push.NotPushRegisteredException;
 import su.sres.shadowserver.push.MessageSender;
 import su.sres.shadowserver.push.ReceiptSender;
 import su.sres.shadowserver.redis.FaultTolerantRedisCluster;
-// import su.sres.shadowserver.push.TransientPushFailureException;
 import su.sres.shadowserver.redis.RedisOperation;
 import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.storage.AccountsManager;
@@ -128,9 +123,7 @@ public class MessageController {
 
   private final RateLimiters rateLimiters;
   private final MessageSender messageSender;
-  private final ReceiptSender receiptSender;
-  // excluded federation, reserved for future use
-  // private final FederatedClientManager federatedClientManager;
+  private final ReceiptSender receiptSender;  
   private final AccountsManager accountsManager;
   private final MessagesManager messagesManager;
   private final UnsealedSenderRateLimiter unsealedSenderRateLimiter;
@@ -160,9 +153,7 @@ public class MessageController {
       ReceiptSender receiptSender,
       AccountsManager accountsManager,
       MessagesManager messagesManager,
-      UnsealedSenderRateLimiter unsealedSenderRateLimiter,
-      // excluded federation, reserved for future use
-      // FederatedClientManager federatedClientManager,
+      UnsealedSenderRateLimiter unsealedSenderRateLimiter,      
       ApnFallbackManager apnFallbackManager,
       DynamicConfiguration dynamicConfiguration,
       RateLimitChallengeManager rateLimitChallengeManager,
@@ -174,9 +165,7 @@ public class MessageController {
     this.receiptSender = receiptSender;
     this.accountsManager = accountsManager;
     this.messagesManager = messagesManager;  
-    this.unsealedSenderRateLimiter = unsealedSenderRateLimiter;
-    // excluded federation, reserved for future use
-    // this.federatedClientManager = federatedClientManager;
+    this.unsealedSenderRateLimiter = unsealedSenderRateLimiter;    
     this.apnFallbackManager = apnFallbackManager;
     this.dynamicConfiguration = dynamicConfiguration;   
     this.rateLimitChallengeManager = rateLimitChallengeManager;
@@ -281,12 +270,12 @@ public class MessageController {
               "enforced", String.valueOf(enforceLimit))
               .increment();
 
-          if (enforceLimit) {
-            logger.debug("Rejected unsealed sender limit from: {}", source.get().getUserLogin());
+          if (enforceLimit) {           
+            logger.debug("Rejected unsealed sender limit from: {}", source.get().getUserLogin());           
 
             throw new RateLimitChallengeException(source.get(), e.getRetryDuration());
-          } else {
-            throw e;
+          } else {            
+            throw e;            
           }
         }
         
@@ -298,19 +287,7 @@ public class MessageController {
       
       final List<Tag> tags = List.of(UserAgentTagUtil.getPlatformTag(userAgent),
           Tag.of(EPHEMERAL_TAG_NAME, String.valueOf(messages.isOnline())),
-          Tag.of(SENDER_TYPE_TAG_NAME, senderType));
-
-      /*
-       * excluded federation (?), reserved for future purposes
-       * 
-       * 
-       * if (Util.isEmpty(messages.getRelay())) sendLocalMessage(source,
-       * destinationName, messages, isSyncMessage); else sendRelayMessage(source,
-       * destinationName, messages, isSyncMessage);
-       * 
-       * return new SendMessageResponse(!isSyncMessage &&
-       * source.getActiveDeviceCount() > 1);
-       */
+          Tag.of(SENDER_TYPE_TAG_NAME, senderType));     
 
       for (IncomingMessage incomingMessage : messages.getMessages()) {
         Optional<Device> destinationDevice = destination.get().getDevice(incomingMessage.getDestinationDeviceId());
@@ -338,7 +315,9 @@ public class MessageController {
           .type(MediaType.APPLICATION_JSON)
           .entity(new StaleDevices(e.getStaleDevices()))
           .build());
-    }
+    } catch (RateLimitExceededException e) {
+      throw new WebApplicationException(Response.status(429).build());
+    } 
 
   }
   
