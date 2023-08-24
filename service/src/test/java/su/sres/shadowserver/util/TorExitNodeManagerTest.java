@@ -28,13 +28,16 @@ public class TorExitNodeManagerTest extends AbstractRedisClusterTest {
   
   @Test
   public void testIsTorExitNode() {
-    final MinioConfiguration configuration = new MinioConfiguration();
-    
-    final TorExitNodeManager torExitNodeManager =
-        new TorExitNodeManager(mock(ScheduledExecutorService.class), configuration);
+    final MinioConfiguration configuration = mock(MinioConfiguration.class);
     
     when(configuration.getRegion()).thenReturn("ap-northeast-3");
     when(configuration.getUri()).thenReturn("http://localhost:9000");
+    when(configuration.getAccessKey()).thenReturn("12345");
+    when(configuration.getAccessSecret()).thenReturn("67890");
+    
+    final TorExitNodeManager torExitNodeManager =
+        new TorExitNodeManager(mock(ScheduledExecutorService.class), configuration);   
+    
     
     assertFalse(torExitNodeManager.isTorExitNode("10.0.0.1"));
     assertFalse(torExitNodeManager.isTorExitNode("10.0.0.2"));
