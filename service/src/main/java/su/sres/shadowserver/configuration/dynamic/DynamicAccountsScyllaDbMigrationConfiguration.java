@@ -5,7 +5,7 @@ import com.google.common.annotations.VisibleForTesting;
 
 public class DynamicAccountsScyllaDbMigrationConfiguration {
   @JsonProperty
-  boolean backgroundMigrationEnabled;
+  boolean backgroundMigrationEnabled = true;
   
   @JsonProperty
   int backgroundMigrationExecutorThreads = 1;

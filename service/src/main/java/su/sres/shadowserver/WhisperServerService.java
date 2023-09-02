@@ -548,9 +548,8 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     accountDatabaseCrawlerListeners.add(new ActiveUserCounter(config.getMetricsFactory(), cacheCluster));    
         
     if (localParams.getAccountExpirationPolicy() != 0) accountDatabaseCrawlerListeners.add(new AccountCleaner(accountsManager, localParams.getAccountExpirationPolicy(), localParams.getAccountLifetime()));
-    
-    // TODO: enable?
-    // accountDatabaseCrawlerListeners.add(new AccountsScyllaDbMigrator(accountsScyllaDb));
+        
+    accountDatabaseCrawlerListeners.add(new AccountsScyllaDbMigrator(accountsScyllaDb));
 
     HttpClient currencyClient = HttpClient.newBuilder().version(HttpClient.Version.HTTP_2).connectTimeout(Duration.ofSeconds(10)).build();
     FixerClient fixerClient = new FixerClient(currencyClient, config.getPaymentsServiceConfiguration().getFixerApiKey());
