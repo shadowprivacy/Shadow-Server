@@ -21,6 +21,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.Consumer;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -112,7 +113,7 @@ class S3ObjectMonitorTest {
     final int maxObjectSize = 16 * 1024 * 1024;
     
     final InputStream bis = new ByteArrayInputStream(new byte[maxObjectSize + 1]);
-    final GetObjectResponse gResponse = new GetObjectResponse(null, bucket, "region", objectKey, bis);
+    final GetObjectResponse gResponse = new GetObjectResponse(null, bucket, "region", objectKey, bis);    
         
     //noinspection unchecked
     final Consumer<InputStream> listener = mock(Consumer.class);     
@@ -128,9 +129,10 @@ class S3ObjectMonitorTest {
     
     when(s3Client.statObject(any(StatObjectArgs.class))).thenReturn(sResponse);
     when(s3Client.getObject(any(GetObjectArgs.class))).thenReturn(gResponse);
-    
-    when(sResponse.etag()).thenReturn(UUID.randomUUID().toString());
             
+    when(sResponse.etag()).thenReturn(UUID.randomUUID().toString());          
+    when(sResponse.size()).thenReturn((long) (maxObjectSize + 1));
+    
     objectMonitor.refresh();
 
     verify(listener, never()).accept(any());

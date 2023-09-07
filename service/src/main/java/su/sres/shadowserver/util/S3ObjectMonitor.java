@@ -129,7 +129,7 @@ public class S3ObjectMonitor implements Managed {
    * @throws InvalidKeyException
    */
   @VisibleForTesting
-  GetObjectResponse getObject() throws IOException, MinioException, InvalidKeyException, IllegalArgumentException, NoSuchAlgorithmException {
+  GetObjectResponse getObject() throws IOException, MinioException, InvalidKeyException, IllegalArgumentException, NoSuchAlgorithmException {      
     GetObjectArgs getArgs = GetObjectArgs.builder()
         .bucket(s3Bucket)
         .object(objectKey)
@@ -141,19 +141,15 @@ public class S3ObjectMonitor implements Managed {
         .build();
 
     GetObjectResponse gResponse = s3Client.getObject(getArgs);
-    StatObjectResponse sResponse = s3Client.statObject(statArgs);
+    StatObjectResponse sResponse = s3Client.statObject(statArgs);    
 
     lastETag.set(sResponse.etag());
 
-    int size = 0;
+    long size = sResponse.size();   
 
-    try (GetObjectResponse g = s3Client.getObject(getArgs)) {
-      size = Util.getBytes(g).length;
-    }
-
-    if (size <= maxObjectSize) {
-      return gResponse;
-    } else {
+    if (size <= maxObjectSize) {      
+      return gResponse;      
+    } else {      
       log.warn("Object at s3://{}/{} has a size of {} bytes, which exceeds the maximum allowed size of {} bytes",
           s3Bucket, objectKey, size, maxObjectSize);
 
@@ -171,12 +167,7 @@ public class S3ObjectMonitor implements Managed {
   @VisibleForTesting
   void refresh() {
     try {
-      final String initialETag = lastETag.get();
-
-      GetObjectArgs getArgs = GetObjectArgs.builder()
-          .bucket(s3Bucket)
-          .object(objectKey)
-          .build();
+      final String initialETag = lastETag.get();      
 
       StatObjectArgs statArgs = StatObjectArgs.builder()
           .bucket(s3Bucket)
@@ -186,15 +177,11 @@ public class S3ObjectMonitor implements Managed {
       StatObjectResponse sResponse = s3Client.statObject(statArgs);
       final String refreshedETag = sResponse.etag();
 
-      if (!StringUtils.equals(initialETag, refreshedETag) && lastETag.compareAndSet(initialETag, refreshedETag)) {
+      if (!StringUtils.equals(initialETag, refreshedETag) && lastETag.compareAndSet(initialETag, refreshedETag)) {   
         
-        int size = 0;
+        long size = sResponse.size();        
 
-        try (GetObjectResponse g = s3Client.getObject(getArgs)) {
-          size = Util.getBytes(g).length;
-        }
-
-        try (final GetObjectResponse gResponse = s3Client.getObject(getArgs)) {          
+        try (final GetObjectResponse gResponse = getObject()) {          
 
           log.info("Object at s3://{}/{} has changed; new eTag is {} and object size is {} bytes",
               s3Bucket, objectKey, refreshedETag, size);
