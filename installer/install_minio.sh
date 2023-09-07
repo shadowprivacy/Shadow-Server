@@ -117,6 +117,7 @@ su -c "${MINIO_PATH}/mc mb shadow/attachments" - ${USER_SH}
 su -c "${MINIO_PATH}/mc mb shadow/profiles" - ${USER_SH}
 su -c "${MINIO_PATH}/mc mb shadow/stickers" - ${USER_SH}
 su -c "${MINIO_PATH}/mc mb shadow/debuglogs" - ${USER_SH}
+su -c "${MINIO_PATH}/mc mb shadow/service" - ${USER_SH}
 
 echo "Setting up policies..."
 
@@ -124,6 +125,7 @@ su -c "${MINIO_PATH}/mc policy set download shadow/attachments" - ${USER_SH}
 su -c "${MINIO_PATH}/mc policy set download shadow/profiles" - ${USER_SH}
 su -c "${MINIO_PATH}/mc policy set download shadow/stickers" - ${USER_SH}
 su -c "${MINIO_PATH}/mc policy set download shadow/debuglogs" - ${USER_SH}
+su -c "${MINIO_PATH}/mc policy set download shadow/service" - ${USER_SH}
 
 echo "Assigning the service user..."
 
@@ -143,6 +145,13 @@ download_sticker_pack cca32f5b905208b7d0f1e17f23fdc185 89
 download_sticker_pack cfc50156556893ef9838069d3890fe49 23
 
 chown -R ${USER_SH} ${DATA_PATH}/stickers/
+
+cd ${DATA_PATH}/service
+
+wget https://check.torproject.org/torbulkexitlist --no-check-certificate
+wget https://iptoasn.com/data/ip2asn-v4-u32.tsv.gz
+
+chown -R ${USER_SH} ${DATA_PATH}/service/
 
 # Update Shadow server config
 
