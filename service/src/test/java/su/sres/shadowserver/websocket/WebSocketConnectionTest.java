@@ -96,8 +96,7 @@ public class WebSocketConnectionTest {
     retrySchedulingExecutor = mock(ScheduledExecutorService.class);
   }
 
-  @Test
-  @Ignore
+  @Test  
   public void testCredentials() throws Exception {
     MessagesManager storedMessages = mock(MessagesManager.class);
     WebSocketAccountAuthenticator webSocketAuthenticator = new WebSocketAccountAuthenticator(accountAuthenticator);
@@ -148,6 +147,8 @@ public class WebSocketConnectionTest {
         });
       }
     });
+    
+    account = webSocketAuthenticator.authenticate(upgradeRequest);
 
     assertFalse(account.getUser().isPresent());
     assertTrue(account.isRequired());
