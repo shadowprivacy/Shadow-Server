@@ -10,10 +10,10 @@ minio:                        # private cloud access configuration
   profileBucket: profiles
   debuglogBucket: debuglogs
   serviceBucket: service
-  torExitNodeListObject:                                                # filename 
-  torExitListMaxSize:                                                   # default 16MB, can be left empty    
-  asnListObject:                                                        # filename
-  asnListMaxSize:                                                       # default 16MB, can be left empty
+  torExitNodeListObject: torbulkexitlist                                # filename 
+  torExitNodeListMaxSize: 16777216                                      # default 16MB    
+  asnListObject: ip2asn-v4-u32.tsv.gz                                   # filename
+  asnListMaxSize: 16777216                                              # default 16MB
 
 accountDatabaseCrawler:       # account database crawler configuration
   chunkSize: 1000                                                       # accounts per run
