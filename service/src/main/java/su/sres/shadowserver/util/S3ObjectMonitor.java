@@ -1,5 +1,6 @@
 /*
- * Copyright 2013-2021 Signal Messenger, LLC
+ * Original software: Copyright 2013-2021 Signal Messenger, LLC
+ * Modified software: Copyright 2023 Anton Alipov, sole trader
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
@@ -144,7 +145,11 @@ public class S3ObjectMonitor implements Managed {
 
     lastETag.set(sResponse.etag());
 
-    int size = Util.getBytes(gResponse).length;
+    int size = 0;
+
+    try (GetObjectResponse g = s3Client.getObject(getArgs)) {
+      size = Util.getBytes(g).length;
+    }
 
     if (size <= maxObjectSize) {
       return gResponse;
@@ -182,16 +187,20 @@ public class S3ObjectMonitor implements Managed {
       final String refreshedETag = sResponse.etag();
 
       if (!StringUtils.equals(initialETag, refreshedETag) && lastETag.compareAndSet(initialETag, refreshedETag)) {
-
-        try (final GetObjectResponse gResponse = getObject()) {
-
-        int size = Util.getBytes(gResponse).length;
-
-        log.info("Object at s3://{}/{} has changed; new eTag is {} and object size is {} bytes",
-            s3Bucket, objectKey, refreshedETag, size);               
         
+        int size = 0;
+
+        try (GetObjectResponse g = s3Client.getObject(getArgs)) {
+          size = Util.getBytes(g).length;
+        }
+
+        try (final GetObjectResponse gResponse = s3Client.getObject(getArgs)) {          
+
+          log.info("Object at s3://{}/{} has changed; new eTag is {} and object size is {} bytes",
+              s3Bucket, objectKey, refreshedETag, size);
+
           changeListener.accept(gResponse);
-        } 
+        }
 
       }
     } catch (final Exception e) {
