@@ -33,8 +33,6 @@ function check_app
 
 check_root_and_exit
 
-SHADOW_SERVER_VERSION=2.03
-
 set +o history
 
 sed -i "s/SHADOW_VER/${SHADOW_SERVER_VERSION}/" shadow.service

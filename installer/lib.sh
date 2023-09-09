@@ -1,5 +1,7 @@
 #!/bin/bash
 
+SHADOW_SERVER_VERSION=2.03
+
 USER_SH="shadow"
 USER_PATH="/home/${USER_SH}"
 
