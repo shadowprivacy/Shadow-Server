@@ -34,7 +34,7 @@ check_root_and_exit
 
 set +o history
 
-read -p "This will upgrade your Shadow server installation to the version ${SHADOW_SERVER_VERSION}. Are you sure that the Shadow server is stopped and that you have upgraded your configuration file, and the check command reports no errors? [y/n] >> " -n 1 -r
+read -p "This will upgrade your Shadow server installation to the version ${SHADOW_SERVER_VERSION}. Are you sure that the Shadow server is stopped, the new jar file is in place, the configuration file is upgraded, and the check command reports no errors? [y/n] >> " -n 1 -r
 if ! [[ $REPLY =~ ^[Yy]$ ]]
 then
     echo " ...Exiting"
@@ -85,30 +85,17 @@ then
   ./turns.sh
 fi
 
-printf "\nDownloading new Shadow server binary..."
-
 cd ${SERVER_PATH}/
 
-wget https://shadowupdate.sres.su:19080/server/ShadowServer-${SHADOW_SERVER_VERSION}.jar
-echo "The SHA256 checksum of the downloaded jar is: "
-sha256sum < ShadowServer-${SHADOW_SERVER_VERSION}.jar
-read -p "Is that OK [y/n]? >> " -n 1 -r
-    if [[ $REPLY =~ ^[Yy]$ ]]
-    then
-    
-    printf "\nPerforming ScyllaDB table markup..."
-    
-    java -jar ShadowServer-${SHADOW_SERVER_VERSION}.jar createaccountsdb ${SERVER_PATH}/config/shadow.yml
-    java -jar ShadowServer-${SHADOW_SERVER_VERSION}.jar createpushchallengedb ${SERVER_PATH}/config/shadow.yml
-    java -jar ShadowServer-${SHADOW_SERVER_VERSION}.jar createreportmessagedb ${SERVER_PATH}/config/shadow.yml
-    
-    chown ${USER_SH} /var/log/shadow.log
-    
-    else
-         error_quit "The jar file has been tampered with!!!"  
-    fi    
-
 chown -R ${USER_SH} ${SERVER_PATH}
+    
+printf "\nPerforming ScyllaDB table markup..."
+    
+java -jar ShadowServer-${SHADOW_SERVER_VERSION}.jar createaccountsdb ${SERVER_PATH}/config/shadow.yml
+java -jar ShadowServer-${SHADOW_SERVER_VERSION}.jar createpushchallengedb ${SERVER_PATH}/config/shadow.yml
+java -jar ShadowServer-${SHADOW_SERVER_VERSION}.jar createreportmessagedb ${SERVER_PATH}/config/shadow.yml
+    
+chown ${USER_SH} /var/log/shadow.log
 
 printf "\nUpgrade complete. Follow the release notes to perform necessary post-installation tasks (if any), then start the Shadow server: 'systemctl start shadow'.\n"
 
