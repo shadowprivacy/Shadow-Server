@@ -143,7 +143,7 @@ then
        sed -i "s|^#cert=/usr/local/etc/turn_server_cert.pem|cert=${SERVER_PATH}/acme/${SERVER_DOMAIN}_ecc/fullchain.cer|" /usr/local/etc/turnserver.conf
        sed -i "s|^#pkey=/usr/local/etc/turn_server_pkey.pem|pkey=${SERVER_PATH}/acme/${SERVER_DOMAIN}_ecc/${SERVER_DOMAIN}.key|" /usr/local/etc/turnserver.conf
        
-       sed -i "/turn\:${SERVER_DOMAIN}:3478/i - turns\:${SERVER_DOMAIN}:5349" ${SERVER_PATH}/config/shadow.yml
+       sed -i "/turn\:${SERVER_DOMAIN}:3478/i \ \ \ - turns\:${SERVER_DOMAIN}:5349" ${SERVER_PATH}/config/shadow.yml
             
    else
    printf  "\nUnfortunately, the top-level domain \"${TLD}\" is not currently supported for automated TURNS configuration. The TURNS configuration will abort. Refer to the documentation to enable TURNS manually.\n"
