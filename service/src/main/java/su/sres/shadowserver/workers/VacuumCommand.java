@@ -11,7 +11,6 @@ import su.sres.shadowserver.configuration.DatabaseConfiguration;
 import su.sres.shadowserver.storage.AbusiveHostRules;
 import su.sres.shadowserver.storage.Accounts;
 import su.sres.shadowserver.storage.FaultTolerantDatabase;
-import su.sres.shadowserver.storage.PendingAccounts;
 
 import org.jdbi.v3.core.Jdbi;
 import org.slf4j.Logger;
@@ -41,16 +40,12 @@ public class VacuumCommand extends ConfiguredCommand<WhisperServerConfiguration>
     FaultTolerantDatabase accountDatabase = new FaultTolerantDatabase("account_database_vacuum", accountJdbi, accountDbConfig.getCircuitBreakerConfiguration());
     FaultTolerantDatabase abuseDatabase = new FaultTolerantDatabase("abuse_database_vacuum", abuseJdbi, abuseDbConfig.getCircuitBreakerConfiguration());
     
-    Accounts accounts = new Accounts(accountDatabase);
-    PendingAccounts pendingAccounts = new PendingAccounts(accountDatabase);   
+    Accounts accounts = new Accounts(accountDatabase);       
     AbusiveHostRules abusiveHostRules = new AbusiveHostRules(abuseDatabase);
 
     logger.info("Vacuuming accounts...");
     accounts.vacuum();
-
-    logger.info("Vacuuming pending_accounts...");
-    pendingAccounts.vacuum();
-    
+        
     logger.info("Vacuuming abusive host rules...");
     abusiveHostRules.vacuum();
     

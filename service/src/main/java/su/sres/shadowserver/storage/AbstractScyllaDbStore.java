@@ -3,8 +3,10 @@ package su.sres.shadowserver.storage;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Timer;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
+import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.BatchWriteItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.BatchWriteItemResponse;
+import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
 import software.amazon.awssdk.services.dynamodb.model.WriteRequest;
 
 import org.slf4j.Logger;
@@ -15,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 import static com.codahale.metrics.MetricRegistry.name;
 import static io.micrometer.core.instrument.Metrics.counter;
@@ -59,6 +62,15 @@ public class AbstractScyllaDbStore {
       logger.error("Attempt count ({}) reached max ({}}) before applying all batch writes to scylla. {} unprocessed items remain.", attemptCount, MAX_ATTEMPTS_TO_SAVE_BATCH_WRITE, totalItems);
       batchWriteItemsUnprocessed.increment(totalItems);
     }
+  }
+  
+  protected List<Map<String, AttributeValue>> scan(ScanRequest scanRequest, int max) {
+
+    return db().scanPaginator(scanRequest)
+        .items()
+        .stream()
+        .limit(max)
+        .collect(Collectors.toList());
   }
 
   static <T> void writeInBatches(final Iterable<T> items, final Consumer<List<T>> action) {

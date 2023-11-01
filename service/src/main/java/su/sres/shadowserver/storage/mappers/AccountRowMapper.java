@@ -27,6 +27,7 @@ public class AccountRowMapper implements RowMapper<Account> {
       Account account = mapper.readValue(resultSet.getString(Accounts.DATA), Account.class);
       account.setUserLogin(resultSet.getString(Accounts.USER_LOGIN));      
       account.setUuid(UUID.fromString(resultSet.getString(Accounts.UID)));
+      account.setVersion(resultSet.getInt(Accounts.VERSION));
 
       return account;
     } catch (IOException e) {

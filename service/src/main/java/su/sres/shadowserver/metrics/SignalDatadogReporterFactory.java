@@ -10,6 +10,8 @@ import com.codahale.metrics.ScheduledReporter;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonTypeName;
 import io.dropwizard.metrics.BaseReporterFactory;
+
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import javax.validation.Valid;
@@ -20,6 +22,8 @@ import org.coursera.metrics.datadog.DefaultMetricNameFormatterFactory;
 import org.coursera.metrics.datadog.DynamicTagsCallbackFactory;
 import org.coursera.metrics.datadog.MetricNameFormatterFactory;
 import org.coursera.metrics.datadog.transport.AbstractTransportFactory;
+
+import su.sres.shadowserver.WhisperServerVersion;
 import su.sres.shadowserver.util.HostnameUtil;
 
 @JsonTypeName("signal-datadog")
@@ -58,10 +62,23 @@ public class SignalDatadogReporterFactory extends BaseReporterFactory {
   );
 
   public ScheduledReporter build(MetricRegistry registry) {
+    final List<String> tagsWithVersion;
+
+    {
+      final String versionTag = "version:" + WhisperServerVersion.getServerVersion();
+
+      if (tags != null) {
+        tagsWithVersion = new ArrayList<>(tags);
+        tagsWithVersion.add(versionTag);
+      } else {
+        tagsWithVersion = List.of(versionTag);
+      }
+    }
+    
     return DatadogReporter.forRegistry(registry)
         .withTransport(transport.build())
         .withHost(HostnameUtil.getLocalHostname())
-        .withTags(tags)
+        .withTags(tagsWithVersion)
         .withPrefix(prefix)
         .withExpansions(EXPANSIONS)
         .withMetricNameFormatter(metricNameFormatter.build())

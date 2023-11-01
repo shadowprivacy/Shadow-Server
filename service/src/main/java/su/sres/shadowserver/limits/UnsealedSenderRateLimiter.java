@@ -65,7 +65,7 @@ public class UnsealedSenderRateLimiter {
 
     try {
       rateLimiters.getUnsealedSenderCardinalityLimiter()
-          .validate(sender.getUserLogin(), destination.getUuid().toString(), maxCardinality);
+          .validate(sender.getUuid().toString(), destination.getUuid().toString(), maxCardinality);
     } catch (final RateLimitExceededException e) {
 
       final boolean enforceLimit = dynamicConfig.getRateLimitChallengeConfiguration().isUnsealedSenderLimitEnforced();
@@ -90,7 +90,7 @@ public class UnsealedSenderRateLimiter {
 
       final long ttl;
       {
-        final long remainingTtl = unsealedSenderCardinalityLimiter.getRemainingTtl(account.getUserLogin());
+        final long remainingTtl = unsealedSenderCardinalityLimiter.getRemainingTtl(account.getUuid().toString());
         ttl = remainingTtl > 0 ? remainingTtl : unsealedSenderCardinalityLimiter.getInitialTtl().toSeconds();
       }
 

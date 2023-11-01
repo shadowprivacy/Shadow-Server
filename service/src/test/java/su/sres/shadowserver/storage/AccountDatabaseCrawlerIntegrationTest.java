@@ -13,8 +13,11 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
 
 import static org.junit.Assert.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -50,13 +53,13 @@ public class AccountDatabaseCrawlerIntegrationTest extends AbstractRedisClusterT
     when(firstAccount.getUuid()).thenReturn(FIRST_UUID);
     when(secondAccount.getUuid()).thenReturn(SECOND_UUID);
 
-    when(accountsManager.getAllFrom(CHUNK_SIZE)).thenReturn(List.of(firstAccount));
-    when(accountsManager.getAllFrom(FIRST_UUID, CHUNK_SIZE))
-        .thenReturn(List.of(secondAccount))
-        .thenReturn(Collections.emptyList());
+    when(accountsManager.getAllFrom(CHUNK_SIZE)).thenReturn(new AccountCrawlChunk(List.of(firstAccount), FIRST_UUID));
+    when(accountsManager.getAllFrom(any(UUID.class), eq(CHUNK_SIZE)))
+        .thenReturn(new AccountCrawlChunk(List.of(secondAccount), SECOND_UUID))
+        .thenReturn(new AccountCrawlChunk(Collections.emptyList(), null));  
 
     final AccountDatabaseCrawlerCache crawlerCache = new AccountDatabaseCrawlerCache(getRedisCluster());
-    accountDatabaseCrawler = new AccountDatabaseCrawler(accountsManager, crawlerCache, List.of(listener), CHUNK_SIZE, CHUNK_INTERVAL_MS);
+    accountDatabaseCrawler = new AccountDatabaseCrawler(accountsManager, crawlerCache, List.of(listener), CHUNK_SIZE, CHUNK_INTERVAL_MS, mock(ExecutorService.class));
   }
 
   @Test

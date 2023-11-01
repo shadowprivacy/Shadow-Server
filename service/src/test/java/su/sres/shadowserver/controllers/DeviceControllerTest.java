@@ -1,16 +1,19 @@
 /*
- * Original software: Copyright 2013-2020 Signal Messenger, LLC
- * Modified software: Copyright 2019-2022 Anton Alipov, sole trader
+ * Original software: Copyright 2013-2021 Signal Messenger, LLC
+ * Modified software: Copyright 2019-2023 Anton Alipov, sole trader
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 package su.sres.shadowserver.controllers;
 
 import com.google.common.collect.ImmutableSet;
 import org.glassfish.jersey.test.grizzly.GrizzlyWebTestContainerFactory;
-import org.junit.Before;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import javax.ws.rs.Path;
 import javax.ws.rs.client.Entity;
@@ -20,12 +23,13 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
 
 import io.dropwizard.auth.PolymorphicAuthValueFactoryProvider;
-import io.dropwizard.testing.junit.ResourceTestRule;
-import junitparams.JUnitParamsRunner;
-import junitparams.Parameters;
-import su.sres.shadowserver.auth.DisabledPermittedAccount;
+import io.dropwizard.testing.junit5.DropwizardExtensionsSupport;
+import io.dropwizard.testing.junit5.ResourceExtension;
+import su.sres.shadowserver.auth.AuthenticatedAccount;
+import su.sres.shadowserver.auth.DisabledPermittedAuthenticatedAccount;
 import su.sres.shadowserver.auth.StoredVerificationCode;
 import su.sres.shadowserver.entities.AccountAttributes;
 import su.sres.shadowserver.entities.DeviceResponse;
@@ -36,30 +40,37 @@ import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.storage.AccountsManager;
 import su.sres.shadowserver.storage.Device;
 import su.sres.shadowserver.storage.Device.DeviceCapabilities;
+import su.sres.shadowserver.storage.KeysScyllaDb;
 import su.sres.shadowserver.storage.MessagesManager;
-import su.sres.shadowserver.storage.PendingDevicesManager;
+import su.sres.shadowserver.storage.StoredVerificationCodeManager;
+import su.sres.shadowserver.util.AccountsHelper;
 import su.sres.shadowserver.util.AuthHelper;
 import su.sres.shadowserver.util.VerificationCode;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
-@RunWith(JUnitParamsRunner.class)
-public class DeviceControllerTest {
+@ExtendWith(DropwizardExtensionsSupport.class)
+class DeviceControllerTest {
   @Path("/v1/devices")
   static class DumbVerificationDeviceController extends DeviceController {
-    public DumbVerificationDeviceController(PendingDevicesManager pendingDevices,
+    public DumbVerificationDeviceController(StoredVerificationCodeManager pendingDevices,
         AccountsManager accounts,
         MessagesManager messages,
+        KeysScyllaDb keys,
         RateLimiters rateLimiters,
         Map<String, Integer> deviceConfiguration,
         int verificationCodeLifetime) {
-      super(pendingDevices, accounts, messages, rateLimiters, deviceConfiguration, verificationCodeLifetime);
+      super(pendingDevices, accounts, messages, keys, rateLimiters, deviceConfiguration, verificationCodeLifetime);
     }
 
     @Override
@@ -68,71 +79,86 @@ public class DeviceControllerTest {
     }
   }
 
-  private PendingDevicesManager pendingDevicesManager = mock(PendingDevicesManager.class);
-  private AccountsManager accountsManager = mock(AccountsManager.class);
-  private MessagesManager messagesManager = mock(MessagesManager.class);
-  private RateLimiters rateLimiters = mock(RateLimiters.class);
-  private RateLimiter rateLimiter = mock(RateLimiter.class);
-  private Account account = mock(Account.class);
-  private Account maxedAccount = mock(Account.class);
+  private static StoredVerificationCodeManager pendingDevicesManager = mock(StoredVerificationCodeManager.class);
+  private static AccountsManager accountsManager = mock(AccountsManager.class);
+  private static MessagesManager messagesManager = mock(MessagesManager.class);
+  private static KeysScyllaDb keys = mock(KeysScyllaDb.class);
+  private static RateLimiters rateLimiters = mock(RateLimiters.class);
+  private static RateLimiter rateLimiter = mock(RateLimiter.class);
+  private static Account account = mock(Account.class);
+  private static Account maxedAccount = mock(Account.class);
 
-  // introduced with CDS
-  private Device masterDevice = mock(Device.class);
+  private static Device masterDevice = mock(Device.class);
 
-  private Map<String, Integer> deviceConfiguration = new HashMap<String, Integer>() {
+  private static Map<String, Integer> deviceConfiguration = new HashMap<String, Integer>() {
     {
     }
   };
 
   private static final int VERIFICATION_CODE_LIFETIME = 48;
 
-  @Rule
-  public final ResourceTestRule resources = ResourceTestRule.builder()
+  private static final ResourceExtension resources = ResourceExtension.builder()
       .addProvider(AuthHelper.getAuthFilter())
-      .addProvider(new PolymorphicAuthValueFactoryProvider.Binder<>(ImmutableSet.of(Account.class, DisabledPermittedAccount.class)))
+      .addProvider(new PolymorphicAuthValueFactoryProvider.Binder<>(ImmutableSet.of(AuthenticatedAccount.class, DisabledPermittedAuthenticatedAccount.class)))
       .setTestContainerFactory(new GrizzlyWebTestContainerFactory())
       .addProvider(new DeviceLimitExceededExceptionMapper())
       .addResource(new DumbVerificationDeviceController(pendingDevicesManager,
           accountsManager,
           messagesManager,
+          keys,
           rateLimiters,
           deviceConfiguration,
           VERIFICATION_CODE_LIFETIME))
       .build();
 
-  @Before
-  public void setup() throws Exception {
+  @BeforeEach
+  void setup() {
     when(rateLimiters.getSmsDestinationLimiter()).thenReturn(rateLimiter);
     when(rateLimiters.getVerifyLimiter()).thenReturn(rateLimiter);
     when(rateLimiters.getAllocateDeviceLimiter()).thenReturn(rateLimiter);
     when(rateLimiters.getVerifyDeviceLimiter()).thenReturn(rateLimiter);
-    
+
     when(masterDevice.getId()).thenReturn(1L);
 
     when(account.getNextDeviceId()).thenReturn(42L);
     when(account.getUserLogin()).thenReturn(AuthHelper.VALID_NUMBER);
     when(account.getUuid()).thenReturn(AuthHelper.VALID_UUID);
-//    when(maxedAccount.getActiveDeviceCount()).thenReturn(6);
 
-    when(account.getAuthenticatedDevice()).thenReturn(Optional.of(masterDevice));
     when(account.isEnabled()).thenReturn(false);
     when(account.isGroupsV2Supported()).thenReturn(true);
     when(account.isGv1MigrationSupported()).thenReturn(true);
     when(account.isSenderKeySupported()).thenReturn(true);
     when(account.isAnnouncementGroupSupported()).thenReturn(true);
+    when(account.isChangeUserLoginSupported()).thenReturn(true);
 
     when(pendingDevicesManager.getCodeForUserLogin(AuthHelper.VALID_NUMBER)).thenReturn(Optional.of(new StoredVerificationCode("5678901", System.currentTimeMillis(), null)));
     when(pendingDevicesManager.getCodeForUserLogin(AuthHelper.VALID_NUMBER_TWO)).thenReturn(Optional.of(new StoredVerificationCode("1112223", System.currentTimeMillis() - TimeUnit.HOURS.toMillis(50), null)));
     when(accountsManager.get(AuthHelper.VALID_NUMBER)).thenReturn(Optional.of(account));
     when(accountsManager.get(AuthHelper.VALID_NUMBER_TWO)).thenReturn(Optional.of(maxedAccount));
+
+    AccountsHelper.setupMockUpdate(accountsManager);
+  }
+
+  @AfterEach
+  void teardown() {
+    reset(
+        pendingDevicesManager,
+        accountsManager,
+        messagesManager,
+        keys,
+        rateLimiters,
+        rateLimiter,
+        account,
+        maxedAccount,
+        masterDevice);
   }
 
   @Test
-  public void validDeviceRegisterTest() throws Exception {
+  void validDeviceRegisterTest() {
     VerificationCode deviceCode = resources.getJerseyTest()
         .target("/v1/devices/provisioning/code")
         .request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID, AuthHelper.VALID_PASSWORD))
         .get(VerificationCode.class);
 
     assertThat(deviceCode).isEqualTo(new VerificationCode(5678901));
@@ -140,7 +166,7 @@ public class DeviceControllerTest {
     DeviceResponse response = resources.getJerseyTest()
         .target("/v1/devices/5678901")
         .request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, "password1"))
+        .header("Authorization", AuthHelper.getProvisioningAuthHeader(AuthHelper.VALID_NUMBER, "password1"))
         .put(Entity.entity(new AccountAttributes(false, 1234, null, true, null),
             MediaType.APPLICATION_JSON_TYPE),
             DeviceResponse.class);
@@ -152,22 +178,34 @@ public class DeviceControllerTest {
   }
 
   @Test
-  public void disabledDeviceRegisterTest() throws Exception {
+  void verifyDeviceTokenBadCredentials() {
+    final Response response = resources.getJerseyTest()
+        .target("/v1/devices/5678901")
+        .request()
+        .header("Authorization", "This is not a valid authorization header")
+        .put(Entity.entity(new AccountAttributes(false, 1234, null, true, null),
+            MediaType.APPLICATION_JSON_TYPE));
+
+    assertEquals(401, response.getStatus());
+  }
+
+  @Test
+  void disabledDeviceRegisterTest() {
     Response response = resources.getJerseyTest()
         .target("/v1/devices/provisioning/code")
         .request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.DISABLED_NUMBER, AuthHelper.DISABLED_PASSWORD))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.DISABLED_UUID, AuthHelper.DISABLED_PASSWORD))
         .get();
 
     assertThat(response.getStatus()).isEqualTo(401);
   }
 
   @Test
-  public void invalidDeviceRegisterTest() throws Exception {
+  void invalidDeviceRegisterTest() {
     VerificationCode deviceCode = resources.getJerseyTest()
         .target("/v1/devices/provisioning/code")
         .request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID, AuthHelper.VALID_PASSWORD))
         .get(VerificationCode.class);
 
     assertThat(deviceCode).isEqualTo(new VerificationCode(5678901));
@@ -175,7 +213,7 @@ public class DeviceControllerTest {
     Response response = resources.getJerseyTest()
         .target("/v1/devices/5678902")
         .request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, "password1"))
+        .header("Authorization", AuthHelper.getProvisioningAuthHeader(AuthHelper.VALID_NUMBER, "password1"))
         .put(Entity.entity(new AccountAttributes(false, 1234, null, true, null),
             MediaType.APPLICATION_JSON_TYPE));
 
@@ -185,11 +223,11 @@ public class DeviceControllerTest {
   }
 
   @Test
-  public void oldDeviceRegisterTest() throws Exception {
+  void oldDeviceRegisterTest() {
     Response response = resources.getJerseyTest()
         .target("/v1/devices/1112223")
         .request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER_TWO, AuthHelper.VALID_PASSWORD_TWO))
+        .header("Authorization", AuthHelper.getProvisioningAuthHeader(AuthHelper.VALID_NUMBER_TWO, AuthHelper.VALID_PASSWORD_TWO))
         .put(Entity.entity(new AccountAttributes(false, 1234, null, true, null),
             MediaType.APPLICATION_JSON_TYPE));
 
@@ -199,11 +237,11 @@ public class DeviceControllerTest {
   }
 
   @Test
-  public void maxDevicesTest() throws Exception {
+  void maxDevicesTest() {
     Response response = resources.getJerseyTest()
         .target("/v1/devices/provisioning/code")
         .request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER_TWO, AuthHelper.VALID_PASSWORD_TWO))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID_TWO, AuthHelper.VALID_PASSWORD_TWO))
         .get();
 
     assertEquals(411, response.getStatus());
@@ -211,26 +249,26 @@ public class DeviceControllerTest {
   }
 
   @Test
-  public void longNameTest() throws Exception {
+  void longNameTest() {
     Response response = resources.getJerseyTest()
         .target("/v1/devices/5678901")
         .request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, "password1"))
+        .header("Authorization", AuthHelper.getProvisioningAuthHeader(AuthHelper.VALID_NUMBER, "password1"))
         .put(Entity.entity(new AccountAttributes(false, 1234, "this is a really long name that is longer than 80 characters it's so long that it's even longer than 204 characters. that's a lot of characters. we're talking lots and lots and lots of characters. 12345678", true, null), MediaType.APPLICATION_JSON_TYPE));
 
     assertEquals(response.getStatus(), 422);
     verifyNoMoreInteractions(messagesManager);
   }
 
-  @Test
-  @Parameters(method = "argumentsForDeviceDowngradeCapabilitiesTest")
-  public void deviceDowngradeCapabilitiesTest(final String userAgent, final boolean gv2, final boolean gv2_2, final boolean gv2_3, final int expectedStatus) throws Exception {
-    DeviceCapabilities deviceCapabilities = new DeviceCapabilities(gv2, gv2_2, gv2_3, true, false, true, true, true);
+  @ParameterizedTest
+  @MethodSource
+  void deviceDowngradeCapabilitiesTest(final String userAgent, final boolean gv2, final boolean gv2_2, final boolean gv2_3, final int expectedStatus) {
+    DeviceCapabilities deviceCapabilities = new DeviceCapabilities(gv2, gv2_2, gv2_3, true, false, true, true, true, true);
     AccountAttributes accountAttributes = new AccountAttributes(false, 1234, null, true, deviceCapabilities);
     Response response = resources.getJerseyTest()
         .target("/v1/devices/5678901")
         .request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, "password1"))
+        .header("Authorization", AuthHelper.getProvisioningAuthHeader(AuthHelper.VALID_NUMBER, "password1"))
         .header("User-Agent", userAgent)
         .put(Entity.entity(accountAttributes, MediaType.APPLICATION_JSON_TYPE));
 
@@ -241,105 +279,152 @@ public class DeviceControllerTest {
     }
   }
 
-  private static Object argumentsForDeviceDowngradeCapabilitiesTest() {
-    return new Object[] {
+  private static Stream<Arguments> deviceDowngradeCapabilitiesTest() {
+    return Stream.of(
 //	             User-Agent                          gv2    gv2-2  gv2-3  expected
-        new Object[] { "Shadow-Android/4.68.3 Android/25", false, false, false, 409 },
-        new Object[] { "Shadow-Android/4.68.3 Android/25", true, false, false, 409 },
-        new Object[] { "Shadow-Android/4.68.3 Android/25", false, true, false, 409 },
-        new Object[] { "Shadow-Android/4.68.3 Android/25", false, false, true, 200 },
-        new Object[] { "Shadow-iOS/3.9.0", false, false, false, 409 },
-        new Object[] { "Shadow-iOS/3.9.0", true, false, false, 409 },
-        new Object[] { "Shadow-iOS/3.9.0", false, true, false, 200 },
-        new Object[] { "Shadow-iOS/3.9.0", false, false, true, 200 },
-        new Object[] { "Shadow-Desktop/1.32.0-beta.3", false, false, false, 409 },
-        new Object[] { "Shadow-Desktop/1.32.0-beta.3", true, false, false, 409 },
-        new Object[] { "Shadow-Desktop/1.32.0-beta.3", false, true, false, 409 },
-        new Object[] { "Shadow-Desktop/1.32.0-beta.3", false, false, true, 200 },
-        new Object[] { "Old client with unparsable UA", false, false, false, 409 },
-        new Object[] { "Old client with unparsable UA", true, false, false, 409 },
-        new Object[] { "Old client with unparsable UA", false, true, false, 409 },
-        new Object[] { "Old client with unparsable UA", false, false, true, 409 }
-    };
+        Arguments.of("Shadow-Android/4.68.3 Android/25", false, false, false, 409),
+        Arguments.of("Shadow-Android/4.68.3 Android/25", true, false, false, 409),
+        Arguments.of("Shadow-Android/4.68.3 Android/25", false, true, false, 409),
+        Arguments.of("Shadow-Android/4.68.3 Android/25", false, false, true, 200),
+        Arguments.of("Shadow-iOS/3.9.0", false, false, false, 409),
+        Arguments.of("Shadow-iOS/3.9.0", true, false, false, 409),
+        Arguments.of("Shadow-iOS/3.9.0", false, true, false, 200),
+        Arguments.of("Shadow-iOS/3.9.0", false, false, true, 200),
+        Arguments.of("Shadow-Desktop/1.32.0-beta.3", false, false, false, 409),
+        Arguments.of("Shadow-Desktop/1.32.0-beta.3", true, false, false, 409),
+        Arguments.of("Shadow-Desktop/1.32.0-beta.3", false, true, false, 409),
+        Arguments.of("Shadow-Desktop/1.32.0-beta.3", false, false, true, 200),
+        Arguments.of("Old client with unparsable UA", false, false, false, 409),
+        Arguments.of("Old client with unparsable UA", true, false, false, 409),
+        Arguments.of("Old client with unparsable UA", false, true, false, 409),
+        Arguments.of("Old client with unparsable UA", false, false, true, 409));
   }
 
   @Test
-  public void deviceDowngradeGv1MigrationTest() {
-    DeviceCapabilities deviceCapabilities = new DeviceCapabilities(true, true, true, true, false, false, true, true);
+  void deviceDowngradeGv1MigrationTest() {
+    DeviceCapabilities deviceCapabilities = new DeviceCapabilities(true, true, true, true, false, false, true, true, true);
     AccountAttributes accountAttributes = new AccountAttributes(false, 1234, null, true, deviceCapabilities);
     Response response = resources.getJerseyTest()
         .target("/v1/devices/5678901")
         .request()
-        .header("authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, "password1"))
-        .header("user-agent", "Signal-Android/4.68.3 Android/25")
+        .header("authorization", AuthHelper.getProvisioningAuthHeader(AuthHelper.VALID_NUMBER, "password1"))
+        .header("user-agent", "Shadow-Android/4.68.3 Android/25")
         .put(Entity.entity(accountAttributes, MediaType.APPLICATION_JSON_TYPE));
 
     assertThat(response.getStatus()).isEqualTo(409);
 
-    deviceCapabilities = new DeviceCapabilities(true, true, true, true, false, true, true, true);
+    deviceCapabilities = new DeviceCapabilities(true, true, true, true, false, true, true, true, true);
     accountAttributes = new AccountAttributes(false, 1234, null, true, deviceCapabilities);
     response = resources.getJerseyTest()
         .target("/v1/devices/5678901")
         .request()
-        .header("authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, "password1"))
-        .header("user-agent", "Signal-Android/4.68.3 Android/25")
+        .header("authorization", AuthHelper.getProvisioningAuthHeader(AuthHelper.VALID_NUMBER, "password1"))
+        .header("user-agent", "Shadow-Android/4.68.3 Android/25")
         .put(Entity.entity(accountAttributes, MediaType.APPLICATION_JSON_TYPE));
 
     assertThat(response.getStatus()).isEqualTo(200);
-    
+
   }
 
   @Test
-  public void deviceDowngradeSenderKeyTest() {
-    DeviceCapabilities deviceCapabilities = new DeviceCapabilities(true, true, true, true, true, true, false, true);
+  void deviceDowngradeSenderKeyTest() {
+    DeviceCapabilities deviceCapabilities = new DeviceCapabilities(true, true, true, true, true, true, false, true, true);
+    AccountAttributes accountAttributes = new AccountAttributes(false, 1234, null, true, deviceCapabilities);
+    Response response = resources
+        .getJerseyTest()
+        .target("/v1/devices/5678901")
+        .request()
+        .header("Authorization", AuthHelper.getProvisioningAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .header("User-Agent", "Shadow-Android/5.42.8675309 Android/30")
+        .put(Entity.entity(accountAttributes, MediaType.APPLICATION_JSON_TYPE));
+    assertThat(response.getStatus()).isEqualTo(409);
+
+    deviceCapabilities = new DeviceCapabilities(true, true, true, true, true, true, true, true, true);
+    accountAttributes = new AccountAttributes(false, 1234, null, true, deviceCapabilities);
+    response = resources
+        .getJerseyTest()
+        .target("/v1/devices/5678901")
+        .request()
+        .header("Authorization", AuthHelper.getProvisioningAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .header("User-Agent", "Shadow-Android/5.42.8675309 Android/30")
+        .put(Entity.entity(accountAttributes, MediaType.APPLICATION_JSON_TYPE));
+    assertThat(response.getStatus()).isEqualTo(200);
+  }
+
+  @Test
+  void deviceDowngradeAnnouncementGroupTest() {
+    DeviceCapabilities deviceCapabilities = new DeviceCapabilities(true, true, true, true, true, true, true, false, true);
+    AccountAttributes accountAttributes = new AccountAttributes(false, 1234, null, true, deviceCapabilities);
+    Response response = resources
+        .getJerseyTest()
+        .target("/v1/devices/5678901")
+        .request()
+        .header("Authorization", AuthHelper.getProvisioningAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .header("User-Agent", "Shadow-Android/5.42.8675309 Android/30")
+        .put(Entity.entity(accountAttributes, MediaType.APPLICATION_JSON_TYPE));
+    assertThat(response.getStatus()).isEqualTo(409);
+
+    deviceCapabilities = new DeviceCapabilities(true, true, true, true, true, true, true, true, true);
+    accountAttributes = new AccountAttributes(false, 1234, null, true, deviceCapabilities);
+    response = resources
+        .getJerseyTest()
+        .target("/v1/devices/5678901")
+        .request()
+        .header("Authorization", AuthHelper.getProvisioningAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .header("User-Agent", "Signal-Android/5.42.8675309 Android/30")
+        .put(Entity.entity(accountAttributes, MediaType.APPLICATION_JSON_TYPE));
+    assertThat(response.getStatus()).isEqualTo(200);
+  }
+
+  @Test
+  void deviceDowngradeChangeUserLoginTest() {
+    DeviceCapabilities deviceCapabilities = new DeviceCapabilities(true, true, true, true, true, true, true, true, false);
     AccountAttributes accountAttributes =
         new AccountAttributes(false, 1234, null, true, deviceCapabilities);
     Response response = resources
         .getJerseyTest()
         .target("/v1/devices/5678901")
         .request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .header("Authorization", AuthHelper.getProvisioningAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
         .header("User-Agent", "Signal-Android/5.42.8675309 Android/30")
         .put(Entity.entity(accountAttributes, MediaType.APPLICATION_JSON_TYPE));
     assertThat(response.getStatus()).isEqualTo(409);
 
-    deviceCapabilities = new DeviceCapabilities(true, true, true, true, true, true, true, true);
+    deviceCapabilities = new DeviceCapabilities(true, true, true, true, true, true, true, true, true);
     accountAttributes = new AccountAttributes(false, 1234, null, true, deviceCapabilities);
     response = resources
         .getJerseyTest()
         .target("/v1/devices/5678901")
         .request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
-        .header("User-Agent", "Signal-Android/5.42.8675309 Android/30")
+        .header("Authorization", AuthHelper.getProvisioningAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .header("User-Agent", "Shadow-Android/5.42.8675309 Android/30")
         .put(Entity.entity(accountAttributes, MediaType.APPLICATION_JSON_TYPE));
     assertThat(response.getStatus()).isEqualTo(200);
+
   }
 
   @Test
-  public void deviceDowngradeAnnouncementGroupTest() {
-    DeviceCapabilities deviceCapabilities = new DeviceCapabilities(true, true, true, true, true, true, true, false);
-    AccountAttributes accountAttributes =
-        new AccountAttributes(false, 1234, null, true, deviceCapabilities);
-    Response response = resources
-        .getJerseyTest()
-        .target("/v1/devices/5678901")
-        .request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
-        .header("User-Agent", "Signal-Android/5.42.8675309 Android/30")
-        .put(Entity.entity(accountAttributes, MediaType.APPLICATION_JSON_TYPE));
-    assertThat(response.getStatus()).isEqualTo(409);
+  void deviceRemovalClearsMessagesAndKeys() {
 
-    deviceCapabilities = new DeviceCapabilities(true, true, true, true, true, true, true, true);
-    accountAttributes = new AccountAttributes(false, 1234, null, true, deviceCapabilities);
-    response = resources
-        .getJerseyTest()
-        .target("/v1/devices/5678901")
-        .request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
-        .header("User-Agent", "Signal-Android/5.42.8675309 Android/30")
-        .put(Entity.entity(accountAttributes, MediaType.APPLICATION_JSON_TYPE));
-    assertThat(response.getStatus()).isEqualTo(200);
+    // this is a static mock, so it might have previous invocations
+    clearInvocations(AuthHelper.VALID_ACCOUNT);
 
+    final long deviceId = 2;
+
+    final Response response = resources
+        .getJerseyTest()
+        .target("/v1/devices/" + deviceId)
+        .request()
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID, AuthHelper.VALID_PASSWORD))
+        .header("User-Agent", "Shadow-Android/5.42.8675309 Android/30")
+        .delete();
+
+    assertThat(response.getStatus()).isEqualTo(204);
+
+    verify(messagesManager, times(2)).clear(AuthHelper.VALID_UUID, deviceId);
+    verify(accountsManager, times(1)).update(eq(AuthHelper.VALID_ACCOUNT), any());
+    verify(AuthHelper.VALID_ACCOUNT).removeDevice(deviceId);
+
+    verify(keys).delete(AuthHelper.VALID_UUID, deviceId);
   }
-
 }

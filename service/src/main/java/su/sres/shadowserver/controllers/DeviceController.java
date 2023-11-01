@@ -29,8 +29,9 @@ import java.util.Map;
 import java.util.Optional;
 
 import io.dropwizard.auth.Auth;
+import su.sres.shadowserver.auth.AuthenticatedAccount;
 import su.sres.shadowserver.auth.AuthenticationCredentials;
-import su.sres.shadowserver.auth.AuthorizationHeader;
+import su.sres.shadowserver.auth.BasicAuthorizationHeader;
 import su.sres.shadowserver.auth.InvalidAuthorizationHeaderException;
 import su.sres.shadowserver.auth.StoredVerificationCode;
 import su.sres.shadowserver.entities.AccountAttributes;
@@ -42,8 +43,9 @@ import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.storage.AccountsManager;
 import su.sres.shadowserver.storage.Device;
 import su.sres.shadowserver.storage.Device.DeviceCapabilities;
+import su.sres.shadowserver.storage.KeysScyllaDb;
 import su.sres.shadowserver.storage.MessagesManager;
-import su.sres.shadowserver.storage.PendingDevicesManager;
+import su.sres.shadowserver.storage.StoredVerificationCodeManager;
 import su.sres.shadowserver.util.Util;
 import su.sres.shadowserver.util.VerificationCode;
 import su.sres.shadowserver.util.ua.UnrecognizedUserAgentException;
@@ -52,26 +54,27 @@ import su.sres.shadowserver.util.ua.UserAgentUtil;
 @Path("/v1/devices")
 public class DeviceController {
 
-  private final Logger logger = LoggerFactory.getLogger(DeviceController.class);
-
   private static final int MAX_DEVICES = 6;
 
-  private final PendingDevicesManager pendingDevices;
+  private final StoredVerificationCodeManager pendingDevices;
   private final AccountsManager accounts;
   private final MessagesManager messages;
+  private final KeysScyllaDb keys;
   private final RateLimiters rateLimiters;
   private final Map<String, Integer> maxDeviceConfiguration;
   private final int verificationCodeLifetime;
 
-  public DeviceController(PendingDevicesManager pendingDevices,
+  public DeviceController(StoredVerificationCodeManager pendingDevices,
       AccountsManager accounts,
       MessagesManager messages,
+      KeysScyllaDb keys,
       RateLimiters rateLimiters,
       Map<String, Integer> maxDeviceConfiguration,
       int verificationCodeLifetime) {
     this.pendingDevices = pendingDevices;
     this.accounts = accounts;
     this.messages = messages;
+    this.keys = keys;
     this.rateLimiters = rateLimiters;
     this.maxDeviceConfiguration = maxDeviceConfiguration;
     this.verificationCodeLifetime = verificationCodeLifetime;
@@ -80,10 +83,10 @@ public class DeviceController {
   @Timed
   @GET
   @Produces(MediaType.APPLICATION_JSON)
-  public DeviceInfoList getDevices(@Auth Account account) {
+  public DeviceInfoList getDevices(@Auth AuthenticatedAccount auth) {
     List<DeviceInfo> devices = new LinkedList<>();
 
-    for (Device device : account.getDevices()) {
+    for (Device device : auth.getAccount().getDevices()) {
       devices.add(new DeviceInfo(device.getId(), device.getName(),
           device.getLastSeen(), device.getCreated()));
     }
@@ -94,13 +97,16 @@ public class DeviceController {
   @Timed
   @DELETE
   @Path("/{device_id}")
-  public void removeDevice(@Auth Account account, @PathParam("device_id") long deviceId) {
-    if (account.getAuthenticatedDevice().get().getId() != Device.MASTER_ID) {
+  public void removeDevice(@Auth AuthenticatedAccount auth, @PathParam("device_id") long deviceId) {
+    Account account = auth.getAccount();
+    if (auth.getAuthenticatedDevice().getId() != Device.MASTER_ID) {
       throw new WebApplicationException(Response.Status.UNAUTHORIZED);
     }
 
-    account.removeDevice(deviceId);
-    accounts.update(account);
+    messages.clear(account.getUuid(), deviceId);
+    account = accounts.update(account, a -> a.removeDevice(deviceId));
+    keys.delete(account.getUuid(), deviceId);
+    // ensure any messages that came in after the first clear() are also removed
     messages.clear(account.getUuid(), deviceId);
   }
 
@@ -108,9 +114,11 @@ public class DeviceController {
   @GET
   @Path("/provisioning/code")
   @Produces(MediaType.APPLICATION_JSON)
-  public VerificationCode createDeviceToken(@Auth Account account)
+  public VerificationCode createDeviceToken(@Auth AuthenticatedAccount auth)
       throws RateLimitExceededException, DeviceLimitExceededException {
-    rateLimiters.getAllocateDeviceLimiter().validate(account.getUserLogin());
+
+    final Account account = auth.getAccount();
+    rateLimiters.getAllocateDeviceLimiter().validate(account.getUuid());
 
     int maxDeviceLimit = MAX_DEVICES;
 
@@ -122,7 +130,7 @@ public class DeviceController {
       throw new DeviceLimitExceededException(account.getDevices().size(), MAX_DEVICES);
     }
 
-    if (account.getAuthenticatedDevice().get().getId() != Device.MASTER_ID) {
+    if (auth.getAuthenticatedDevice().getId() != Device.MASTER_ID) {
       throw new WebApplicationException(Response.Status.UNAUTHORIZED);
     }
 
@@ -142,85 +150,78 @@ public class DeviceController {
   @Consumes(MediaType.APPLICATION_JSON)
   @Path("/{verification_code}")
   public DeviceResponse verifyDeviceToken(@PathParam("verification_code") String verificationCode,
-      @HeaderParam("Authorization") String authorizationHeader,
+      @HeaderParam("Authorization") BasicAuthorizationHeader authorizationHeader,
       @HeaderParam("User-Agent") String userAgent,
       @Valid AccountAttributes accountAttributes)
       throws RateLimitExceededException, DeviceLimitExceededException {
-    try {
-      AuthorizationHeader header = AuthorizationHeader.fromFullHeader(authorizationHeader);
-      String userLogin = header.getIdentifier().getUserLogin();
-      String password = header.getPassword();
 
-      if (userLogin == null)
-        throw new WebApplicationException(400);
+    String userLogin = authorizationHeader.getUsername();
+    String password = authorizationHeader.getPassword();
 
-      rateLimiters.getVerifyDeviceLimiter().validate(userLogin);
+    rateLimiters.getVerifyDeviceLimiter().validate(userLogin);
 
-      Optional<StoredVerificationCode> storedVerificationCode = pendingDevices.getCodeForUserLogin(userLogin);
+    Optional<StoredVerificationCode> storedVerificationCode = pendingDevices.getCodeForUserLogin(userLogin);
 
-      if (!storedVerificationCode.isPresent() || !storedVerificationCode.get().isValid(verificationCode, verificationCodeLifetime)) {
-        throw new WebApplicationException(Response.status(403).build());
-      }
-
-      Optional<Account> account = accounts.get(userLogin);
-
-      if (!account.isPresent()) {
-        throw new WebApplicationException(Response.status(403).build());
-      }
-
-      int maxDeviceLimit = MAX_DEVICES;
-
-      if (maxDeviceConfiguration.containsKey(account.get().getUserLogin())) {
-        maxDeviceLimit = maxDeviceConfiguration.get(account.get().getUserLogin());
-      }
-
-      if (account.get().getEnabledDeviceCount() >= maxDeviceLimit) {
-        throw new DeviceLimitExceededException(account.get().getDevices().size(), MAX_DEVICES);
-      }
-
-      final DeviceCapabilities capabilities = accountAttributes.getCapabilities();
-      if (capabilities != null && isCapabilityDowngrade(account.get(), capabilities, userAgent)) {
-        throw new WebApplicationException(Response.status(409).build());
-      }
-
-      Device device = new Device();
-      device.setName(accountAttributes.getName());
-      device.setAuthenticationCredentials(new AuthenticationCredentials(password));
-      device.setFetchesMessages(accountAttributes.getFetchesMessages());
-      device.setId(account.get().getNextDeviceId());
-      device.setRegistrationId(accountAttributes.getRegistrationId());
-      device.setLastSeen(Util.todayInMillis());
-      device.setCreated(System.currentTimeMillis());
-      device.setCapabilities(accountAttributes.getCapabilities());
-
-      account.get().addDevice(device);
-      messages.clear(account.get().getUuid(), device.getId());
-      accounts.update(account.get());
-
-      pendingDevices.remove(userLogin);
-
-      return new DeviceResponse(device.getId());
-    } catch (InvalidAuthorizationHeaderException e) {
-      logger.info("Bad Authorization Header", e);
-      throw new WebApplicationException(Response.status(401).build());
+    if (!storedVerificationCode.isPresent() || !storedVerificationCode.get().isValid(verificationCode, verificationCodeLifetime)) {
+      throw new WebApplicationException(Response.status(403).build());
     }
+
+    Optional<Account> account = accounts.get(userLogin);
+
+    if (!account.isPresent()) {
+      throw new WebApplicationException(Response.status(403).build());
+    }
+
+    int maxDeviceLimit = MAX_DEVICES;
+
+    if (maxDeviceConfiguration.containsKey(account.get().getUserLogin())) {
+      maxDeviceLimit = maxDeviceConfiguration.get(account.get().getUserLogin());
+    }
+
+    if (account.get().getEnabledDeviceCount() >= maxDeviceLimit) {
+      throw new DeviceLimitExceededException(account.get().getDevices().size(), MAX_DEVICES);
+    }
+
+    final DeviceCapabilities capabilities = accountAttributes.getCapabilities();
+    if (capabilities != null && isCapabilityDowngrade(account.get(), capabilities, userAgent)) {
+      throw new WebApplicationException(Response.status(409).build());
+    }
+
+    Device device = new Device();
+    device.setName(accountAttributes.getName());
+    device.setAuthenticationCredentials(new AuthenticationCredentials(password));
+    device.setFetchesMessages(accountAttributes.getFetchesMessages());
+    device.setRegistrationId(accountAttributes.getRegistrationId());
+    device.setLastSeen(Util.todayInMillis());
+    device.setCreated(System.currentTimeMillis());
+    device.setCapabilities(accountAttributes.getCapabilities());
+
+    accounts.update(account.get(), a -> {
+      device.setId(a.getNextDeviceId());
+      messages.clear(a.getUuid(), device.getId());
+      a.addDevice(device);
+    });
+
+    pendingDevices.remove(userLogin);
+
+    return new DeviceResponse(device.getId());
   }
 
   @Timed
   @PUT
   @Path("/unauthenticated_delivery")
-  public void setUnauthenticatedDelivery(@Auth Account account) {
-    assert (account.getAuthenticatedDevice().isPresent());
+  public void setUnauthenticatedDelivery(@Auth AuthenticatedAccount auth) {
+    assert (auth.getAuthenticatedDevice() != null);
     // Deprecated
   }
 
   @Timed
   @PUT
   @Path("/capabilities")
-  public void setCapabiltities(@Auth Account account, @Valid DeviceCapabilities capabilities) {
-    assert (account.getAuthenticatedDevice().isPresent());
-    account.getAuthenticatedDevice().get().setCapabilities(capabilities);
-    accounts.update(account);
+  public void setCapabiltities(@Auth AuthenticatedAccount auth, @Valid DeviceCapabilities capabilities) {
+    assert (auth.getAuthenticatedDevice() != null);
+    final long deviceId = auth.getAuthenticatedDevice().getId();
+    accounts.updateDevice(auth.getAccount(), deviceId, d -> d.setCapabilities(capabilities));
   }
 
   @VisibleForTesting
@@ -232,7 +233,8 @@ public class DeviceController {
 
   private boolean isCapabilityDowngrade(Account account, DeviceCapabilities capabilities, String userAgent) {
     boolean isDowngrade = false;
-    
+
+    isDowngrade |= account.isChangeUserLoginSupported() && !capabilities.isChangeUserLogin();
     isDowngrade |= account.isAnnouncementGroupSupported() && !capabilities.isAnnouncementGroup();
     isDowngrade |= account.isSenderKeySupported() && !capabilities.isSenderKey();
     isDowngrade |= account.isGv1MigrationSupported() && !capabilities.isGv1Migration();

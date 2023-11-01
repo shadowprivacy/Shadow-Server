@@ -1,15 +1,16 @@
 /*
- * Original software: Copyright 2013-2020 Signal Messenger, LLC
- * Modified software: Copyright 2019-2022 Anton Alipov, sole trader
+ * Original software: Copyright 2013-2021 Signal Messenger, LLC
+ * Modified software: Copyright 2019-2023 Anton Alipov, sole trader
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 package su.sres.shadowserver.controllers;
 
 import com.codahale.metrics.annotation.Timed;
 import com.google.common.annotations.VisibleForTesting;
+
+import su.sres.shadowserver.auth.AuthenticatedAccount;
 import su.sres.shadowserver.entities.UserRemoteConfig;
 import su.sres.shadowserver.entities.UserRemoteConfigList;
-import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.storage.RemoteConfig;
 import su.sres.shadowserver.storage.RemoteConfigsManager;
 import su.sres.shadowserver.util.Conversions;
@@ -43,90 +44,90 @@ import io.dropwizard.auth.Auth;
 @Path("/v1/config")
 public class RemoteConfigController {
 
-    private final RemoteConfigsManager remoteConfigsManager;
-    private final List<String> configAuthTokens;
-    private final Map<String, String> globalConfig;
+  private final RemoteConfigsManager remoteConfigsManager;
+  private final List<String> configAuthTokens;
+  private final Map<String, String> globalConfig;
 
-    private static final String GLOBAL_CONFIG_PREFIX = "global.";
+  private static final String GLOBAL_CONFIG_PREFIX = "global.";
 
-    public RemoteConfigController(RemoteConfigsManager remoteConfigsManager, List<String> configAuthTokens, Map<String, String> globalConfig) {
-	this.remoteConfigsManager = remoteConfigsManager;
-	this.configAuthTokens = configAuthTokens;
-	this.globalConfig = globalConfig;
+  public RemoteConfigController(RemoteConfigsManager remoteConfigsManager, List<String> configAuthTokens, Map<String, String> globalConfig) {
+    this.remoteConfigsManager = remoteConfigsManager;
+    this.configAuthTokens = configAuthTokens;
+    this.globalConfig = globalConfig;
+  }
+
+  @Timed
+  @GET
+  @Consumes(MediaType.APPLICATION_JSON)
+  @Produces(MediaType.APPLICATION_JSON)
+  public UserRemoteConfigList getAll(@Auth AuthenticatedAccount auth) {
+    try {
+      MessageDigest digest = MessageDigest.getInstance("SHA1");
+
+      final Stream<UserRemoteConfig> globalConfigStream = globalConfig.entrySet().stream().map(entry -> new UserRemoteConfig(GLOBAL_CONFIG_PREFIX + entry.getKey(), true, entry.getValue()));
+      return new UserRemoteConfigList(Stream.concat(remoteConfigsManager.getAll().stream().map(config -> {
+        final byte[] hashKey = config.getHashKey() != null ? config.getHashKey().getBytes(StandardCharsets.UTF_8)
+            : config.getName().getBytes(StandardCharsets.UTF_8);
+        boolean inBucket = isInBucket(digest, auth.getAccount().getUuid(), hashKey, config.getPercentage(), config.getUuids());
+        return new UserRemoteConfig(config.getName(), inBucket, inBucket ? config.getValue() : config.getDefaultValue());
+      }), globalConfigStream).collect(Collectors.toList()));
+    } catch (NoSuchAlgorithmException e) {
+      throw new AssertionError(e);
+    }
+  }
+
+  @Timed
+  @PUT
+  @Consumes(MediaType.APPLICATION_JSON)
+  @Produces(MediaType.APPLICATION_JSON)
+  public void set(@HeaderParam("Config-Token") String configToken, @Valid RemoteConfig config) {
+    if (!isAuthorized(configToken)) {
+      throw new WebApplicationException(Response.Status.UNAUTHORIZED);
     }
 
-    @Timed
-    @GET
-    @Consumes(MediaType.APPLICATION_JSON)
-    @Produces(MediaType.APPLICATION_JSON)
-    public UserRemoteConfigList getAll(@Auth Account account) {
-	try {
-	    MessageDigest digest = MessageDigest.getInstance("SHA1");
-
-	    final Stream<UserRemoteConfig> globalConfigStream = globalConfig.entrySet().stream().map(entry -> new UserRemoteConfig(GLOBAL_CONFIG_PREFIX + entry.getKey(), true, entry.getValue()));
-	    return new UserRemoteConfigList(Stream.concat(remoteConfigsManager.getAll().stream().map(config -> {
-		final byte[] hashKey = config.getHashKey() != null ? config.getHashKey().getBytes(StandardCharsets.UTF_8) : config.getName().getBytes(StandardCharsets.UTF_8);
-		boolean inBucket = isInBucket(digest, account.getUuid(), hashKey, config.getPercentage(), config.getUuids());
-		return new UserRemoteConfig(config.getName(), inBucket,
-			inBucket ? config.getValue() : config.getDefaultValue());
-	    }), globalConfigStream).collect(Collectors.toList()));
-	} catch (NoSuchAlgorithmException e) {
-	    throw new AssertionError(e);
-	}
+    if (config.getName().startsWith(GLOBAL_CONFIG_PREFIX)) {
+      throw new WebApplicationException(Response.Status.FORBIDDEN);
     }
 
-    @Timed
-    @PUT
-    @Consumes(MediaType.APPLICATION_JSON)
-    @Produces(MediaType.APPLICATION_JSON)
-    public void set(@HeaderParam("Config-Token") String configToken, @Valid RemoteConfig config) {
-	if (!isAuthorized(configToken)) {
-	    throw new WebApplicationException(Response.Status.UNAUTHORIZED);
-	}
+    remoteConfigsManager.set(config);
+  }
 
-	if (config.getName().startsWith(GLOBAL_CONFIG_PREFIX)) {
-	    throw new WebApplicationException(Response.Status.FORBIDDEN);
-	}
-
-	remoteConfigsManager.set(config);
+  @Timed
+  @DELETE
+  @Path("/{name}")
+  public void delete(@HeaderParam("Config-Token") String configToken, @PathParam("name") String name) {
+    if (!isAuthorized(configToken)) {
+      throw new WebApplicationException(Response.Status.UNAUTHORIZED);
     }
 
-    @Timed
-    @DELETE
-    @Path("/{name}")
-    public void delete(@HeaderParam("Config-Token") String configToken, @PathParam("name") String name) {
-	if (!isAuthorized(configToken)) {
-	    throw new WebApplicationException(Response.Status.UNAUTHORIZED);
-	}
-
-	if (name.startsWith(GLOBAL_CONFIG_PREFIX)) {
-	    throw new WebApplicationException(Response.Status.FORBIDDEN);
-	}
-
-	remoteConfigsManager.delete(name);
+    if (name.startsWith(GLOBAL_CONFIG_PREFIX)) {
+      throw new WebApplicationException(Response.Status.FORBIDDEN);
     }
 
-    @VisibleForTesting
-    public static boolean isInBucket(MessageDigest digest, UUID uid, byte[] hashKey, int configPercentage, Set<UUID> uuidsInBucket) {
-	if (uuidsInBucket.contains(uid))
-	    return true;
+    remoteConfigsManager.delete(name);
+  }
 
-	ByteBuffer bb = ByteBuffer.wrap(new byte[16]);
-	bb.putLong(uid.getMostSignificantBits());
-	bb.putLong(uid.getLeastSignificantBits());
+  @VisibleForTesting
+  public static boolean isInBucket(MessageDigest digest, UUID uid, byte[] hashKey, int configPercentage, Set<UUID> uuidsInBucket) {
+    if (uuidsInBucket.contains(uid))
+      return true;
 
-	digest.update(bb.array());
+    ByteBuffer bb = ByteBuffer.wrap(new byte[16]);
+    bb.putLong(uid.getMostSignificantBits());
+    bb.putLong(uid.getLeastSignificantBits());
 
-	byte[] hash = digest.digest(hashKey);
-	int bucket = (int) (Math.abs(Conversions.byteArrayToLong(hash)) % 100);
+    digest.update(bb.array());
 
-	return bucket < configPercentage;
-    }
+    byte[] hash = digest.digest(hashKey);
+    int bucket = (int) (Math.abs(Conversions.byteArrayToLong(hash)) % 100);
 
-    @SuppressWarnings("BooleanMethodIsAlwaysInverted")
-    private boolean isAuthorized(String configToken) {
-	return configToken != null && configAuthTokens.stream()
-		.anyMatch(authorized -> MessageDigest.isEqual(authorized.getBytes(), configToken.getBytes()));
-    }
+    return bucket < configPercentage;
+  }
+
+  @SuppressWarnings("BooleanMethodIsAlwaysInverted")
+  private boolean isAuthorized(String configToken) {
+    return configToken != null && configAuthTokens.stream()
+        .anyMatch(authorized -> MessageDigest.isEqual(authorized.getBytes(), configToken.getBytes()));
+  }
 
 }

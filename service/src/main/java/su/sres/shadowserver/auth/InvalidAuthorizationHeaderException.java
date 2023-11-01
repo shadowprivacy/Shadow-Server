@@ -5,13 +5,15 @@
  */
 package su.sres.shadowserver.auth;
 
+import javax.ws.rs.WebApplicationException;
+import javax.ws.rs.core.Response.Status;
 
-public class InvalidAuthorizationHeaderException extends Exception {
+public class InvalidAuthorizationHeaderException extends WebApplicationException {
   public InvalidAuthorizationHeaderException(String s) {
-    super(s);
+    super(s, Status.UNAUTHORIZED);
   }
 
   public InvalidAuthorizationHeaderException(Exception e) {
-    super(e);
+    super(e, Status.UNAUTHORIZED);
   }
 }

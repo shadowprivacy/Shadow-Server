@@ -1,17 +1,18 @@
 /*
- * Original software: Copyright 2013-2020 Signal Messenger, LLC
- * Modified software: Copyright 2019-2022 Anton Alipov, sole trader
+ * Original software: Copyright 2013-2021 Signal Messenger, LLC
+ * Modified software: Copyright 2019-2023 Anton Alipov, sole trader
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 package su.sres.shadowserver.controllers;
 
 import com.codahale.metrics.annotation.Timed;
+
+import su.sres.shadowserver.auth.AuthenticatedAccount;
 import su.sres.shadowserver.entities.AttachmentDescriptorV2;
 import su.sres.shadowserver.limits.RateLimiter;
 import su.sres.shadowserver.limits.RateLimiters;
 import su.sres.shadowserver.s3.PolicySigner;
 import su.sres.shadowserver.s3.PostPolicyGenerator;
-import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.util.Pair;
 
 import javax.ws.rs.GET;
@@ -40,8 +41,9 @@ public class AttachmentControllerV2 extends AttachmentControllerBase {
   @GET
   @Produces(MediaType.APPLICATION_JSON)
   @Path("/form/upload")
-  public AttachmentDescriptorV2 getAttachmentUploadForm(@Auth Account account) throws RateLimitExceededException {
-    rateLimiter.validate(account.getUserLogin());
+  public AttachmentDescriptorV2 getAttachmentUploadForm(@Auth AuthenticatedAccount auth)
+      throws RateLimitExceededException {
+    rateLimiter.validate(auth.getAccount().getUuid());
 
     ZonedDateTime        now          = ZonedDateTime.now(ZoneOffset.UTC);
     long                 attachmentId = generateAttachmentId();

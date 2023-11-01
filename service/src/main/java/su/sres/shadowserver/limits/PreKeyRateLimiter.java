@@ -49,7 +49,8 @@ public class PreKeyRateLimiter {
   public void validate(final Account account) throws RateLimitExceededException {
 
     try {
-      rateLimiters.getDailyPreKeysLimiter().validate(account.getUserLogin());
+      rateLimiters.getDailyPreKeysLimiter().validate(account.getUuid());     
+   
     } catch (final RateLimitExceededException e) {
 
       final boolean enforceLimit = dynamicConfig.isPreKeyLimitEnforced();
@@ -69,7 +70,7 @@ public class PreKeyRateLimiter {
 
   public void handleRateLimitReset(final Account account) {
 
-    rateLimiters.getDailyPreKeysLimiter().clear(account.getUserLogin());
+    rateLimiters.getDailyPreKeysLimiter().clear(account.getUuid());
 
     Metrics.counter(RATE_LIMIT_RESET_COUNTER_NAME, "countryCode", Util.getCountryCode(account.getUserLogin()))
         .increment();

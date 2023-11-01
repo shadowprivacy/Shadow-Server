@@ -1,6 +1,6 @@
 /*
- * Original software: Copyright 2013-2020 Signal Messenger, LLC
- * Modified software: Copyright 2019-2022 Anton Alipov, sole trader
+ * Original software: Copyright 2013-2021 Signal Messenger, LLC
+ * Modified software: Copyright 2019-2023 Anton Alipov, sole trader
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 package su.sres.shadowserver.storage;
@@ -13,9 +13,10 @@ package su.sres.shadowserver.storage;
  */
 public interface MessageAvailabilityListener {
 
-    void handleNewMessagesAvailable();
-    
-    void handleNewEphemeralMessageAvailable();
-        
-    void handleMessagesPersisted();
+  void handleNewMessagesAvailable();
+
+  @Deprecated
+  void handleNewEphemeralMessageAvailable();
+
+  void handleMessagesPersisted();
 }

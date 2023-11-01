@@ -1,6 +1,6 @@
 /*
- * Original software: Copyright 2013-2020 Signal Messenger, LLC
- * Modified software: Copyright 2019-2022 Anton Alipov, sole trader
+ * Original software: Copyright 2013-2021 Signal Messenger, LLC
+ * Modified software: Copyright 2019-2023 Anton Alipov, sole trader
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 package su.sres.shadowserver.auth;
@@ -10,32 +10,31 @@ import java.util.Optional;
 import io.dropwizard.auth.Authenticator;
 import io.dropwizard.auth.basic.BasicCredentials;
 import io.micrometer.core.instrument.Metrics;
-import io.micrometer.core.instrument.Tag;
-
-import static com.codahale.metrics.MetricRegistry.name;
-
 import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.storage.AccountsManager;
 
-public class AccountAuthenticator extends BaseAccountAuthenticator implements Authenticator<BasicCredentials, Account> {
+import static com.codahale.metrics.MetricRegistry.name;
 
-    private static final String AUTHENTICATION_COUNTER_NAME = name(AccountAuthenticator.class, "authenticate");
-    private static final String GV2_CAPABLE_TAG_NAME = "gv1Migration";
+public class AccountAuthenticator extends BaseAccountAuthenticator implements
+Authenticator<BasicCredentials, AuthenticatedAccount> {
+  
+  private static final String AUTHENTICATION_COUNTER_NAME = name(AccountAuthenticator.class, "authenticate");
 
-    public AccountAuthenticator(AccountsManager accountsManager) {
-	super(accountsManager);
-    }
+  public AccountAuthenticator(AccountsManager accountsManager) {
+    super(accountsManager);
+  }
 
-    @Override
-    public Optional<Account> authenticate(BasicCredentials basicCredentials) {
-	final Optional<Account> maybeAccount = super.authenticate(basicCredentials, true);
+  @Override
+  public Optional<AuthenticatedAccount> authenticate(BasicCredentials basicCredentials) {
+    final Optional<AuthenticatedAccount> maybeAuthenticatedAccount = super.authenticate(basicCredentials, true);
 
-	// TODO Remove this temporary counter when we can replace it with more generic
-	// feature adoption system
-	maybeAccount.ifPresent(account -> {
-	    Metrics.counter(AUTHENTICATION_COUNTER_NAME, GV2_CAPABLE_TAG_NAME, String.valueOf(account.isGv1MigrationSupported())).increment();
-	});
+    // TODO Remove after announcement groups have launched
+    maybeAuthenticatedAccount.ifPresent(authenticatedAccount ->
+        Metrics.counter(AUTHENTICATION_COUNTER_NAME,
+            "supportsAnnouncementGroups",
+            String.valueOf(authenticatedAccount.getAccount().isAnnouncementGroupSupported()))
+            .increment());
 
-	return maybeAccount;
-    }
+    return maybeAuthenticatedAccount;
+  }
 }

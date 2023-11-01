@@ -1,3 +1,8 @@
+/*
+ * Copyright 2013-2021 Signal Messenger, LLC
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
 package su.sres.shadowserver.storage;
 
 import static com.codahale.metrics.MetricRegistry.name;
@@ -17,9 +22,13 @@ import software.amazon.awssdk.services.dynamodb.model.DeleteItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.GetItemResponse;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.ReturnValue;
 import software.amazon.awssdk.services.dynamodb.model.ReturnValuesOnConditionCheckFailure;
+import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
 import software.amazon.awssdk.services.dynamodb.model.TransactionCanceledException;
+import software.amazon.awssdk.services.dynamodb.model.TransactionConflictException;
 import software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.UpdateItemResponse;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -49,7 +58,8 @@ public class AccountsScyllaDb extends AbstractScyllaDbStore implements AccountSt
   // account, serialized to JSON
   static final String ATTR_ACCOUNT_DATA = "D";
 
-  static final String ATTR_MIGRATION_VERSION = "V";
+  // internal version for optimistic locking
+  static final String ATTR_VERSION = "V";
   static final String ATTR_ACCOUNT_VD = "VD";
 
   static final String KEY_PARAMETER_NAME = "PN";
@@ -73,7 +83,10 @@ public class AccountsScyllaDb extends AbstractScyllaDbStore implements AccountSt
   private static final Timer UPDATE_TIMER = Metrics.timer(name(AccountsScyllaDb.class, "update"));
   private static final Timer GET_BY_USER_LOGIN_TIMER = Metrics.timer(name(AccountsScyllaDb.class, "getByUserLogin"));
   private static final Timer GET_BY_UUID_TIMER = Metrics.timer(name(AccountsScyllaDb.class, "getByUuid"));
+  private static final Timer GET_ALL_FROM_START_TIMER = Metrics.timer(name(AccountsScyllaDb.class, "getAllFrom"));
+  private static final Timer GET_ALL_FROM_OFFSET_TIMER = Metrics.timer(name(AccountsScyllaDb.class, "getAllFromOffset"));
   private static final Timer DELETE_TIMER = Metrics.timer(name(AccountsScyllaDb.class, "delete"));
+  private static final Timer DELETE_RECENTLY_DELETED_UUIDS_TIMER = Metrics.timer(name(AccountsScyllaDb.class, "deleteRecentlyDeletedUuids"));
 
   private final Logger logger = LoggerFactory.getLogger(AccountsScyllaDb.class);
 
@@ -129,9 +142,17 @@ public class AccountsScyllaDb extends AbstractScyllaDbStore implements AccountSt
           Optional<Account> exAcc = get(account.getUserLogin());
           UUID uuid = exAcc.get().getUuid();
           account.setUuid(uuid);
+
+          final int version = exAcc.get().getVersion();
+          account.setVersion(version);
+
           update(account);
 
           return false;
+
+        } catch (TransactionConflictException e) {
+          // this should only happen during concurrent update()s for an account migration
+          throw new ContestedOptimisticLockException();
         }
 
         client.putItem(miscPut);
@@ -152,7 +173,7 @@ public class AccountsScyllaDb extends AbstractScyllaDbStore implements AccountSt
             ATTR_ACCOUNT_USER_LOGIN, AttributeValues.fromString(account.getUserLogin()),
             ATTR_ACCOUNT_VD, AttributeValues.fromString("default"),
             ATTR_ACCOUNT_DATA, AttributeValues.fromByteArray(SystemMapper.getMapper().writeValueAsBytes(account)),
-            ATTR_MIGRATION_VERSION, AttributeValues.fromInt(account.getScyllaDbMigrationVersion())))
+            ATTR_VERSION, AttributeValues.fromInt(account.getVersion())))
         .build();
   }
 
@@ -184,28 +205,50 @@ public class AccountsScyllaDb extends AbstractScyllaDbStore implements AccountSt
 
   // TODO: VD change
   @Override
-  public void update(Account account) {
+  public void update(Account account) throws ContestedOptimisticLockException {
     UPDATE_TIMER.record(() -> {
       UpdateItemRequest updateItemRequest;
       try {
         updateItemRequest = UpdateItemRequest.builder()
             .tableName(accountsTableName)
             .key(Map.of(KEY_ACCOUNT_UUID, AttributeValues.fromUUID(account.getUuid())))
-            .updateExpression("SET #data = :data, #version = :version")
-            .conditionExpression("attribute_exists(#number)")
+            .updateExpression("SET #data = :data ADD #version :version_increment")
+            .conditionExpression("attribute_exists(#number) AND #version = :version")
             .expressionAttributeNames(Map.of("#number", ATTR_ACCOUNT_USER_LOGIN,
                 "#data", ATTR_ACCOUNT_DATA,
-                "#version", ATTR_MIGRATION_VERSION))
+                "#version", ATTR_VERSION))
             .expressionAttributeValues(Map.of(
                 ":data", AttributeValues.fromByteArray(SystemMapper.getMapper().writeValueAsBytes(account)),
-                ":version", AttributeValues.fromInt(account.getScyllaDbMigrationVersion())))
+                ":version", AttributeValues.fromInt(account.getVersion()),
+                ":version_increment", AttributeValues.fromInt(1)))
+            .returnValues(ReturnValue.UPDATED_NEW)
             .build();
 
       } catch (JsonProcessingException e) {
         throw new IllegalArgumentException(e);
       }
 
-      client.updateItem(updateItemRequest);
+      try {
+        UpdateItemResponse response = client.updateItem(updateItemRequest);
+
+        account.setVersion(AttributeValues.getInt(response.attributes(), "V", account.getVersion() + 1));
+      } catch (final TransactionConflictException e) {
+
+        throw new ContestedOptimisticLockException();
+
+      } catch (final ConditionalCheckFailedException e) {
+
+        // the exception doesn’t give details about which condition failed,
+        // but we can infer it was an optimistic locking failure if the UUID is known
+        throw get(account.getUuid()).isPresent() ? new ContestedOptimisticLockException() : e;
+      } catch (final Exception e) {
+        if (!(e instanceof ContestedOptimisticLockException)) {
+          // the Scylla account now lags the Postgres account version. Put it in the migration retry table so that it will
+          // get updated faster—otherwise it will be stale until the accounts crawler runs again
+          migrationRetryAccounts.put(account.getUuid());
+        }
+      throw e;
+      }
     });
   }
 
@@ -243,12 +286,40 @@ public class AccountsScyllaDb extends AbstractScyllaDbStore implements AccountSt
 
   // TODO: getAll(offset. length)
 
+  public AccountCrawlChunk getAllFrom(final UUID from, final int maxCount, final int pageSize) {
+    final ScanRequest.Builder scanRequestBuilder = ScanRequest.builder()
+        .limit(pageSize)
+        .exclusiveStartKey(Map.of(KEY_ACCOUNT_UUID, AttributeValues.fromUUID(from)));
+
+    return scanForChunk(scanRequestBuilder, maxCount, GET_ALL_FROM_OFFSET_TIMER);
+  }
+
+  public AccountCrawlChunk getAllFromStart(final int maxCount, final int pageSize) {
+    final ScanRequest.Builder scanRequestBuilder = ScanRequest.builder()
+        .limit(pageSize);
+
+    return scanForChunk(scanRequestBuilder, maxCount, GET_ALL_FROM_START_TIMER);
+  }
+
+  private AccountCrawlChunk scanForChunk(final ScanRequest.Builder scanRequestBuilder, final int maxCount, final Timer timer) {
+
+    scanRequestBuilder.tableName(accountsTableName);
+
+    final List<Account> accounts = timer.record(() -> scan(scanRequestBuilder.build(), maxCount)
+        .stream()
+        .map(AccountsScyllaDb::fromItem)
+        .collect(Collectors.toList()));
+
+    return new AccountCrawlChunk(accounts, accounts.size() > 0 ? accounts.get(accounts.size() - 1).getUuid() : null);
+  }
+
   @Override
   public void delete(UUID uuid, long directoryVersion) {
-    DELETE_TIMER.record(() -> {
+    DELETE_TIMER.record(() -> delete(uuid, true, directoryVersion, true));
+  }
 
-      delete(uuid, true, directoryVersion, true);
-    });
+  public void deleteInvalidMigration(UUID uuid, long directoryVersion) {
+    DELETE_TIMER.record(() -> delete(uuid, false, directoryVersion, false));
   }
 
   private void delete(UUID uuid, boolean saveInDeletedAccountsTable, long directoryVersion, boolean updateDirectoryVersion) {
@@ -296,29 +367,36 @@ public class AccountsScyllaDb extends AbstractScyllaDbStore implements AccountSt
 
     final List<CompletableFuture<?>> futures = accounts.stream()
         .map(this::migrate)
-        .map(f -> f.whenComplete((migrated, e) -> {
+        .map(f -> f.whenCompleteAsync((migrated, e) -> {
           if (e == null) {
             MIGRATED_COUNTER.increment(migrated ? 1 : 0);
           } else {
             ERROR_COUNTER.increment();
           }
-        }))
+        }, migrationThreadPool))
         .collect(Collectors.toList());
 
     CompletableFuture<Void> migrationBatch = CompletableFuture.allOf(futures.toArray(new CompletableFuture[] {}));
 
-    return migrationBatch.whenComplete((result, exception) -> deleteRecentlyDeletedUuids());
+    return migrationBatch.whenCompleteAsync((result, exception) -> {
+      if (exception != null) {
+        logger.warn("Exception migrating batch", exception);
+      }
+      deleteRecentlyDeletedUuids();
+    }, migrationThreadPool);
   }
 
   public void deleteRecentlyDeletedUuids() {
+    DELETE_RECENTLY_DELETED_UUIDS_TIMER.record(() -> {
 
-    final List<UUID> recentlyDeletedUuids = migrationDeletedAccounts.getRecentlyDeletedUuids();
+      final List<UUID> recentlyDeletedUuids = migrationDeletedAccounts.getRecentlyDeletedUuids();
 
-    for (UUID recentlyDeletedUuid : recentlyDeletedUuids) {
-      delete(recentlyDeletedUuid, false, -1L, false);
-    }
+      for (UUID recentlyDeletedUuid : recentlyDeletedUuids) {
+        delete(recentlyDeletedUuid, false, -1L, false);
+      }
 
-    migrationDeletedAccounts.delete(recentlyDeletedUuids);
+      migrationDeletedAccounts.delete(recentlyDeletedUuids);
+    });
   }
 
   public CompletableFuture<Boolean> migrate(Account account) {
@@ -329,9 +407,9 @@ public class AccountsScyllaDb extends AbstractScyllaDbStore implements AccountSt
           .conditionExpression("attribute_not_exists(#uuid) OR (attribute_exists(#uuid) AND #version < :version)")
           .expressionAttributeNames(Map.of(
               "#uuid", KEY_ACCOUNT_UUID,
-              "#version", ATTR_MIGRATION_VERSION))
+              "#version", ATTR_VERSION))
           .expressionAttributeValues(Map.of(
-              ":version", AttributeValues.fromInt(account.getScyllaDbMigrationVersion()))));
+              ":version", AttributeValues.fromInt(account.getVersion()))));
 
       final CompletableFuture<Boolean> resultFuture1 = new CompletableFuture<>();
       final CompletableFuture<Boolean> resultFuture2 = new CompletableFuture<>();
@@ -358,7 +436,7 @@ public class AccountsScyllaDb extends AbstractScyllaDbStore implements AccountSt
           logger.error("Could not store account {}", account.getUuid());
         }
         resultFuture1.completeExceptionally(exception);
-      });
+      }, migrationThreadPool);
 
       asyncClient.putItem(userLoginConstraintPut).whenCompleteAsync((result, exception) -> {
         if (result != null) {
@@ -379,7 +457,7 @@ public class AccountsScyllaDb extends AbstractScyllaDbStore implements AccountSt
           logger.error("Could not store account {}", account.getUuid());
         }
         resultFuture2.completeExceptionally(exception);
-      });
+      }, migrationThreadPool);
 
       combinedFuture.complete(resultFuture1.join() && resultFuture2.join());
 
@@ -404,11 +482,20 @@ public class AccountsScyllaDb extends AbstractScyllaDbStore implements AccountSt
       account.setUserLogin(item.get(ATTR_ACCOUNT_USER_LOGIN).s());
       // account.setVD(item.get(ATTR_ACCOUNT_VD).s());
       account.setUuid(UUIDUtil.fromByteBuffer(item.get(KEY_ACCOUNT_UUID).b().asByteBuffer()));
+      account.setVersion(Integer.parseInt(item.get(ATTR_VERSION).n()));
 
       return account;
 
     } catch (IOException e) {
       throw new RuntimeException("Could not read stored account data", e);
+    }
+  }
+  
+  void putUuidForMigrationRetry(final UUID uuid) {
+    try {
+      migrationRetryAccounts.put(uuid);
+    } catch (final Exception e) {
+      logger.error("Failed to store for retry: {}", uuid, e);
     }
   }
 }

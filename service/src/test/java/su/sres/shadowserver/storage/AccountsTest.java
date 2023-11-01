@@ -173,6 +173,12 @@ public class AccountsTest {
     device.setName("foobar");
 
     accounts.update(account);
+    
+    account.setProfileName("profileName");
+
+    accounts.update(account);
+
+    assertThat(account.getVersion()).isEqualTo(2);
 
     Optional<Account> retrieved = accounts.get("johndoe");
 
@@ -199,19 +205,19 @@ public class AccountsTest {
 
     users.sort((account, t1) -> UUIDComparator.staticCompare(account.getUuid(), t1.getUuid()));
 
-    List<Account> retrieved = accounts.getAllFrom(10);
-    assertThat(retrieved.size()).isEqualTo(10);
+    AccountCrawlChunk retrieved = accounts.getAllFrom(10);
+    assertThat(retrieved.getAccounts().size()).isEqualTo(10);
 
-    for (int i = 0; i < retrieved.size(); i++) {
-      verifyStoredState(users.get(i).getUserLogin(), users.get(i).getUuid(), retrieved.get(i), users.get(i));
+    for (int i=0;i<retrieved.getAccounts().size();i++) {
+      verifyStoredState(users.get(i).getUserLogin(), users.get(i).getUuid(), retrieved.getAccounts().get(i), users.get(i));
     }
 
     for (int j = 0; j < 9; j++) {
-      retrieved = accounts.getAllFrom(retrieved.get(9).getUuid(), 10);
-      assertThat(retrieved.size()).isEqualTo(10);
+      retrieved = accounts.getAllFrom(retrieved.getLastUuid().orElseThrow(), 10);
+      assertThat(retrieved.getAccounts().size()).isEqualTo(10);
 
-      for (int i = 0; i < retrieved.size(); i++) {
-        verifyStoredState(users.get(10 + (j * 10) + i).getUserLogin(), users.get(10 + (j * 10) + i).getUuid(), retrieved.get(i), users.get(10 + (j * 10) + i));
+      for (int i=0;i<retrieved.getAccounts().size();i++) {
+        verifyStoredState(users.get(10 + (j * 10) + i).getUserLogin(), users.get(10 + (j * 10) + i).getUuid(), retrieved.getAccounts().get(i), users.get(10 + (j * 10) + i));
       }
     }
   }
@@ -333,8 +339,7 @@ public class AccountsTest {
     Random random = new Random(System.currentTimeMillis());
     SignedPreKey signedPreKey = new SignedPreKey(random.nextInt(), "testPublicKey-" + random.nextInt(), "testSignature-" + random.nextInt());
     return new Device(id, "testName-" + random.nextInt(), "testAuthToken-" + random.nextInt(), "testSalt-" + random.nextInt(), "testGcmId-" + random.nextInt(), "testApnId-" + random.nextInt(), "testVoipApnId-" + random.nextInt(), random.nextBoolean(), random.nextInt(), signedPreKey, random.nextInt(), random.nextInt(), "testUserAgent-" + random.nextInt() , 0, new Device.DeviceCapabilities(random.nextBoolean(), random.nextBoolean(), random.nextBoolean(), random.nextBoolean(), random.nextBoolean(), random.nextBoolean(),
-        random.nextBoolean(), random.nextBoolean()));
-
+        random.nextBoolean(), random.nextBoolean(), random.nextBoolean()));
   }
 
   private Account generateAccount(String number, UUID uuid) {
@@ -373,6 +378,7 @@ public class AccountsTest {
     assertThat(result.getUserLogin()).isEqualTo(number);
     assertThat(result.getLastSeen()).isEqualTo(expecting.getLastSeen());
     assertThat(result.getUuid()).isEqualTo(uuid);
+    assertThat(result.getVersion()).isEqualTo(expecting.getVersion());
     assertThat(Arrays.equals(result.getUnidentifiedAccessKey().get(), expecting.getUnidentifiedAccessKey().get())).isTrue();
 
     for (Device expectingDevice : expecting.getDevices()) {

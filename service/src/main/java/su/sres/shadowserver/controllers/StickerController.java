@@ -1,10 +1,11 @@
 /*
- * Original software: Copyright 2013-2020 Signal Messenger, LLC
- * Modified software: Copyright 2019-2022 Anton Alipov, sole trader
+ * Original software: Copyright 2013-2021 Signal Messenger, LLC
+ * Modified software: Copyright 2019-2023 Anton Alipov, sole trader
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 package su.sres.shadowserver.controllers;
 
+import su.sres.shadowserver.auth.AuthenticatedAccount;
 import su.sres.shadowserver.entities.StickerPackFormUploadAttributes;
 import su.sres.shadowserver.entities.StickerPackFormUploadAttributes.StickerPackFormUploadItem;
 import su.sres.shadowserver.limits.RateLimiters;
@@ -46,10 +47,10 @@ public class StickerController {
     @GET
     @Produces(MediaType.APPLICATION_JSON)
     @Path("/pack/form/{count}")
-    public StickerPackFormUploadAttributes getStickersForm(@Auth Account account,
+    public StickerPackFormUploadAttributes getStickersForm(@Auth AuthenticatedAccount auth,
 	    @PathParam("count") @Min(1) @Max(201) int stickerCount)
 	    throws RateLimitExceededException {
-	rateLimiters.getStickerPackLimiter().validate(account.getUserLogin());
+      rateLimiters.getStickerPackLimiter().validate(auth.getAccount().getUuid());
 
 	ZonedDateTime now = ZonedDateTime.now(ZoneOffset.UTC);
 	String packId = generatePackId();

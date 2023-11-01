@@ -418,5 +418,11 @@
   <changeSet id="25" author="2A">
     <sql>ALTER TABLE remote_config ALTER COLUMN uuids TYPE UUID[] USING array[uuids]::UUID[];</sql>
   </changeSet>
+  
+  <changeSet id="26" author="chris">
+    <addColumn tableName="accounts">
+      <column name="version" type="int" defaultValue="0"/>
+    </addColumn>
+  </changeSet>
 
 </databaseChangeLog>

@@ -1,6 +1,6 @@
 /*
- * Original software: Copyright 2013-2020 Signal Messenger, LLC
- * Modified software: Copyright 2019-2022 Anton Alipov, sole trader
+ * Original software: Copyright 2013-2021 Signal Messenger, LLC
+ * Modified software: Copyright 2019-2023 Anton Alipov, sole trader
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 package su.sres.shadowserver.controllers;
@@ -14,10 +14,11 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableSet;
 import org.glassfish.jersey.test.grizzly.GrizzlyWebTestContainerFactory;
-import org.junit.Before;
-import org.junit.ClassRule;
-import org.junit.Test;
-import su.sres.shadowserver.auth.DisabledPermittedAccount;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import su.sres.shadowserver.auth.AuthenticatedAccount;
+import su.sres.shadowserver.auth.DisabledPermittedAuthenticatedAccount;
 import su.sres.shadowserver.entities.StickerPackFormUploadAttributes;
 import su.sres.shadowserver.limits.RateLimiter;
 import su.sres.shadowserver.limits.RateLimiters;
@@ -30,30 +31,33 @@ import java.io.IOException;
 import java.util.Base64;
 
 import io.dropwizard.auth.PolymorphicAuthValueFactoryProvider;
-import io.dropwizard.testing.junit.ResourceTestRule;
+import io.dropwizard.testing.junit5.DropwizardExtensionsSupport;
+import io.dropwizard.testing.junit5.ResourceExtension;
 
-public class StickerControllerTest {
+@ExtendWith(DropwizardExtensionsSupport.class)
+class StickerControllerTest {
 
-  private static RateLimiter rateLimiter = mock(RateLimiter.class);
-  private static RateLimiters rateLimiters = mock(RateLimiters.class);
+  private static final RateLimiter rateLimiter = mock(RateLimiter.class);
+  private static final RateLimiters rateLimiters = mock(RateLimiters.class);
 
-  @ClassRule
-  public static final ResourceTestRule resources = ResourceTestRule.builder().addProvider(AuthHelper.getAuthFilter())
-      .addProvider(new PolymorphicAuthValueFactoryProvider.Binder<>(
-          ImmutableSet.of(Account.class, DisabledPermittedAccount.class)))
-      .setMapper(SystemMapper.getMapper()).setTestContainerFactory(new GrizzlyWebTestContainerFactory())
-      .addResource(new StickerController(rateLimiters, "foo", "bar", "us-east-1", "mybucket")).build();
+  private static final ResourceExtension resources = ResourceExtension.builder()
+      .addProvider(AuthHelper.getAuthFilter())
+      .addProvider(new PolymorphicAuthValueFactoryProvider.Binder<>(ImmutableSet.of(AuthenticatedAccount.class, DisabledPermittedAuthenticatedAccount.class)))
+      .setMapper(SystemMapper.getMapper())
+      .setTestContainerFactory(new GrizzlyWebTestContainerFactory())
+      .addResource(new StickerController(rateLimiters, "foo", "bar", "us-east-1", "mybucket"))
+      .build();
 
-  @Before
-  public void setup() {
+  @BeforeEach
+  void setup() {
     when(rateLimiters.getStickerPackLimiter()).thenReturn(rateLimiter);
   }
 
   @Test
-  public void testCreatePack() throws RateLimitExceededException, IOException {
+  void testCreatePack() throws RateLimitExceededException, IOException {
     StickerPackFormUploadAttributes attributes = resources.getJerseyTest().target("/v1/sticker/pack/form/10")
         .request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID, AuthHelper.VALID_PASSWORD))
         .get(StickerPackFormUploadAttributes.class);
 
     assertThat(attributes.getPackId()).isNotNull();
@@ -85,13 +89,13 @@ public class StickerControllerTest {
     }
 
     verify(rateLimiters, times(1)).getStickerPackLimiter();
-    verify(rateLimiter, times(1)).validate(eq(AuthHelper.VALID_NUMBER));
+    verify(rateLimiter, times(1)).validate(AuthHelper.VALID_UUID);
   }
 
   @Test
-  public void testCreateTooLargePack() throws Exception {
+  void testCreateTooLargePack() throws Exception {
     Response response = resources.getJerseyTest().target("/v1/sticker/pack/form/202").request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID, AuthHelper.VALID_PASSWORD))
         .get();
 
     assertThat(response.getStatus()).isEqualTo(400);

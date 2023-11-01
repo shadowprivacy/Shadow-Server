@@ -7,7 +7,7 @@ public interface AccountStore {
 
   boolean create(Account account, long directoryVersion);
 
-  void update(Account account);
+  void update(Account account) throws ContestedOptimisticLockException;
     
   Optional<Account> get(String userLogin);
 

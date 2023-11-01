@@ -5,6 +5,7 @@
  */
 package su.sres.shadowserver.entities;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.util.UUID;
@@ -12,23 +13,34 @@ import java.util.UUID;
 public class AccountCreationResult {
 
   @JsonProperty
-  private UUID uuid;
-  
+  private final UUID uuid;
+
   @JsonProperty
-  private boolean storageCapable;
+  private final String userLogin;
 
-  public AccountCreationResult() {}
+  @JsonProperty
+  private final boolean storageCapable;
 
-  public AccountCreationResult(UUID uuid, boolean storageCapable) {
-	    this.uuid           = uuid;
-	    this.storageCapable = storageCapable;
+  @JsonCreator
+  public AccountCreationResult(
+      @JsonProperty("uuid") final UUID uuid,
+      @JsonProperty("number") final String userLogin,
+      @JsonProperty("storageCapable") final boolean storageCapable) {
+
+    this.uuid = uuid;
+    this.userLogin = userLogin;
+    this.storageCapable = storageCapable;
   }
 
   public UUID getUuid() {
     return uuid;
   }
   
+  public String getUserLogin() {
+    return userLogin;
+  }
+
   public boolean isStorageCapable() {
-	    return storageCapable;
+    return storageCapable;
   }
 }

@@ -12,6 +12,8 @@ import com.google.common.annotations.VisibleForTesting;
 
 import org.signal.zkgroup.profiles.ProfileKeyCredentialResponse;
 
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 public class Profile {
@@ -50,6 +52,9 @@ public class Profile {
   private UUID uuid;
 
   @JsonProperty
+  private List<Badge> badges;
+
+  @JsonProperty
   @JsonSerialize(using = ProfileKeyCredentialResponseAdapter.Serializing.class)
   @JsonDeserialize(using = ProfileKeyCredentialResponseAdapter.Deserializing.class)
   private ProfileKeyCredentialResponse credential;
@@ -60,7 +65,7 @@ public class Profile {
   public Profile(
         String name, String about, String aboutEmoji, String avatar, String paymentAddress, String identityKey,
         String unidentifiedAccess, boolean unrestrictedUnidentifiedAccess, UserCapabilities capabilities, String username,
-        UUID uuid, ProfileKeyCredentialResponse credential) {
+        UUID uuid, List<Badge> badges, ProfileKeyCredentialResponse credential) {
     this.name = name;
     this.about = about;
     this.aboutEmoji = aboutEmoji;
@@ -72,6 +77,7 @@ public class Profile {
 	this.capabilities = capabilities;
 	this.username = username;
 	this.uuid = uuid;	
+	this.badges = badges;
 	this.credential = credential;
     }
 
@@ -125,5 +131,9 @@ public class Profile {
   @VisibleForTesting
   public UUID getUuid() {
     return uuid;
+  }
+
+  public List<Badge> getBadges() {
+    return badges;
   }
 }

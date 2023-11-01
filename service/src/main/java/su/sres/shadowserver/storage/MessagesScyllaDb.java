@@ -11,8 +11,6 @@ import software.amazon.awssdk.services.dynamodb.model.QueryRequest;
 import software.amazon.awssdk.services.dynamodb.model.ReturnValue;
 import software.amazon.awssdk.services.dynamodb.model.WriteRequest;
 
-import org.apache.commons.lang3.StringUtils;
-
 import com.google.common.collect.ImmutableMap;
 
 import su.sres.shadowserver.entities.MessageProtos;
@@ -130,43 +128,19 @@ public class MessagesScyllaDb extends AbstractScyllaDbStore {
           .limit(numberOfMessagesToFetch)
           .build();
       List<OutgoingMessageEntity> messageEntities = new ArrayList<>(numberOfMessagesToFetch);
-      for (Map<String, AttributeValue> message : db().query(queryRequest).items()) {
+      for (Map<String, AttributeValue> message : db().queryPaginator(queryRequest).items()) {
         messageEntities.add(convertItemToOutgoingMessageEntity(message));
+        if (messageEntities.size() == numberOfMessagesToFetch) {
+          // queryPaginator() uses limit() as the page size, not as an absolute limit
+          // …but a page might be smaller than limit, because a page is capped at 1 MB
+          break;
+        }
       }
       return messageEntities;
     });
-  }
+  }  
 
-  public Optional<OutgoingMessageEntity> deleteMessageByDestinationAndSourceAndTimestamp(final UUID destinationAccountUuid, final long destinationDeviceId, final String source, final long timestamp) {
-    return deleteBySourceAndTimestamp.record(() -> {
-      if (StringUtils.isEmpty(source)) {
-        throw new IllegalArgumentException("must specify a source");
-      }
-
-      final AttributeValue partitionKey = convertPartitionKey(destinationAccountUuid);
-      final QueryRequest queryRequest = QueryRequest.builder()
-          .tableName(tableName)
-          .projectionExpression(KEY_SORT)
-          .consistentRead(true)
-          .keyConditionExpression("#part = :part AND begins_with ( #sort , :sortprefix )")
-          .filterExpression("#source = :source AND #timestamp = :timestamp")
-          .expressionAttributeNames(Map.of(
-              "#part", KEY_PARTITION,
-              "#sort", KEY_SORT,
-              "#source", KEY_SOURCE,
-              "#timestamp", KEY_TIMESTAMP))
-          .expressionAttributeValues(Map.of(
-              ":part", partitionKey,
-              ":sortprefix", convertDestinationDeviceIdToSortKeyPrefix(destinationDeviceId),
-              ":source", AttributeValues.fromString(source),
-              ":timestamp", AttributeValues.fromLong(timestamp)))
-          .build();
-
-      return deleteItemsMatchingQueryAndReturnFirstOneActuallyDeleted(partitionKey, queryRequest);
-    });
-  }
-
-  public Optional<OutgoingMessageEntity> deleteMessageByDestinationAndGuid(final UUID destinationAccountUuid, final long destinationDeviceId, final UUID messageUuid) {
+  public Optional<OutgoingMessageEntity> deleteMessageByDestinationAndGuid(final UUID destinationAccountUuid, final UUID messageUuid) {
     return deleteByGuid.record(() -> {
       final AttributeValue partitionKey = convertPartitionKey(destinationAccountUuid);
       final QueryRequest queryRequest = QueryRequest.builder()
@@ -189,7 +163,7 @@ public class MessagesScyllaDb extends AbstractScyllaDbStore {
   @Nonnull
   private Optional<OutgoingMessageEntity> deleteItemsMatchingQueryAndReturnFirstOneActuallyDeleted(AttributeValue partitionKey, QueryRequest queryRequest) {
     Optional<OutgoingMessageEntity> result = Optional.empty();
-    for (Map<String, AttributeValue> item : db().query(queryRequest).items()) {
+    for (Map<String, AttributeValue> item : db().queryPaginator(queryRequest).items()) {
       final byte[] rangeKeyValue = item.get(KEY_SORT).b().asByteArray();
       DeleteItemRequest.Builder deleteItemRequest = DeleteItemRequest.builder()
           .tableName(tableName)
@@ -254,7 +228,7 @@ public class MessagesScyllaDb extends AbstractScyllaDbStore {
   }
 
   private void deleteRowsMatchingQuery(AttributeValue partitionKey, QueryRequest querySpec) {
-    writeInBatches(db().query(querySpec).items(), (itemBatch) -> deleteItems(partitionKey, itemBatch));
+    writeInBatches(db().queryPaginator(querySpec).items(), itemBatch -> deleteItems(partitionKey, itemBatch));
   }
 
   private void deleteItems(AttributeValue partitionKey, List<Map<String, AttributeValue>> items) {

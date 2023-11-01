@@ -13,6 +13,9 @@ import javax.validation.constraints.Min;
 import javax.validation.constraints.NotNull;
 
 import java.time.Duration;
+import java.util.Collections;
+import java.util.List;
+import java.util.stream.Collectors;
 
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
 
@@ -39,6 +42,8 @@ public class CircuitBreakerConfiguration {
   @Min(1)
   private long waitDurationInOpenStateInSeconds = 10;
 
+  @JsonProperty
+  private List<String> ignoredExceptions = Collections.emptyList();
 
   public int getFailureRateThreshold() {
     return failureRateThreshold;
@@ -54,6 +59,18 @@ public class CircuitBreakerConfiguration {
 
   public long getWaitDurationInOpenStateInSeconds() {
     return waitDurationInOpenStateInSeconds;
+  }
+
+  public List<Class> getIgnoredExceptions() {
+    return ignoredExceptions.stream()
+        .map(name -> {
+          try {
+            return Class.forName(name);
+          } catch (final ClassNotFoundException e) {
+            throw new RuntimeException(e);
+          }
+        })
+        .collect(Collectors.toList());
   }
 
   @VisibleForTesting
@@ -75,14 +92,19 @@ public class CircuitBreakerConfiguration {
   public void setWaitDurationInOpenStateInSeconds(int seconds) {
     this.waitDurationInOpenStateInSeconds = seconds;
   }
-  
+
+  @VisibleForTesting
+  public void setIgnoredExceptions(final List<String> ignoredExceptions) {
+    this.ignoredExceptions = ignoredExceptions;
+  }
 
   public CircuitBreakerConfig toCircuitBreakerConfig() {
     return CircuitBreakerConfig.custom()
-                        .failureRateThreshold(getFailureRateThreshold())
-                        .ringBufferSizeInHalfOpenState(getRingBufferSizeInHalfOpenState())
-                        .waitDurationInOpenState(Duration.ofSeconds(getWaitDurationInOpenStateInSeconds()))
-                        .ringBufferSizeInClosedState(getRingBufferSizeInClosedState())
-                        .build();
+        .failureRateThreshold(getFailureRateThreshold())
+        .ignoreExceptions(getIgnoredExceptions().toArray(new Class[0]))
+        .ringBufferSizeInHalfOpenState(getRingBufferSizeInHalfOpenState())
+        .waitDurationInOpenState(Duration.ofSeconds(getWaitDurationInOpenStateInSeconds()))
+        .ringBufferSizeInClosedState(getRingBufferSizeInClosedState())
+        .build();
   }
 }

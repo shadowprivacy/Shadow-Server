@@ -18,6 +18,10 @@ minio:                        # private cloud access configuration
 accountDatabaseCrawler:       # account database crawler configuration
   chunkSize: 1000                                                       # accounts per run
   chunkIntervalMs:                                                      # time per run, can be left empty
+  
+scyllaDbMigrationCrawler:     # account migration crawler configuration
+  chunkSize: 1000                                                       # accounts per run
+  chunkIntervalMs:                                                      # time per run, can be left empty
 
 metricsCluster:               # Redis server configuration for metrics cluster 
   urls:
@@ -109,6 +113,13 @@ migrationDeletedAccountsScyllaDb:      # ScyllaDB database configuration for mig
   accessKey: shadow                                                     # Scylla service access key
   accessSecret: your_scylla_service_password                            # Scylla service secret key configured when installing ScyllaDB
 
+migrationMismatchedAccountsScyllaDb:   # ScyllaDB database configuration for migration mismatched accounts database
+  region: us-east-1
+  tableName:  migrationmismatcheddb
+  endpoint: "http://localhost:8083/"
+  accessKey: shadow                                                     # Scylla service access key
+  accessSecret: your_scylla_service_password                            # Scylla service secret key configured when installing ScyllaDB
+
 migrationRetryAccountsScyllaDb:        # ScyllaDB database configuration for migration retry accounts database
   region: us-east-1
   tableName:  migrationretrydb
@@ -126,6 +137,20 @@ pushChallengeScyllaDb:                 # ScyllaDB database configuration for pus
 reportMessageScyllaDb:                 # ScyllaDB database configuration for reported messages database
   region: us-east-1
   tableName:  reportmessagedb
+  endpoint: "http://localhost:8083/"
+  accessKey: shadow                                                     # Scylla service access key
+  accessSecret: your_scylla_service_password                            # Scylla service secret key configured when installing ScyllaDB
+  
+verificationCodeStoreScyllaDb:         # ScyllaDB database configuration for verification code store database
+  region: us-east-1
+  tableName:  verificationcodestoredb
+  endpoint: "http://localhost:8083/"
+  accessKey: shadow                                                     # Scylla service access key
+  accessSecret: your_scylla_service_password                            # Scylla service secret key configured when installing ScyllaDB  
+
+deletedAccountsScyllaDb: # ScyllaDB database configuration for deleted accounts database
+  region: us-east-1
+  tableName:  deletedaccountsdb
   endpoint: "http://localhost:8083/"
   accessKey: shadow                                                     # Scylla service access key
   accessSecret: your_scylla_service_password                            # Scylla service secret key configured when installing ScyllaDB
@@ -173,9 +198,6 @@ turn:                         # NAT-T server parameters
 
 gcm:  
   apiKey: GoogleFCMKey                                                  # the server key of your Firebase project     
-
-wavefront:                    # Wavefront micrometer metrics config, not used currently
-  uri: "https://metrics.example.com/"                                   # fake/unused  
   
 datadog:                      # Datadog config, not used currently
   apiKey: 12345                                                         # fake/unused
@@ -195,6 +217,12 @@ unidentifiedDelivery:         # unidentified access credentials configuration
 
 recaptcha:
   secret: 123                                                           # fake/unused
+  
+recaptchaV2:
+  scoreFloor: 1                                                          # fake/unused
+  projectPAth: xxx                                                       # fake/unused
+  siteKey: xxx                                                           # fake/unused
+  credentialConfigurationJson: xxx                                       # fake/unused  
 
 limits:
   contactQueries:
@@ -212,7 +240,7 @@ remoteConfig:
     {} # leave this empty          
 
 paymentsService:
-  userAuthenticationTokenSharedSecret: 6730674e1bd4f3a9cfdb2645159230b1 # fake/unused
+  userAuthenticationTokenSharedSecret: 6730674e1bd4f3a9cfdb2645159230b1 # fake/unused, hex-encoded 32-byte shared secret
   fixerApiKey: 6730674e1bd4f3a9cfdb2645159230b1                         # fake/unused
   paymentCurrencies:                                                    # unused for now 
     - USD
@@ -226,6 +254,14 @@ group:                        # group parameters
   maxGroupTitleLengthBytes: 256                                         # maximum length of group title (in bytes)  
   maxGroupDescriptionLengthBytes: 1024                                  # maximum length of group description (in bytes)
   externalServiceSecret: your_group_service_secret_key                  # must be a hex string key
+
+badges:
+  badges:
+    - id: TEST
+      imageUrl: https://example.com/test-badge
+      category: other
+  badgeIdsEnabledForAll:
+    - TEST
 
 localParametersConfiguration: # locally significant server parameters
  verificationCodeLifetime: 24                                           # account verification code lifetime in hours

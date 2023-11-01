@@ -8,36 +8,30 @@ package su.sres.shadowserver.push;
 
 import io.lettuce.core.cluster.SlotHash;
 import org.apache.commons.lang3.RandomStringUtils;
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.RegisterExtension;
 import org.mockito.ArgumentCaptor;
-import su.sres.shadowserver.configuration.CircuitBreakerConfiguration;
-import su.sres.shadowserver.providers.RedisClientFactory;
-import su.sres.shadowserver.redis.AbstractRedisClusterTest;
+import su.sres.shadowserver.redis.RedisClusterExtension;
 import su.sres.shadowserver.redis.RedisException;
-import su.sres.shadowserver.redis.ReplicatedJedisPool;
 import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.storage.AccountsManager;
 import su.sres.shadowserver.storage.Device;
 import su.sres.shadowserver.util.Pair;
-import redis.clients.jedis.Jedis;
-import redis.embedded.RedisServer;
 
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assume.assumeFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-public class ApnFallbackManagerTest extends AbstractRedisClusterTest {
+class ApnFallbackManagerTest {
+  @RegisterExtension
+  static final RedisClusterExtension REDIS_CLUSTER_EXTENSION = RedisClusterExtension.builder().build();
 
   private Account account;
   private Device device;
@@ -51,9 +45,8 @@ public class ApnFallbackManagerTest extends AbstractRedisClusterTest {
   private static final long DEVICE_ID = 1L;
   private static final String VOIP_APN_ID = RandomStringUtils.randomAlphanumeric(32);
 
-  @Before
-  public void setUp() throws Exception {
-    super.setUp();
+  @BeforeEach
+  void setUp() throws Exception {
 
     device = mock(Device.class);
     when(device.getId()).thenReturn(DEVICE_ID);
@@ -71,11 +64,11 @@ public class ApnFallbackManagerTest extends AbstractRedisClusterTest {
 
     apnSender = mock(APNSender.class);
 
-    apnFallbackManager = new ApnFallbackManager(getRedisCluster(), apnSender, accountsManager);
+    apnFallbackManager = new ApnFallbackManager(REDIS_CLUSTER_EXTENSION.getRedisCluster(), apnSender, accountsManager);
   }
 
   @Test
-  public void testClusterInsert() throws RedisException {
+  void testClusterInsert() throws RedisException {
     final String endpoint = apnFallbackManager.getEndpointKey(account, device);
 
     assertTrue(apnFallbackManager.getPendingDestinations(SlotHash.getSlot(endpoint), 1).isEmpty());
@@ -95,7 +88,7 @@ public class ApnFallbackManagerTest extends AbstractRedisClusterTest {
   }
 
   @Test
-  public void testProcessNextSlot() throws RedisException {
+  void testProcessNextSlot() throws RedisException {
     final ApnFallbackManager.NotificationWorker worker = apnFallbackManager.new NotificationWorker();
 
     apnFallbackManager.schedule(account, device, System.currentTimeMillis() - 30_000);
@@ -103,7 +96,8 @@ public class ApnFallbackManagerTest extends AbstractRedisClusterTest {
     final int slot = SlotHash.getSlot(apnFallbackManager.getEndpointKey(account, device));
     final int previousSlot = (slot + SlotHash.SLOT_COUNT - 1) % SlotHash.SLOT_COUNT;
 
-    getRedisCluster().withCluster(connection -> connection.sync().set(ApnFallbackManager.NEXT_SLOT_TO_PERSIST_KEY, String.valueOf(previousSlot)));
+    REDIS_CLUSTER_EXTENSION.getRedisCluster().withCluster(connection -> connection.sync()
+        .set(ApnFallbackManager.NEXT_SLOT_TO_PERSIST_KEY, String.valueOf(previousSlot)));
 
     assertEquals(1, worker.processNextSlot());
 
@@ -113,7 +107,7 @@ public class ApnFallbackManagerTest extends AbstractRedisClusterTest {
     final ApnMessage message = messageCaptor.getValue();
 
     assertEquals(VOIP_APN_ID, message.getApnId());
-    assertEquals(ACCOUNT_NUMBER, message.getNumber());
+    assertEquals(Optional.of(ACCOUNT_UUID), message.getUuid());
     assertEquals(DEVICE_ID, message.getDeviceId());
 
     assertEquals(0, worker.processNextSlot());

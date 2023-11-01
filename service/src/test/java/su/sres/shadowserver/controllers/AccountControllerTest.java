@@ -1,16 +1,17 @@
 /*
- * Original software: Copyright 2013-2020 Signal Messenger, LLC
- * Modified software: Copyright 2019-2022 Anton Alipov, sole trader
+ * Original software: Copyright 2013-2021 Signal Messenger, LLC
+ * Modified software: Copyright 2019-2023 Anton Alipov, sole trader
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 package su.sres.shadowserver.controllers;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.eq;
-import static org.mockito.Mockito.isA;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
@@ -27,9 +28,9 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
+import org.mockito.stubbing.Answer;
 
 import javax.ws.rs.client.Entity;
 import javax.ws.rs.core.MediaType;
@@ -51,7 +52,8 @@ import io.dropwizard.testing.junit5.DropwizardExtensionsSupport;
 import io.dropwizard.testing.junit5.ResourceExtension;
 
 import su.sres.shadowserver.auth.AuthenticationCredentials;
-import su.sres.shadowserver.auth.DisabledPermittedAccount;
+import su.sres.shadowserver.auth.AuthenticatedAccount;
+import su.sres.shadowserver.auth.DisabledPermittedAuthenticatedAccount;
 import su.sres.shadowserver.auth.StoredVerificationCode;
 import su.sres.shadowserver.auth.TurnTokenGenerator;
 import su.sres.shadowserver.configuration.LocalParametersConfiguration;
@@ -74,9 +76,9 @@ import su.sres.shadowserver.storage.AbusiveHostRules;
 import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.storage.AccountsManager;
 import su.sres.shadowserver.storage.DirectoryManager;
-import su.sres.shadowserver.storage.MessagesManager;
-import su.sres.shadowserver.storage.PendingAccountsManager;
+import su.sres.shadowserver.storage.StoredVerificationCodeManager;
 import su.sres.shadowserver.storage.UsernamesManager;
+import su.sres.shadowserver.util.AccountsHelper;
 import su.sres.shadowserver.util.AuthHelper;
 import su.sres.shadowserver.util.Hex;
 import su.sres.shadowserver.util.SystemMapper;
@@ -101,7 +103,7 @@ class AccountControllerTest {
   
   private static final int VERIFICATION_CODE_LIFETIME = 48;
 
-  private static PendingAccountsManager pendingAccountsManager = mock(PendingAccountsManager.class);
+  private static StoredVerificationCodeManager pendingAccountsManager = mock(StoredVerificationCodeManager.class);
   private static AccountsManager accountsManager = mock(AccountsManager.class);
   private static AbusiveHostRules abusiveHostRules = mock(AbusiveHostRules.class);
   private static RateLimiters rateLimiters = mock(RateLimiters.class);
@@ -110,8 +112,7 @@ class AccountControllerTest {
   private static RateLimiter smsVoiceIpLimiter = mock(RateLimiter.class);
   private static RateLimiter autoBlockLimiter = mock(RateLimiter.class);
   private static RateLimiter usernameSetLimiter = mock(RateLimiter.class);
-
-  private static MessagesManager storedMessages = mock(MessagesManager.class);
+  
   private static TurnTokenGenerator turnTokenGenerator = mock(TurnTokenGenerator.class);
   private static Account senderPinAccount = mock(Account.class);
   private static Account senderRegLockAccount = mock(Account.class);
@@ -132,11 +133,12 @@ class AccountControllerTest {
   private static final ResourceExtension resources = ResourceExtension.builder()
       .addProvider(AuthHelper.getAuthFilter())
       .addProvider(new PolymorphicAuthValueFactoryProvider.Binder<>(
-          ImmutableSet.of(Account.class, DisabledPermittedAccount.class)))
+          ImmutableSet.of(AuthenticatedAccount.class,
+              DisabledPermittedAuthenticatedAccount.class)))
       .addProvider(new RateLimitExceededExceptionMapper()).setMapper(SystemMapper.getMapper())
       .setTestContainerFactory(new GrizzlyWebTestContainerFactory())
       .addResource(new AccountController(pendingAccountsManager, accountsManager, usernamesManager,
-          abusiveHostRules, rateLimiters, storedMessages, turnTokenGenerator, new HashMap<>(),
+          abusiveHostRules, rateLimiters, turnTokenGenerator, new HashMap<>(),
           recaptchaClient, gcmSender,
           // apnSender,
           localParametersConfiguration, serviceConfiguration))
@@ -149,6 +151,8 @@ class AccountControllerTest {
     new SecureRandom().nextBytes(registration_lock_key);
     AuthenticationCredentials registrationLockCredentials = new AuthenticationCredentials(
         Hex.toStringCondensed(registration_lock_key));
+    
+    AccountsHelper.setupMockUpdate(accountsManager);
 
     when(rateLimiters.getSmsDestinationLimiter()).thenReturn(rateLimiter);
     when(rateLimiters.getVerifyLimiter()).thenReturn(rateLimiter);
@@ -184,6 +188,14 @@ class AccountControllerTest {
     when(accountsManager.get(eq(SENDER_TRANSFER))).thenReturn(Optional.of(senderTransfer));
 
     when(accountsManager.getDirectoryManager()).thenReturn(directoryManager);
+    
+    when(accountsManager.create(any(), any(), any(), any())).thenAnswer((Answer<Account>) invocation -> {
+      final Account account = mock(Account.class);
+      when(account.getUuid()).thenReturn(UUID.randomUUID());
+      when(account.getUserLogin()).thenReturn(invocation.getArgument(0, String.class));
+
+      return account;
+    });
 
     when(usernamesManager.put(eq(AuthHelper.VALID_UUID), eq("n00bkiller"))).thenReturn(true);
     when(usernamesManager.put(eq(AuthHelper.VALID_UUID), eq("takenusername"))).thenReturn(false);
@@ -215,8 +227,7 @@ class AccountControllerTest {
         pinLimiter,
         smsVoiceIpLimiter,
         autoBlockLimiter,
-        usernameSetLimiter,
-        storedMessages,
+        usernameSetLimiter,       
         turnTokenGenerator,
         senderPinAccount,
         senderRegLockAccount,
@@ -452,58 +463,30 @@ class AccountControllerTest {
 
   @Test
   void testVerifyCode() throws Exception {
-    AccountCreationResult result = resources.getJerseyTest().target(String.format("/v1/accounts/code/%s", "1234"))
+    resources.getJerseyTest().target(String.format("/v1/accounts/code/%s", "1234"))
         .request()
-        .header("Authorization", AuthHelper.getAuthHeader(SENDER, "bar"))
+        .header("Authorization", AuthHelper.getProvisioningAuthHeader(SENDER, "bar"))
         .put(Entity.entity(new AccountAttributes(false, 2222, null, true, null),
             MediaType.APPLICATION_JSON_TYPE), AccountCreationResult.class);
 
-    assertThat(result.getUuid()).isNotNull();
-    assertThat(result.isStorageCapable()).isFalse();
-
-    final ArgumentCaptor<Account> accountArgumentCaptor = ArgumentCaptor.forClass(Account.class);
-
-    verify(accountsManager, times(1)).create(accountArgumentCaptor.capture());
-
-    assertThat(accountArgumentCaptor.getValue().isDiscoverableByUserLogin()).isTrue();
+    verify(accountsManager).create(eq(SENDER), eq("bar"), any(), any());
   }
-
+  
   @Test
-  void testVerifyCodeUndiscoverable() throws Exception {
-    AccountCreationResult result = resources.getJerseyTest()
+  void testVerifyCodeBadCredentials() {
+    final Response response = resources.getJerseyTest()
         .target(String.format("/v1/accounts/code/%s", "1234"))
         .request()
-        .header("Authorization", AuthHelper.getAuthHeader(SENDER, "bar"))
-        .put(Entity.entity(new AccountAttributes(false, 2222, null, false, null),
-            MediaType.APPLICATION_JSON_TYPE), AccountCreationResult.class);
+        .header("Authorization", "This is not a valid authorization header")
+        .put(Entity.entity(new AccountAttributes(), MediaType.APPLICATION_JSON_TYPE));
 
-    assertThat(result.getUuid()).isNotNull();
-    assertThat(result.isStorageCapable()).isFalse();
-
-    final ArgumentCaptor<Account> accountArgumentCaptor = ArgumentCaptor.forClass(Account.class);
-
-    verify(accountsManager, times(1)).create(accountArgumentCaptor.capture());
-
-    assertThat(accountArgumentCaptor.getValue().isDiscoverableByUserLogin()).isFalse();
+    assertThat(response.getStatus()).isEqualTo(401);
   }
 
   @Test
-  void testVerifySupportsStorage() throws Exception {
-    AccountCreationResult result = resources.getJerseyTest().target(String.format("/v1/accounts/code/%s", "666666"))
-        .request().header("Authorization", AuthHelper.getAuthHeader(SENDER_HAS_STORAGE, "bar"))
-        .put(Entity.entity(new AccountAttributes(false, 2222, null, true, null),
-            MediaType.APPLICATION_JSON_TYPE), AccountCreationResult.class);
-
-    assertThat(result.getUuid()).isNotNull();
-    assertThat(result.isStorageCapable()).isTrue();
-
-    verify(accountsManager, times(1)).create(isA(Account.class));
-  }
-
-  @Test
-  void testVerifyCodeOld() throws Exception {
+  void testVerifyCodeOld() {
     Response response = resources.getJerseyTest().target(String.format("/v1/accounts/code/%s", "1234")).request()
-        .header("Authorization", AuthHelper.getAuthHeader(SENDER_OLD, "bar")).put(Entity.entity(new AccountAttributes(false, 2222, null, true, null), MediaType.APPLICATION_JSON_TYPE));
+        .header("Authorization", AuthHelper.getProvisioningAuthHeader(SENDER_OLD, "bar")).put(Entity.entity(new AccountAttributes(false, 2222, null, true, null), MediaType.APPLICATION_JSON_TYPE));
 
     assertThat(response.getStatus()).isEqualTo(403);
 
@@ -511,9 +494,9 @@ class AccountControllerTest {
   }
 
   @Test
-  void testVerifyBadCode() throws Exception {
+  void testVerifyBadCode() {
     Response response = resources.getJerseyTest().target(String.format("/v1/accounts/code/%s", "1111")).request()
-        .header("Authorization", AuthHelper.getAuthHeader(SENDER, "bar")).put(Entity.entity(new AccountAttributes(false, 3333, null, true, null), MediaType.APPLICATION_JSON_TYPE));
+        .header("Authorization", AuthHelper.getProvisioningAuthHeader(SENDER, "bar")).put(Entity.entity(new AccountAttributes(false, 3333, null, true, null), MediaType.APPLICATION_JSON_TYPE));
 
     assertThat(response.getStatus()).isEqualTo(403);
 
@@ -526,7 +509,7 @@ class AccountControllerTest {
 
     final Response response = resources.getJerseyTest().target(String.format("/v1/accounts/code/%s", "1234"))
         .queryParam("transfer", true).request()
-        .header("Authorization", AuthHelper.getAuthHeader(SENDER_TRANSFER, "bar")).put(Entity.entity(new AccountAttributes(false, 2222, null, true, null), MediaType.APPLICATION_JSON_TYPE));
+        .header("Authorization", AuthHelper.getProvisioningAuthHeader(SENDER_TRANSFER, "bar")).put(Entity.entity(new AccountAttributes(false, 2222, null, true, null), MediaType.APPLICATION_JSON_TYPE));
 
     assertThat(response.getStatus()).isEqualTo(409);
   }
@@ -537,7 +520,7 @@ class AccountControllerTest {
 
     final Response response = resources.getJerseyTest().target(String.format("/v1/accounts/code/%s", "1234"))
         .queryParam("transfer", true).request()
-        .header("Authorization", AuthHelper.getAuthHeader(SENDER_TRANSFER, "bar")).put(Entity.entity(new AccountAttributes(false, 2222, null, true, null), MediaType.APPLICATION_JSON_TYPE));
+        .header("Authorization", AuthHelper.getProvisioningAuthHeader(SENDER_TRANSFER, "bar")).put(Entity.entity(new AccountAttributes(false, 2222, null, true, null), MediaType.APPLICATION_JSON_TYPE));
 
     assertThat(response.getStatus()).isEqualTo(200);
   }
@@ -546,88 +529,63 @@ class AccountControllerTest {
   void testVerifyTransferSupportedNotRequested() {
     when(senderTransfer.isTransferSupported()).thenReturn(true);
 
-    final Response response = resources.getJerseyTest().target(String.format("/v1/accounts/code/%s", "1234"))
-        .request().header("Authorization", AuthHelper.getAuthHeader(SENDER_TRANSFER, "bar")).put(Entity.entity(new AccountAttributes(false, 2222, null, true, null), MediaType.APPLICATION_JSON_TYPE));
-
+    final Response response =        
+        resources.getJerseyTest()
+            .target(String.format("/v1/accounts/code/%s", "1234"))
+            .request()
+            .header("Authorization", AuthHelper.getProvisioningAuthHeader(SENDER_TRANSFER, "bar"))
+            .put(Entity.entity(new AccountAttributes(false, 2222, null, true, null),
+                MediaType.APPLICATION_JSON_TYPE));
+    
     assertThat(response.getStatus()).isEqualTo(200);
-  }  
-
-  @Test
-  void testSetGcmId() throws Exception {
-    Response response = resources.getJerseyTest().target("/v1/accounts/gcm/").request()
-        .header("Authorization",
-            AuthHelper.getAuthHeader(AuthHelper.DISABLED_NUMBER, AuthHelper.DISABLED_PASSWORD))
-        .put(Entity.json(new GcmRegistrationId("c00lz0rz")));
-
-    assertThat(response.getStatus()).isEqualTo(204);
-
-    verify(AuthHelper.DISABLED_DEVICE, times(1)).setGcmId(eq("c00lz0rz"));
-    verify(accountsManager, times(1)).update(eq(AuthHelper.DISABLED_ACCOUNT));
   }
 
   @Test
-  void testSetGcmIdByUuid() throws Exception {
+  void testSetGcmId() {
     Response response = resources.getJerseyTest().target("/v1/accounts/gcm/").request()
-        .header("Authorization",
-            AuthHelper.getAuthHeader(AuthHelper.DISABLED_UUID.toString(), AuthHelper.DISABLED_PASSWORD))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.DISABLED_UUID, AuthHelper.DISABLED_PASSWORD))
         .put(Entity.json(new GcmRegistrationId("z000")));
 
     assertThat(response.getStatus()).isEqualTo(204);
 
     verify(AuthHelper.DISABLED_DEVICE, times(1)).setGcmId(eq("z000"));
-    verify(accountsManager, times(1)).update(eq(AuthHelper.DISABLED_ACCOUNT));
+    verify(accountsManager, times(1)).updateDevice(eq(AuthHelper.DISABLED_ACCOUNT), anyLong(), any());
   }
 
   @Test
-  void testSetApnId() throws Exception {
+  void testSetApnId() {
     Response response = resources.getJerseyTest().target("/v1/accounts/apn/").request()
-        .header("Authorization",
-            AuthHelper.getAuthHeader(AuthHelper.DISABLED_NUMBER, AuthHelper.DISABLED_PASSWORD))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.DISABLED_UUID, AuthHelper.DISABLED_PASSWORD))
         .put(Entity.json(new ApnRegistrationId("first", "second")));
 
     assertThat(response.getStatus()).isEqualTo(204);
 
     verify(AuthHelper.DISABLED_DEVICE, times(1)).setApnId(eq("first"));
     verify(AuthHelper.DISABLED_DEVICE, times(1)).setVoipApnId(eq("second"));
-    verify(accountsManager, times(1)).update(eq(AuthHelper.DISABLED_ACCOUNT));
+    verify(accountsManager, times(1)).updateDevice(eq(AuthHelper.DISABLED_ACCOUNT), anyLong(), any());
   }
   
   @Test
-  void testSetApnIdNoVoip() throws Exception {
+  void testSetApnIdNoVoip() {
     Response response =
         resources.getJerseyTest()
             .target("/v1/accounts/apn/")
             .request()
-            .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.DISABLED_NUMBER, AuthHelper.DISABLED_PASSWORD))
+            .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.DISABLED_UUID, AuthHelper.DISABLED_PASSWORD))
             .put(Entity.json(new ApnRegistrationId("first", null)));
 
     assertThat(response.getStatus()).isEqualTo(204);
 
     verify(AuthHelper.DISABLED_DEVICE, times(1)).setApnId(eq("first"));
     verify(AuthHelper.DISABLED_DEVICE, times(1)).setVoipApnId(null);
-    verify(accountsManager, times(1)).update(eq(AuthHelper.DISABLED_ACCOUNT));
+    verify(accountsManager, times(1)).updateDevice(eq(AuthHelper.DISABLED_ACCOUNT), anyLong(), any());
   }
-
-
-  @Test
-  void testSetApnIdByUuid() throws Exception {
-    Response response = resources.getJerseyTest().target("/v1/accounts/apn/").request()
-        .header("Authorization",
-            AuthHelper.getAuthHeader(AuthHelper.DISABLED_UUID.toString(), AuthHelper.DISABLED_PASSWORD))
-        .put(Entity.json(new ApnRegistrationId("third", "fourth")));
-
-    assertThat(response.getStatus()).isEqualTo(204);
-
-    verify(AuthHelper.DISABLED_DEVICE, times(1)).setApnId(eq("third"));
-    verify(AuthHelper.DISABLED_DEVICE, times(1)).setVoipApnId(eq("fourth"));
-    verify(accountsManager, times(1)).update(eq(AuthHelper.DISABLED_ACCOUNT));
-  }
-
+  
   @ParameterizedTest
   @ValueSource(strings = {"/v1/accounts/whoami/", "/v1/accounts/me/"})
   void testWhoAmI(final String path) {
     AccountCreationResult response = resources.getJerseyTest().target(path).request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID, AuthHelper.VALID_PASSWORD))
         .get(AccountCreationResult.class);
 
     assertThat(response.getUuid()).isEqualTo(AuthHelper.VALID_UUID);
@@ -636,7 +594,7 @@ class AccountControllerTest {
   @Test
   void testSetUsername() {
     Response response = resources.getJerseyTest().target("/v1/accounts/username/n00bkiller").request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID, AuthHelper.VALID_PASSWORD))
         .put(Entity.text(""));
 
     assertThat(response.getStatus()).isEqualTo(200);
@@ -645,7 +603,7 @@ class AccountControllerTest {
   @Test
   void testSetTakenUsername() {
     Response response = resources.getJerseyTest().target("/v1/accounts/username/takenusername").request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID, AuthHelper.VALID_PASSWORD))
         .put(Entity.text(""));
 
     assertThat(response.getStatus()).isEqualTo(409);
@@ -654,7 +612,7 @@ class AccountControllerTest {
   @Test
   void testSetInvalidUsername() {
     Response response = resources.getJerseyTest().target("/v1/accounts/username/pаypal").request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID, AuthHelper.VALID_PASSWORD))
         .put(Entity.text(""));
 
     assertThat(response.getStatus()).isEqualTo(400);
@@ -663,7 +621,7 @@ class AccountControllerTest {
   @Test
   void testSetInvalidPrefixUsername() {
     Response response = resources.getJerseyTest().target("/v1/accounts/username/0n00bkiller").request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID, AuthHelper.VALID_PASSWORD))
         .put(Entity.text(""));
 
     assertThat(response.getStatus()).isEqualTo(400);
@@ -672,7 +630,7 @@ class AccountControllerTest {
   @Test
   void testSetUsernameBadAuth() {
     Response response = resources.getJerseyTest().target("/v1/accounts/username/n00bkiller").request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.INVALID_PASSWORD))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID, AuthHelper.INVALID_PASSWORD))
         .put(Entity.text(""));
 
     assertThat(response.getStatus()).isEqualTo(401);
@@ -681,7 +639,7 @@ class AccountControllerTest {
   @Test
   void testDeleteUsername() {
     Response response = resources.getJerseyTest().target("/v1/accounts/username/").request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID, AuthHelper.VALID_PASSWORD))
         .delete();
 
     assertThat(response.getStatus()).isEqualTo(204);
@@ -691,7 +649,7 @@ class AccountControllerTest {
   @Test
   void testDeleteUsernameBadAuth() {
     Response response = resources.getJerseyTest().target("/v1/accounts/username/").request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.INVALID_PASSWORD))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID, AuthHelper.INVALID_PASSWORD))
         .delete();
 
     assertThat(response.getStatus()).isEqualTo(401);
@@ -702,7 +660,7 @@ class AccountControllerTest {
     Response response = resources.getJerseyTest()
         .target("/v1/accounts/attributes/")
         .request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID, AuthHelper.VALID_PASSWORD))
         .put(Entity.json(new AccountAttributes(false, 2222, null, true, null)));
 
     assertThat(response.getStatus()).isEqualTo(204);
@@ -713,7 +671,7 @@ class AccountControllerTest {
     Response response = resources.getJerseyTest()
         .target("/v1/accounts/me")
         .request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID, AuthHelper.VALID_PASSWORD))
         .delete();
 
     assertThat(response.getStatus()).isEqualTo(204);

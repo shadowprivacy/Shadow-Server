@@ -18,13 +18,8 @@ public class IncomingMessageList {
   @JsonProperty
   @NotNull
   @Valid
-  @JsonInclude(Include.NON_NULL)
-  private List<IncomingMessage> messages;
-
- // excluded federation, reserved for future purposes 
- // @JsonProperty
- // private String relay;
-
+  private List<@NotNull IncomingMessage> messages;
+ 
   @JsonProperty
   private long timestamp;
   

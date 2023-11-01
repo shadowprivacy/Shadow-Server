@@ -41,7 +41,7 @@ public class CreateAccountsDbCommand extends EnvironmentCommand<WhisperServerCon
   static final String KEY_ACCOUNT_UUID = "U";
   static final String ATTR_ACCOUNT_USER_LOGIN = "P";
   static final String ATTR_ACCOUNT_DATA = "D";
-  static final String ATTR_MIGRATION_VERSION = "V";
+  static final String ATTR_VERSION = "V";
   static final String ATTR_ACCOUNT_VD = "VD";
 
   static final String KEY_PARAMETER_NAME = "PN";
@@ -84,7 +84,7 @@ public class CreateAccountsDbCommand extends EnvironmentCommand<WhisperServerCon
     attributeDefinitionsAccount.add(AttributeDefinition.builder().attributeName(ATTR_ACCOUNT_USER_LOGIN).attributeType("S").build());
     attributeDefinitionsAccount.add(AttributeDefinition.builder().attributeName(ATTR_ACCOUNT_VD).attributeType("S").build());
     attributeDefinitionsAccount.add(AttributeDefinition.builder().attributeName(ATTR_ACCOUNT_DATA).attributeType("B").build());
-    attributeDefinitionsAccount.add(AttributeDefinition.builder().attributeName(ATTR_MIGRATION_VERSION).attributeType("N").build());
+    attributeDefinitionsAccount.add(AttributeDefinition.builder().attributeName(ATTR_VERSION).attributeType("N").build());
 
     List<AttributeDefinition> attributeDefinitionsUserLogin = new ArrayList<AttributeDefinition>();
     attributeDefinitionsUserLogin.add(AttributeDefinition.builder().attributeName(KEY_ACCOUNT_UUID).attributeType("B").build());

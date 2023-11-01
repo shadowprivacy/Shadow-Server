@@ -1,6 +1,6 @@
 /*
- * Original software: Copyright 2013-2020 Signal Messenger, LLC
- * Modified software: Copyright 2019-2022 Anton Alipov, sole trader
+ * Original software: Copyright 2013-2021 Signal Messenger, LLC
+ * Modified software: Copyright 2019-2023 Anton Alipov, sole trader
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 package su.sres.shadowserver;
@@ -10,7 +10,6 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import su.sres.websocket.configuration.WebSocketConfiguration;
 
 import javax.validation.Valid;
-import javax.validation.constraints.NotEmpty;
 import javax.validation.constraints.NotNull;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -34,11 +33,6 @@ public class WhisperServerConfiguration extends Configuration {
   @Valid
   @JsonProperty
   private MinioConfiguration minio;
-
-  @NotNull
-  @Valid
-  @JsonProperty
-  private WavefrontConfiguration wavefront;
 
   @NotNull
   @Valid
@@ -69,6 +63,11 @@ public class WhisperServerConfiguration extends Configuration {
   @Valid
   @JsonProperty
   private AccountDatabaseCrawlerConfiguration accountDatabaseCrawler;
+  
+  @NotNull
+  @Valid
+  @JsonProperty
+  private AccountDatabaseCrawlerConfiguration scyllaDbMigrationCrawler;
 
   @NotNull
   @Valid
@@ -109,11 +108,21 @@ public class WhisperServerConfiguration extends Configuration {
   @NotNull
   @JsonProperty
   private ScyllaDbConfiguration migrationDeletedAccountsScyllaDb;
+  
+  @Valid
+  @NotNull
+  @JsonProperty
+  private ScyllaDbConfiguration migrationMismatchedAccountsScyllaDb;
 
   @Valid
   @NotNull
   @JsonProperty
   private ScyllaDbConfiguration migrationRetryAccountsScyllaDb;
+  
+  @Valid
+  @NotNull
+  @JsonProperty
+  private ScyllaDbConfiguration deletedAccountsScyllaDb;
   
   @Valid
   @NotNull
@@ -124,6 +133,16 @@ public class WhisperServerConfiguration extends Configuration {
   @NotNull
   @JsonProperty
   private ScyllaDbConfiguration reportMessageScyllaDb;
+  
+  @Valid
+  @NotNull
+  @JsonProperty
+  private ScyllaDbConfiguration pendingAccountsScyllaDb;
+
+  @Valid
+  @NotNull
+  @JsonProperty
+  private ScyllaDbConfiguration pendingDevicesScyllaDb;
 
   @Valid
   @NotNull
@@ -149,16 +168,6 @@ public class WhisperServerConfiguration extends Configuration {
   @NotNull
   @JsonProperty
   private List<MaxDeviceConfiguration> maxDevices = new LinkedList<>();
-
-  /*
-   * excluded federation configuration, let's preserve for future purposes
-   * 
-   * @Valid
-   * 
-   * @JsonProperty private FederationConfiguration federation = new
-   * FederationConfiguration();
-   * 
-   */
 
   @Valid
   @NotNull
@@ -204,6 +213,11 @@ public class WhisperServerConfiguration extends Configuration {
   @NotNull
   @JsonProperty
   private RecaptchaConfiguration recaptcha;
+  
+  @Valid
+  @NotNull
+  @JsonProperty
+  private RecaptchaV2Configuration recaptchaV2;
 
   @Valid
   @NotNull
@@ -238,10 +252,19 @@ public class WhisperServerConfiguration extends Configuration {
   @NotNull
   private GroupConfiguration group;
   
+  @Valid
+  @NotNull
+  @JsonProperty
+  private BadgesConfiguration badges;
+  
   private Map<String, String> transparentDataIndex = new HashMap<>();
     
   public RecaptchaConfiguration getRecaptchaConfiguration() {
     return recaptcha;
+  }
+  
+  public RecaptchaV2Configuration getRecaptchaV2Configuration() {
+    return recaptchaV2;
   }
 
   public WebSocketConfiguration getWebSocketConfiguration() {
@@ -278,6 +301,10 @@ public class WhisperServerConfiguration extends Configuration {
 
   public AccountDatabaseCrawlerConfiguration getAccountDatabaseCrawlerConfiguration() {
     return accountDatabaseCrawler;
+  }
+  
+  public AccountDatabaseCrawlerConfiguration getScyllaDbMigrationCrawlerConfiguration() {
+    return scyllaDbMigrationCrawler;
   }
 
   public MessageCacheConfiguration getMessageCacheConfiguration() {
@@ -319,9 +346,17 @@ public class WhisperServerConfiguration extends Configuration {
   public ScyllaDbConfiguration getMigrationDeletedAccountsScyllaDbConfiguration() {
     return migrationDeletedAccountsScyllaDb;
   }
+  
+  public ScyllaDbConfiguration getMigrationMismatchedAccountsScyllaDbConfiguration() {
+    return migrationMismatchedAccountsScyllaDb;
+  }
 
   public ScyllaDbConfiguration getMigrationRetryAccountsScyllaDbConfiguration() {
     return migrationRetryAccountsScyllaDb;
+  }
+  
+  public ScyllaDbConfiguration getDeletedAccountsScyllaDbConfiguration() {
+    return deletedAccountsScyllaDb;
   }
   
   public DatabaseConfiguration getAbuseDatabaseConfiguration() {
@@ -335,14 +370,6 @@ public class WhisperServerConfiguration extends Configuration {
   public RateLimitsConfiguration getLimitsConfiguration() {
     return limits;
   }
-
-  /*
-   * excluded federation configuration, let's preserve for future purposes
-   * 
-   * public FederationConfiguration getFederationConfiguration() { return
-   * federation; }
-   * 
-   */
 
   public TurnConfiguration getTurnConfiguration() {
     return turn;
@@ -358,10 +385,6 @@ public class WhisperServerConfiguration extends Configuration {
 
   public MinioConfiguration getMinioConfiguration() {
     return minio;
-  }
-
-  public WavefrontConfiguration getWavefrontConfiguration() {
-    return wavefront;
   }
 
   public DatadogConfiguration getDatadogConfiguration() {
@@ -426,5 +449,17 @@ public class WhisperServerConfiguration extends Configuration {
   
   public ScyllaDbConfiguration getReportMessageScyllaDbConfiguration() {
     return reportMessageScyllaDb;
-  }  
+  }
+  
+  public ScyllaDbConfiguration getPendingAccountsScyllaDbConfiguration() {
+    return pendingAccountsScyllaDb;
+  }
+
+  public ScyllaDbConfiguration getPendingDevicesScyllaDbConfiguration() {
+    return pendingDevicesScyllaDb;
+  }
+  
+  public BadgesConfiguration getBadges() {
+    return badges;
+  }
 }

@@ -6,6 +6,8 @@
 package su.sres.shadowserver.controllers;
 
 import com.codahale.metrics.annotation.Timed;
+
+import su.sres.shadowserver.auth.AuthenticatedAccount;
 import su.sres.shadowserver.entities.AttachmentDescriptorV2;
 import su.sres.shadowserver.limits.RateLimiter;
 import su.sres.shadowserver.limits.RateLimiters;
@@ -40,8 +42,8 @@ public class DebugLogController extends AttachmentControllerBase {
   @GET
   @Produces(MediaType.APPLICATION_JSON)
   @Path("/form/upload")
-  public AttachmentDescriptorV2 getAttachmentUploadForm(@Auth Account account) throws RateLimitExceededException {
-    rateLimiter.validate(account.getUserLogin());
+  public AttachmentDescriptorV2 getAttachmentUploadForm(@Auth AuthenticatedAccount auth) throws RateLimitExceededException {
+    rateLimiter.validate(auth.getAccount().getUuid());
 
     ZonedDateTime        now          = ZonedDateTime.now(ZoneOffset.UTC);
     long                 attachmentId = generateAttachmentId();

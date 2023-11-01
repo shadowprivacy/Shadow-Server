@@ -16,6 +16,7 @@ import su.sres.websocket.auth.AuthenticationException;
 import su.sres.websocket.auth.WebSocketAuthenticator;
 import su.sres.websocket.auth.WebSocketAuthenticator.AuthenticationResult;
 import su.sres.websocket.auth.WebsocketAuthValueFactoryProvider;
+import su.sres.websocket.configuration.WebSocketConfiguration;
 import su.sres.websocket.session.WebSocketSessionContextValueFactoryProvider;
 import su.sres.websocket.setup.WebSocketEnvironment;
 
@@ -32,9 +33,11 @@ public class WebSocketResourceProviderFactory<T extends Principal> extends WebSo
   private static final Logger logger = LoggerFactory.getLogger(WebSocketResourceProviderFactory.class);
 
   private final WebSocketEnvironment<T> environment;
-  private final ApplicationHandler      jerseyApplicationHandler;
+  private final ApplicationHandler jerseyApplicationHandler;
+  private final WebSocketConfiguration configuration;
 
-  public WebSocketResourceProviderFactory(WebSocketEnvironment<T> environment, Class<T> principalClass) {
+  public WebSocketResourceProviderFactory(WebSocketEnvironment<T> environment, Class<T> principalClass,
+      WebSocketConfiguration configuration) {
     this.environment = environment;
 
     environment.jersey().register(new WebSocketSessionContextValueFactoryProvider.Binder());
@@ -42,13 +45,15 @@ public class WebSocketResourceProviderFactory<T extends Principal> extends WebSo
     environment.jersey().register(new JacksonMessageBodyProvider(environment.getObjectMapper()));
 
     this.jerseyApplicationHandler = new ApplicationHandler(environment.jersey());
+
+    this.configuration = configuration;
   }
 
   @Override
   public Object createWebSocket(ServletUpgradeRequest request, ServletUpgradeResponse response) {
     try {
       Optional<WebSocketAuthenticator<T>> authenticator = Optional.ofNullable(environment.getAuthenticator());
-      T                                   authenticated = null;
+      T authenticated = null;
 
       if (authenticator.isPresent()) {
         AuthenticationResult<T> authenticationResult = authenticator.get().authenticate(request);
@@ -61,25 +66,29 @@ public class WebSocketResourceProviderFactory<T extends Principal> extends WebSo
         }
       }
 
-      return new WebSocketResourceProvider<T>(getRemoteAddress(request),
-                                              this.jerseyApplicationHandler,
-                                              this.environment.getRequestLog(),
-                                              authenticated,
-                                              this.environment.getMessageFactory(),
-                                              ofNullable(this.environment.getConnectListener()),
-                                              this.environment.getIdleTimeoutMillis());
+      return new WebSocketResourceProvider<>(getRemoteAddress(request),
+          this.jerseyApplicationHandler,
+          this.environment.getRequestLog(),
+          authenticated,
+          this.environment.getMessageFactory(),
+          ofNullable(this.environment.getConnectListener()),
+          this.environment.getIdleTimeoutMillis());
     } catch (AuthenticationException | IOException e) {
       logger.warn("Authentication failure", e);
       try {
         response.sendError(500, "Failure");
-      } catch (IOException ex) {}
+      } catch (IOException ignored) {
+      }
       return null;
     }
+
   }
 
   @Override
   public void configure(WebSocketServletFactory factory) {
     factory.setCreator(this);
+    factory.getPolicy().setMaxBinaryMessageSize(configuration.getMaxBinaryMessageSize());
+    factory.getPolicy().setMaxTextMessageSize(configuration.getMaxTextMessageSize());
   }
 
   private String getRemoteAddress(ServletUpgradeRequest request) {
@@ -89,9 +98,9 @@ public class WebSocketResourceProviderFactory<T extends Principal> extends WebSo
       return request.getRemoteAddress();
     } else {
       return Arrays.stream(forwardedFor.split(","))
-                   .map(String::trim)
-                   .reduce((a, b) -> b)
-                   .orElseThrow();
+          .map(String::trim)
+          .reduce((a, b) -> b)
+          .orElseThrow();
     }
   }
 }

@@ -1,6 +1,6 @@
 /*
- * Original software: Copyright 2013-2020 Signal Messenger, LLC
- * Modified software: Copyright 2019-2022 Anton Alipov, sole trader
+ * Original software: Copyright 2013-2021 Signal Messenger, LLC
+ * Modified software: Copyright 2019-2023 Anton Alipov, sole trader
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 package su.sres.shadowserver.controllers;
@@ -39,7 +39,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -48,9 +47,9 @@ import static com.codahale.metrics.MetricRegistry.name;
 import io.dropwizard.auth.Auth;
 import io.micrometer.core.instrument.Metrics;
 import io.micrometer.core.instrument.Tag;
-import su.sres.shadowserver.auth.AuthenticationCredentials;
-import su.sres.shadowserver.auth.AuthorizationHeader;
-import su.sres.shadowserver.auth.DisabledPermittedAccount;
+import su.sres.shadowserver.auth.AuthenticatedAccount;
+import su.sres.shadowserver.auth.BasicAuthorizationHeader;
+import su.sres.shadowserver.auth.DisabledPermittedAuthenticatedAccount;
 import su.sres.shadowserver.auth.InvalidAuthorizationHeaderException;
 import su.sres.shadowserver.auth.StoredVerificationCode;
 import su.sres.shadowserver.auth.TurnToken;
@@ -77,8 +76,7 @@ import su.sres.shadowserver.storage.AbusiveHostRules;
 import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.storage.AccountsManager;
 import su.sres.shadowserver.storage.Device;
-import su.sres.shadowserver.storage.MessagesManager;
-import su.sres.shadowserver.storage.PendingAccountsManager;
+import su.sres.shadowserver.storage.StoredVerificationCodeManager;
 import su.sres.shadowserver.storage.UsernamesManager;
 import su.sres.shadowserver.util.Constants;
 import su.sres.shadowserver.util.ForwardedIpUtil;
@@ -91,7 +89,6 @@ public class AccountController {
 
   private final Logger logger = LoggerFactory.getLogger(AccountController.class);
   private final MetricRegistry metricRegistry = SharedMetricRegistries.getOrCreate(Constants.METRICS_NAME);
-  private final Meter newUserMeter = metricRegistry.meter(name(AccountController.class, "brand_new_user"));
   private final Meter blockedHostMeter = metricRegistry.meter(name(AccountController.class, "blocked_host"));
   private final Meter rateLimitedHostMeter = metricRegistry.meter(name(AccountController.class, "rate_limited_host"));
   private final Meter captchaRequiredMeter = metricRegistry.meter(name(AccountController.class, "captcha_required"));
@@ -107,12 +104,11 @@ public class AccountController {
 
   private static final String VERFICATION_TRANSPORT_TAG_NAME = "transport";
 
-  private final PendingAccountsManager pendingAccounts;
+  private final StoredVerificationCodeManager pendingAccounts;
   private final AccountsManager accounts;
   private final UsernamesManager usernames;
   private final AbusiveHostRules abusiveHostRules;
   private final RateLimiters rateLimiters;
-  private final MessagesManager messagesManager;
   private final TurnTokenGenerator turnTokenGenerator;
   private final Map<String, Integer> testDevices;
   private final RecaptchaClient recaptchaClient;
@@ -121,9 +117,9 @@ public class AccountController {
   private final LocalParametersConfiguration localParametersConfiguration;
   private final ServiceConfiguration serviceConfiguration;
 
-  public AccountController(PendingAccountsManager pendingAccounts, AccountsManager accounts,
+  public AccountController(StoredVerificationCodeManager pendingAccounts, AccountsManager accounts,
       UsernamesManager usernames, AbusiveHostRules abusiveHostRules, RateLimiters rateLimiters,
-      MessagesManager messagesManager, TurnTokenGenerator turnTokenGenerator, Map<String, Integer> testDevices,
+      TurnTokenGenerator turnTokenGenerator, Map<String, Integer> testDevices,
       RecaptchaClient recaptchaClient, GCMSender gcmSender,
       // APNSender apnSender,
       LocalParametersConfiguration localParametersConfiguration, ServiceConfiguration serviceConfiguration) {
@@ -132,7 +128,6 @@ public class AccountController {
     this.usernames = usernames;
     this.abusiveHostRules = abusiveHostRules;
     this.rateLimiters = rateLimiters;
-    this.messagesManager = messagesManager;
     this.testDevices = testDevices;
     this.turnTokenGenerator = turnTokenGenerator;
     this.recaptchaClient = recaptchaClient;
@@ -147,7 +142,7 @@ public class AccountController {
   @Path("/{type}/preauth/{token}/{number}")
   public Response getPreAuth(@PathParam("type") String pushType, @PathParam("token") String pushToken,
       @PathParam("number") String userLogin,
-      @QueryParam("voip")  Optional<Boolean> useVoip) {
+      @QueryParam("voip") Optional<Boolean> useVoip) {
 
     if (!"apn".equals(pushType) && !"fcm".equals(pushType)) {
       return Response.status(400).build();
@@ -171,10 +166,10 @@ public class AccountController {
     pendingAccounts.store(userLogin, presetVerificationCode.get());
 
     if ("fcm".equals(pushType)) {
-      gcmSender.sendMessage(new GcmMessage(pushToken, userLogin, 0, GcmMessage.Type.CHALLENGE,
+      gcmSender.sendMessage(new GcmMessage(pushToken, null, 0, GcmMessage.Type.CHALLENGE,
           Optional.of(presetVerificationCode.get().getPushCode())));
 //    } else if ("apn".equals(pushType)) {
-//      apnSender.sendMessage(new ApnMessage(pushToken, number, 0, useVoip.orElse(true), ApnMessage.Type.CHALLENGE, Optional.of(presetVerificationCode.get().getPushCode())));
+//      apnSender.sendMessage(new ApnMessage(pushToken, null, 0, useVoip.orElse(true), ApnMessage.Type.CHALLENGE, Optional.of(presetVerificationCode.get().getPushCode())));
     } else {
       throw new AssertionError();
     }
@@ -193,23 +188,23 @@ public class AccountController {
       @QueryParam("challenge") Optional<String> pushChallenge,
       @Context HttpServletRequest httpServletRequest) throws RateLimitExceededException, RetryLaterException {
 
-    String requester;
+    String sourceHost;
 
     if (!Util.isValidUserLogin(userLogin)) {
       logger.info("Invalid user login: " + userLogin);
       throw new WebApplicationException(Response.status(400).build());
     }
 
-    requester = forwardedFor.isPresent() ? ForwardedIpUtil.getMostRecentProxy(forwardedFor.get()).orElseThrow() : httpServletRequest.getRemoteAddr();
+    sourceHost = forwardedFor.isPresent() ? ForwardedIpUtil.getMostRecentProxy(forwardedFor.get()).orElseThrow() : httpServletRequest.getRemoteAddr();
 
     Optional<StoredVerificationCode> storedVerificationCode = pendingAccounts.getCodeForUserLogin(userLogin);
-    CaptchaRequirement requirement = requiresCaptcha(userLogin, transport, forwardedFor, requester, captcha, storedVerificationCode, pushChallenge);
+    CaptchaRequirement requirement = requiresCaptcha(userLogin, transport, forwardedFor, sourceHost, captcha, storedVerificationCode, pushChallenge);
 
     if (requirement.isCaptchaRequired()) {
       captchaRequiredMeter.mark();
-      if (requirement.isAutoBlock() && shouldAutoBlock(requester)) {
-        logger.info("Auto-block: " + requester);
-        abusiveHostRules.setBlockedHost(requester, "Auto-Block");
+      if (requirement.isAutoBlock() && shouldAutoBlock(sourceHost)) {
+        logger.info("Auto-block: {}", sourceHost);
+        abusiveHostRules.setBlockedHost(sourceHost, "Auto-Block");
       }
 
       return Response.status(402).build();
@@ -249,71 +244,59 @@ public class AccountController {
   @Produces(MediaType.APPLICATION_JSON)
   @Path("/code/{verification_code}")
   public AccountCreationResult verifyAccount(@PathParam("verification_code") String verificationCode,
-      @HeaderParam("Authorization") String authorizationHeader,
+      @HeaderParam("Authorization") BasicAuthorizationHeader authorizationHeader,
       @HeaderParam("X-Signal-Agent") String signalAgent,
       @HeaderParam("User-Agent") String userAgent,
       @QueryParam("transfer") Optional<Boolean> availableForTransfer, @Valid AccountAttributes accountAttributes)
       throws RateLimitExceededException {
-    try {
 
-      AuthorizationHeader header = AuthorizationHeader.fromFullHeader(authorizationHeader);
-      String userLogin = header.getIdentifier().getUserLogin();
-      String password = header.getPassword();
+    String userLogin = authorizationHeader.getUsername();
+    String password = authorizationHeader.getPassword();
 
-      if (userLogin == null) {
-        throw new WebApplicationException(400);
-      }
+    rateLimiters.getVerifyLimiter().validate(userLogin);
 
-      rateLimiters.getVerifyLimiter().validate(userLogin);
+    Optional<StoredVerificationCode> storedVerificationCode = pendingAccounts.getCodeForUserLogin(userLogin);
 
-      Optional<StoredVerificationCode> storedVerificationCode = pendingAccounts.getCodeForUserLogin(userLogin);
-
-      if (storedVerificationCode.isEmpty() || !storedVerificationCode.get().isValid(verificationCode, localParametersConfiguration.getVerificationCodeLifetime())) {
-        throw new WebApplicationException(Response.status(403).build());
-      }
-
-      Optional<Account> existingAccount = accounts.get(userLogin);
-
-      // TODO: remove this after soft-deletion is abandoned on the client side
-      if (existingAccount.isPresent() && System.currentTimeMillis() - existingAccount.get().getLastSeen() < TimeUnit.DAYS.toMillis(7)) {
-        rateLimiters.getVerifyLimiter().clear(userLogin);        
-      }
-
-      if (availableForTransfer.orElse(false) && existingAccount.map(Account::isTransferSupported).orElse(false)) {
-        throw new WebApplicationException(Response.status(409).build());
-      }
-
-      if (accounts.getAccountCreationLock() || accounts.getAccountRemovalLock()
-          || accounts.getDirectoryManager().getDirectoryReadLock() || accounts.getDirectoryRestoreLock()) {
-
-        throw new WebApplicationException(
-            Response.status(503).header("Retry-After", Integer.valueOf(60)).build());
-      }
-
-      Account account = createAccount(userLogin, password, signalAgent, accountAttributes);
-
-      {
-        final List<Tag> tags = new ArrayList<>();
-        tags.add(UserAgentTagUtil.getPlatformTag(userAgent));
-
-        Metrics.counter(ACCOUNT_VERIFY_COUNTER_NAME, tags).increment();
-      }
-
-      return new AccountCreationResult(account.getUuid(),
-          existingAccount.map(Account::isStorageSupported).orElse(false));
-
-    } catch (InvalidAuthorizationHeaderException e) {
-      logger.info("Bad Authorization Header", e);
-      throw new WebApplicationException(Response.status(401).build());
+    if (storedVerificationCode.isEmpty() || !storedVerificationCode.get().isValid(verificationCode, localParametersConfiguration.getVerificationCodeLifetime())) {
+      throw new WebApplicationException(Response.status(403).build());
     }
+
+    Optional<Account> existingAccount = accounts.get(userLogin);
+
+    // TODO: remove this after soft-deletion is abandoned on the client side
+    if (existingAccount.isPresent() && System.currentTimeMillis() - existingAccount.get().getLastSeen() < TimeUnit.DAYS.toMillis(7)) {
+      rateLimiters.getVerifyLimiter().clear(userLogin);
+    }
+
+    if (availableForTransfer.orElse(false) && existingAccount.map(Account::isTransferSupported).orElse(false)) {
+      throw new WebApplicationException(Response.status(409).build());
+    }
+
+    if (accounts.getAccountCreationLock() || accounts.getAccountRemovalLock()
+        || accounts.getDirectoryManager().getDirectoryReadLock() || accounts.getDirectoryRestoreLock()) {
+
+      throw new WebApplicationException(
+          Response.status(503).header("Retry-After", Integer.valueOf(60)).build());
+    }
+
+    Account account = accounts.create(userLogin, password, signalAgent, accountAttributes);
+
+    {
+      final List<Tag> tags = new ArrayList<>();
+      tags.add(UserAgentTagUtil.getPlatformTag(userAgent));
+
+      Metrics.counter(ACCOUNT_VERIFY_COUNTER_NAME, tags).increment();
+    }
+
+    return new AccountCreationResult(account.getUuid(), account.getUserLogin(), existingAccount.map(Account::isStorageSupported).orElse(false));
   }
 
   @Timed
   @GET
   @Path("/turn/")
   @Produces(MediaType.APPLICATION_JSON)
-  public TurnToken getTurnToken(@Auth Account account) throws RateLimitExceededException {
-    rateLimiters.getTurnLimiter().validate(account.getUserLogin());
+  public TurnToken getTurnToken(@Auth AuthenticatedAccount auth) throws RateLimitExceededException {
+    rateLimiters.getTurnLimiter().validate(auth.getAccount().getUuid());
     return turnTokenGenerator.generate();
   }
 
@@ -321,8 +304,8 @@ public class AccountController {
   @GET
   @Path("/config/")
   @Produces(MediaType.APPLICATION_JSON)
-  public ServiceConfiguration getServiceConfiguration(@Auth Account account) throws RateLimitExceededException {
-    rateLimiters.getConfigLimiter().validate(account.getUserLogin());
+  public ServiceConfiguration getServiceConfiguration(@Auth AuthenticatedAccount auth) throws RateLimitExceededException {
+    rateLimiters.getConfigLimiter().validate(auth.getAccount().getUuid());
     return serviceConfiguration;
   }
 
@@ -330,8 +313,8 @@ public class AccountController {
   @GET
   @Path("/cert/")
   @Produces(MediaType.APPLICATION_JSON)
-  public SystemCerts getCerts(@Auth Account account) throws RateLimitExceededException {
-    rateLimiters.getCertLimiter().validate(account.getUserLogin());
+  public SystemCerts getCerts(@Auth AuthenticatedAccount auth) throws RateLimitExceededException {
+    rateLimiters.getCertLimiter().validate(auth.getAccount().getUuid());
 
     return (new CertsProvider(localParametersConfiguration, serviceConfiguration)).getCerts();
   }
@@ -340,8 +323,8 @@ public class AccountController {
   @GET
   @Path("/certver/")
   @Produces(MediaType.APPLICATION_JSON)
-  public SystemCertsVersion getCertsVersion(@Auth Account account) throws RateLimitExceededException {
-    rateLimiters.getCertVerLimiter().validate(account.getUserLogin());
+  public SystemCertsVersion getCertsVersion(@Auth AuthenticatedAccount auth) throws RateLimitExceededException {
+    rateLimiters.getCertVerLimiter().validate(auth.getAccount().getUuid());
 
     return (new CertsProvider(localParametersConfiguration, serviceConfiguration)).getCertsVersion();
   }
@@ -350,13 +333,11 @@ public class AccountController {
   @GET
   @Path("/license")
   @Produces(MediaType.APPLICATION_OCTET_STREAM)
-  public Response getLicenseFile(@Auth Account account) throws RateLimitExceededException {
+  public Response getLicenseFile(@Auth AuthenticatedAccount auth) throws RateLimitExceededException {
 
-    String login = account.getUserLogin();
+    rateLimiters.getLicenseLimiter().validate(auth.getAccount().getUuid());
 
-    rateLimiters.getLicenseLimiter().validate(login);
-
-    String filename = login + ".bin";
+    String filename = auth.getAccount().getUserLogin() + ".bin";
 
     try {
       InputStream is = new FileInputStream(localParametersConfiguration.getLicensePath() + "/" + filename);
@@ -372,12 +353,11 @@ public class AccountController {
   @GET
   @Path("/serverlicense")
   @Produces(MediaType.APPLICATION_OCTET_STREAM)
-  public Response getServerLicenseFile(@Auth Account account) throws RateLimitExceededException {
+  public Response getServerLicenseFile(@Auth AuthenticatedAccount auth) throws RateLimitExceededException {
 
     String filename = Constants.serverLicenseFilename;
-    String login = account.getUserLogin();
 
-    rateLimiters.getLicenseLimiter().validate(login);
+    rateLimiters.getLicenseLimiter().validate(auth.getAccount().getUuid());
 
     try {
       InputStream is = new FileInputStream(localParametersConfiguration.getLicensePath() + "/" + filename);
@@ -392,136 +372,141 @@ public class AccountController {
   @PUT
   @Path("/gcm/")
   @Consumes(MediaType.APPLICATION_JSON)
-  public void setGcmRegistrationId(@Auth DisabledPermittedAccount disabledPermittedAccount,
+  public void setGcmRegistrationId(@Auth DisabledPermittedAuthenticatedAccount disabledPermittedAuth,
       @Valid GcmRegistrationId registrationId) {
-    Account account = disabledPermittedAccount.getAccount();
-    Device device = account.getAuthenticatedDevice().get();
-//	    boolean wasAccountEnabled = account.isEnabled();
+    Account account = disabledPermittedAuth.getAccount();
+    Device device = disabledPermittedAuth.getAuthenticatedDevice();
 
     if (device.getGcmId() != null && device.getGcmId().equals(registrationId.getGcmRegistrationId())) {
       return;
     }
 
-    device.setApnId(null);
-    device.setVoipApnId(null);
-    device.setGcmId(registrationId.getGcmRegistrationId());
-
-    device.setFetchesMessages(false);
-
-    accounts.update(account);
+    accounts.updateDevice(account, device.getId(), d -> {
+      d.setApnId(null);
+      d.setVoipApnId(null);
+      d.setGcmId(registrationId.getGcmRegistrationId());
+      d.setFetchesMessages(false);
+    });
   }
 
   @Timed
   @DELETE
   @Path("/gcm/")
-  public void deleteGcmRegistrationId(@Auth DisabledPermittedAccount disabledPermittedAccount) {
-    Account account = disabledPermittedAccount.getAccount();
-    Device device = account.getAuthenticatedDevice().get();
-    device.setGcmId(null);
-    device.setFetchesMessages(false);
-    device.setUserAgent("OWA");
-    accounts.update(account);
+  public void deleteGcmRegistrationId(@Auth DisabledPermittedAuthenticatedAccount disabledPermittedAuth) {
+    Account account = disabledPermittedAuth.getAccount();
+    Device device = disabledPermittedAuth.getAuthenticatedDevice();
+
+    accounts.updateDevice(account, device.getId(), d -> {
+      d.setGcmId(null);
+      d.setFetchesMessages(false);
+      d.setUserAgent("OWA");
+    });
   }
 
   @Timed
   @PUT
   @Path("/apn/")
   @Consumes(MediaType.APPLICATION_JSON)
-  public void setApnRegistrationId(@Auth DisabledPermittedAccount disabledPermittedAccount,
+  public void setApnRegistrationId(@Auth DisabledPermittedAuthenticatedAccount disabledPermittedAuth,
       @Valid ApnRegistrationId registrationId) {
-    Account account = disabledPermittedAccount.getAccount();
-    Device device = account.getAuthenticatedDevice().get();
+    Account account = disabledPermittedAuth.getAccount();
+    Device device = disabledPermittedAuth.getAuthenticatedDevice();
 
-    device.setApnId(registrationId.getApnRegistrationId());
-    device.setVoipApnId(registrationId.getVoipRegistrationId());
-    device.setGcmId(null);
-    device.setFetchesMessages(false);
-    accounts.update(account);
+    accounts.updateDevice(account, device.getId(), d -> {
+      d.setApnId(registrationId.getApnRegistrationId());
+      d.setVoipApnId(registrationId.getVoipRegistrationId());
+      d.setGcmId(null);
+      d.setFetchesMessages(false);
+    });
   }
 
   @Timed
   @DELETE
   @Path("/apn/")
-  public void deleteApnRegistrationId(@Auth DisabledPermittedAccount disabledPermittedAccount) {
-    Account account = disabledPermittedAccount.getAccount();
-    Device device = account.getAuthenticatedDevice().get();
+  public void deleteApnRegistrationId(@Auth DisabledPermittedAuthenticatedAccount disabledPermittedAuth) {
+    Account account = disabledPermittedAuth.getAccount();
+    Device device = disabledPermittedAuth.getAuthenticatedDevice();
 
-    device.setApnId(null);
-    device.setFetchesMessages(false);
-    if (device.getId() == 1) {
-      device.setUserAgent("OWI");
-    } else {
-      device.setUserAgent("OWP");
-    }
-    accounts.update(account);
-  }  
+    accounts.updateDevice(account, device.getId(), d -> {
+      d.setApnId(null);
+      d.setFetchesMessages(false);
+      if (d.getId() == 1) {
+        d.setUserAgent("OWI");
+      } else {
+        d.setUserAgent("OWP");
+      }
+    });
+  }
 
   @Timed
   @PUT
   @Path("/name/")
-  public void setName(@Auth DisabledPermittedAccount disabledPermittedAccount, @Valid DeviceName deviceName) {
-    Account account = disabledPermittedAccount.getAccount();
+  public void setName(@Auth DisabledPermittedAuthenticatedAccount disabledPermittedAuth, @Valid DeviceName deviceName) {
+    Account account = disabledPermittedAuth.getAccount();
+    Device device = disabledPermittedAuth.getAuthenticatedDevice();
 
-    account.getAuthenticatedDevice().get().setName(deviceName.getDeviceName());
-    accounts.update(account);
+    accounts.updateDevice(account, device.getId(), d -> d.setName(deviceName.getDeviceName()));
   }
 
   @Timed
   @DELETE
   @Path("/signaling_key")
-  public void removeSignalingKey(@Auth DisabledPermittedAccount disabledPermittedAccount) {
+  public void removeSignalingKey(@Auth DisabledPermittedAuthenticatedAccount disabledPermittedAuth) {
   }
 
   @Timed
   @PUT
   @Path("/attributes/")
   @Consumes(MediaType.APPLICATION_JSON)
-  public void setAccountAttributes(@Auth DisabledPermittedAccount disabledPermittedAccount,
-      @HeaderParam("X-Signal-Agent") String userAgent, @Valid AccountAttributes attributes) {
-    Account account = disabledPermittedAccount.getAccount();
-    Device device = account.getAuthenticatedDevice().get();
+  public void setAccountAttributes(@Auth DisabledPermittedAuthenticatedAccount disabledPermittedAuth,
+      @HeaderParam("X-Signal-Agent") String userAgent,
+      @Valid AccountAttributes attributes) {
+    Account account = disabledPermittedAuth.getAccount();
+    long deviceId = disabledPermittedAuth.getAuthenticatedDevice().getId();
 
-    device.setFetchesMessages(attributes.getFetchesMessages());
-    device.setName(attributes.getName());
-    device.setLastSeen(Util.todayInMillis());
-    device.setCapabilities(attributes.getCapabilities());
-    device.setRegistrationId(attributes.getRegistrationId());
-    device.setUserAgent(userAgent);    
+    accounts.update(account, a -> {
+      a.getDevice(deviceId).ifPresent(d -> {
+        d.setFetchesMessages(attributes.getFetchesMessages());
+        d.setName(attributes.getName());
+        d.setLastSeen(Util.todayInMillis());
+        d.setCapabilities(attributes.getCapabilities());
+        d.setRegistrationId(attributes.getRegistrationId());
+        d.setUserAgent(userAgent);
+      });
 
-    account.setUnidentifiedAccessKey(attributes.getUnidentifiedAccessKey());
-    account.setUnrestrictedUnidentifiedAccess(attributes.isUnrestrictedUnidentifiedAccess());
-    account.setDiscoverableByUserLogin(attributes.isDiscoverableByUserLogin());
-
-    accounts.update(account);
+      a.setUnidentifiedAccessKey(attributes.getUnidentifiedAccessKey());
+      a.setUnrestrictedUnidentifiedAccess(attributes.isUnrestrictedUnidentifiedAccess());
+      a.setDiscoverableByUserLogin(attributes.isDiscoverableByUserLogin());
+    });
   }
 
   @GET
   @Path("/me")
   @Produces(MediaType.APPLICATION_JSON)
-  public AccountCreationResult getMe(@Auth Account account) {
-    return whoAmI(account);
+  public AccountCreationResult getMe(@Auth AuthenticatedAccount auth) {
+    return whoAmI(auth);
   }
 
   @GET
   @Path("/whoami")
   @Produces(MediaType.APPLICATION_JSON)
-  public AccountCreationResult whoAmI(@Auth Account account) {
-    return new AccountCreationResult(account.getUuid(), account.isStorageSupported());
+  public AccountCreationResult whoAmI(@Auth AuthenticatedAccount auth) {
+    return new AccountCreationResult(auth.getAccount().getUuid(), auth.getAccount().getUserLogin(), auth.getAccount().isStorageSupported());
   }
 
   @DELETE
   @Path("/username")
   @Produces(MediaType.APPLICATION_JSON)
-  public void deleteUsername(@Auth Account account) {
-    usernames.delete(account.getUuid());
+  public void deleteUsername(@Auth AuthenticatedAccount auth) {
+    usernames.delete(auth.getAccount().getUuid());
   }
 
   @PUT
   @Path("/username/{username}")
   @Produces(MediaType.APPLICATION_JSON)
-  public Response setUsername(@Auth Account account, @PathParam("username") String username)
+  public Response setUsername(@Auth AuthenticatedAccount auth, @PathParam("username") String username)
       throws RateLimitExceededException {
-    rateLimiters.getUsernameSetLimiter().validate(account.getUuid().toString());
+    rateLimiters.getUsernameSetLimiter().validate(auth.getAccount().getUuid());
 
     if (username == null || username.isEmpty()) {
       return Response.status(Response.Status.BAD_REQUEST).build();
@@ -533,7 +518,7 @@ public class AccountController {
       return Response.status(Response.Status.BAD_REQUEST).build();
     }
 
-    if (!usernames.put(account.getUuid(), username)) {
+    if (!usernames.put(auth.getAccount().getUuid(), username)) {
       return Response.status(Response.Status.CONFLICT).build();
     }
 
@@ -541,13 +526,13 @@ public class AccountController {
   }
 
   private CaptchaRequirement requiresCaptcha(String userLogin, String transport, Optional<String> forwardedFor,
-      String requester, Optional<String> captchaToken, Optional<StoredVerificationCode> storedVerificationCode,
+      String sourceHost, Optional<String> captchaToken, Optional<StoredVerificationCode> storedVerificationCode,
       Optional<String> pushChallenge) {
 
     // this should be skipped, since the captcha token is absent; in case it's
     // somehow present, the guy is rejected with 402
     if (captchaToken.isPresent()) {
-      boolean validToken = recaptchaClient.verify(captchaToken.get(), requester);
+      boolean validToken = recaptchaClient.verify(captchaToken.get(), sourceHost);
 
       if (validToken) {
         captchaSuccessMeter.mark();
@@ -584,11 +569,11 @@ public class AccountController {
       }
     }
 
-    List<AbusiveHostRule> abuseRules = abusiveHostRules.getAbusiveHostRulesFor(requester);
+    List<AbusiveHostRule> abuseRules = abusiveHostRules.getAbusiveHostRulesFor(sourceHost);
 
     for (AbusiveHostRule abuseRule : abuseRules) {
       if (abuseRule.isBlocked()) {
-        logger.info("Blocked host: " + transport + ", " + userLogin + ", " + requester + " (" + forwardedFor.orElse("") + ")");
+        logger.info("Blocked host: {}, {}, {} ({})", userLogin, sourceHost, forwardedFor.orElse(""));
         blockedHostMeter.mark();
         return new CaptchaRequirement(true, false);
         // isCaptchaRequired = true will send 402 to this guy
@@ -596,9 +581,9 @@ public class AccountController {
     }
 
     try {
-      rateLimiters.getSmsVoiceIpLimiter().validate(requester);
+      rateLimiters.getSmsVoiceIpLimiter().validate(sourceHost);
     } catch (RateLimitExceededException e) {
-      logger.info("Rate limited exceeded: " + transport + ", " + userLogin + ", " + requester + " (" + forwardedFor.orElse("") + ")");
+      logger.info("Rate limited exceeded: {}, {}, {} ({})", userLogin, sourceHost, forwardedFor.orElse(""));
       rateLimitedHostMeter.mark();
       return new CaptchaRequirement(true, true);
       // send him 402 and consider for autoblock
@@ -610,52 +595,18 @@ public class AccountController {
   @Timed
   @DELETE
   @Path("/me")
-  public void deleteAccount(@Auth Account account) {
-    accounts.delete(Stream.of(account).collect(Collectors.toCollection(HashSet::new)), AccountsManager.DeletionReason.USER_REQUEST);
+  public void deleteAccount(@Auth AuthenticatedAccount auth) {
+    accounts.delete(Stream.of(auth.getAccount()).collect(Collectors.toCollection(HashSet::new)), AccountsManager.DeletionReason.USER_REQUEST);
   }
 
-  private boolean shouldAutoBlock(String requester) {
+  private boolean shouldAutoBlock(String sourceHost) {
     try {
-      rateLimiters.getAutoBlockLimiter().validate(requester);
+      rateLimiters.getAutoBlockLimiter().validate(sourceHost);
     } catch (RateLimitExceededException e) {
       return true;
     }
 
     return false;
-  }
-
-  private Account createAccount(String userLogin, String password, String signalAgent, AccountAttributes accountAttributes) {
-    Optional<Account> maybeExistingAccount = accounts.get(userLogin);
-
-    Device device = new Device();
-    device.setId(Device.MASTER_ID);
-    device.setAuthenticationCredentials(new AuthenticationCredentials(password));
-    device.setFetchesMessages(accountAttributes.getFetchesMessages());
-    device.setRegistrationId(accountAttributes.getRegistrationId());
-    device.setName(accountAttributes.getName());
-    device.setCapabilities(accountAttributes.getCapabilities());
-    device.setCreated(System.currentTimeMillis());
-    device.setLastSeen(Util.todayInMillis());
-    device.setUserAgent(signalAgent);
-
-    Account account = new Account();
-    account.setUserLogin(userLogin);
-    account.setUuid(UUID.randomUUID());
-
-    account.addDevice(device);    
-
-    account.setUnidentifiedAccessKey(accountAttributes.getUnidentifiedAccessKey());
-    account.setUnrestrictedUnidentifiedAccess(accountAttributes.isUnrestrictedUnidentifiedAccess());
-    account.setDiscoverableByUserLogin(accountAttributes.isDiscoverableByUserLogin());
-
-    if (accounts.create(account)) {
-      newUserMeter.mark();
-    }
-
-    maybeExistingAccount.ifPresent(definitelyExistingAccount -> messagesManager.clear(definitelyExistingAccount.getUuid()));
-    pendingAccounts.remove(userLogin);
-
-    return account;
   }
 
   private String generatePushChallenge() {

@@ -1,3 +1,8 @@
+/*
+ * Copyright 2021 Signal Messenger, LLC
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
 package su.sres.shadowserver.mappers;
 
 import su.sres.shadowserver.entities.RateLimitChallenge;

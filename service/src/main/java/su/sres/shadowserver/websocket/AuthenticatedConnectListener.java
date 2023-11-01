@@ -1,6 +1,6 @@
 /*
- * Original software: Copyright 2013-2020 Signal Messenger, LLC
- * Modified software: Copyright 2019-2022 Anton Alipov, sole trader
+ * Original software: Copyright 2013-2021 Signal Messenger, LLC
+ * Modified software: Copyright 2019-2023 Anton Alipov, sole trader
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 package su.sres.shadowserver.websocket;
@@ -10,6 +10,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.SharedMetricRegistries;
 import com.codahale.metrics.Timer;
 
+import su.sres.shadowserver.auth.AuthenticatedAccount;
 import su.sres.shadowserver.push.ApnFallbackManager;
 import su.sres.shadowserver.push.ClientPresenceManager;
 import su.sres.shadowserver.push.MessageSender;
@@ -62,17 +63,17 @@ public class AuthenticatedConnectListener implements WebSocketConnectListener {
   @Override
   public void onWebSocketConnect(WebSocketSessionContext context) {
     if (context.getAuthenticated() != null) {
-      final Account account = context.getAuthenticated(Account.class);
-      final Device device = account.getAuthenticatedDevice().get();
+      final AuthenticatedAccount auth = context.getAuthenticated(AuthenticatedAccount.class);
+      final Device device = auth.getAuthenticatedDevice();
       final Timer.Context timer = durationTimer.time();
       final WebSocketConnection connection = new WebSocketConnection(receiptSender,
-          messagesManager, account, device,
+          messagesManager, auth, device,
           context.getClient(),
           retrySchedulingExecutor);
 
       openWebsocketCounter.inc();
       try {
-        RedisOperation.unchecked(() -> apnFallbackManager.cancel(account, device));
+        RedisOperation.unchecked(() -> apnFallbackManager.cancel(auth.getAccount(), device));
       } catch (Exception e) {
 // log nothing, just ignore the exception
       }
@@ -86,20 +87,20 @@ public class AuthenticatedConnectListener implements WebSocketConnectListener {
           
           connection.stop();
 
-          RedisOperation.unchecked(() -> clientPresenceManager.clearPresence(account.getUuid(), device.getId()));
+          RedisOperation.unchecked(() -> clientPresenceManager.clearPresence(auth.getAccount().getUuid(), device.getId()));
           RedisOperation.unchecked(() -> {
             messagesManager.removeMessageAvailabilityListener(connection);
 
-            if (messagesManager.hasCachedMessages(account.getUuid(), device.getId())) {
-              messageSender.sendNewMessageNotification(account, device);
+            if (messagesManager.hasCachedMessages(auth.getAccount().getUuid(), device.getId())) {
+              messageSender.sendNewMessageNotification(auth.getAccount(), device);
             }
           });
         }
       });
       try {
-        clientPresenceManager.setPresent(account.getUuid(), device.getId(), connection);
-        messagesManager.addMessageAvailabilityListener(account.getUuid(), device.getId(), connection);
         connection.start();
+        clientPresenceManager.setPresent(auth.getAccount().getUuid(), device.getId(), connection);
+        messagesManager.addMessageAvailabilityListener(auth.getAccount().getUuid(), device.getId(), connection);        
       } catch (final Exception e) {
         log.warn("Failed to initialize websocket", e);
         context.getClient().close(1011, "Unexpected error initializing connection");

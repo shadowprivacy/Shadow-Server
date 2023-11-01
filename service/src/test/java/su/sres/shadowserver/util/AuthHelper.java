@@ -1,6 +1,6 @@
 /*
- * Original software: Copyright 2013-2020 Signal Messenger, LLC
- * Modified software: Copyright 2019-2022 Anton Alipov, sole trader
+ * Original software: Copyright 2013-2021 Signal Messenger, LLC
+ * Modified software: Copyright 2019-2023 Anton Alipov, sole trader
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 package su.sres.shadowserver.util;
@@ -8,21 +8,17 @@ package su.sres.shadowserver.util;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableMap;
 import org.mockito.ArgumentMatcher;
 
 import su.sres.shadowserver.auth.AccountAuthenticator;
-import su.sres.shadowserver.auth.AmbiguousIdentifier;
+import su.sres.shadowserver.auth.AuthenticatedAccount;
 import su.sres.shadowserver.auth.AuthenticationCredentials;
-import su.sres.shadowserver.auth.DisabledPermittedAccount;
 import su.sres.shadowserver.auth.DisabledPermittedAccountAuthenticator;
-
-// federation excluded, reserved for future use
-// import su.sres.shadowserver.auth.FederatedPeerAuthenticator;
-// import su.sres.shadowserver.configuration.FederationConfiguration;
-// import su.sres.shadowserver.federation.FederatedPeer;
+import su.sres.shadowserver.auth.DisabledPermittedAuthenticatedAccount;
 import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.storage.AccountsManager;
 import su.sres.shadowserver.storage.Device;
@@ -53,7 +49,7 @@ public class AuthHelper {
   public static final UUID VALID_UUID_TWO = UUID.randomUUID();
   public static final String VALID_PASSWORD_TWO = "baz";
 
-  public static final String INVVALID_NUMBER = "+14151111111";
+  public static final String INVALID_NUMBER = "+14151111111";
   public static final UUID INVALID_UUID = UUID.randomUUID();
   public static final String INVALID_PASSWORD = "bar";
 
@@ -127,12 +123,7 @@ public class AuthHelper {
     when(DISABLED_ACCOUNT.getUserLogin()).thenReturn(DISABLED_NUMBER);
     when(DISABLED_ACCOUNT.getUuid()).thenReturn(DISABLED_UUID);
     when(UNDISCOVERABLE_ACCOUNT.getUserLogin()).thenReturn(UNDISCOVERABLE_NUMBER);
-    when(UNDISCOVERABLE_ACCOUNT.getUuid()).thenReturn(UNDISCOVERABLE_UUID);
-
-    when(VALID_ACCOUNT.getAuthenticatedDevice()).thenReturn(Optional.of(VALID_DEVICE));
-    when(VALID_ACCOUNT_TWO.getAuthenticatedDevice()).thenReturn(Optional.of(VALID_DEVICE_TWO));
-    when(DISABLED_ACCOUNT.getAuthenticatedDevice()).thenReturn(Optional.of(DISABLED_DEVICE));
-    when(UNDISCOVERABLE_ACCOUNT.getAuthenticatedDevice()).thenReturn(Optional.of(UNDISCOVERABLE_DEVICE));
+    when(UNDISCOVERABLE_ACCOUNT.getUuid()).thenReturn(UNDISCOVERABLE_UUID);   
 
     when(VALID_ACCOUNT.getRelay()).thenReturn(Optional.empty());
     when(VALID_ACCOUNT_TWO.getRelay()).thenReturn(Optional.empty());
@@ -149,65 +140,47 @@ public class AuthHelper {
     when(UNDISCOVERABLE_ACCOUNT.isDiscoverableByUserLogin()).thenReturn(false);
 
     when(VALID_ACCOUNT.getIdentityKey()).thenReturn(VALID_IDENTITY);
+    
+    reset(ACCOUNTS_MANAGER);
 
     when(ACCOUNTS_MANAGER.get(VALID_NUMBER)).thenReturn(Optional.of(VALID_ACCOUNT));
-    when(ACCOUNTS_MANAGER.get(VALID_UUID)).thenReturn(Optional.of(VALID_ACCOUNT));
-    when(ACCOUNTS_MANAGER.get(argThat((ArgumentMatcher<AmbiguousIdentifier>) identifier -> identifier != null && identifier.hasUserLogin() && identifier.getUserLogin().equals(VALID_NUMBER)))).thenReturn(Optional.of(VALID_ACCOUNT));
-    when(ACCOUNTS_MANAGER.get(argThat((ArgumentMatcher<AmbiguousIdentifier>) identifier -> identifier != null && identifier.hasUuid() && identifier.getUuid().equals(VALID_UUID)))).thenReturn(Optional.of(VALID_ACCOUNT));
+    when(ACCOUNTS_MANAGER.get(VALID_UUID)).thenReturn(Optional.of(VALID_ACCOUNT));    
 
     when(ACCOUNTS_MANAGER.get(VALID_NUMBER_TWO)).thenReturn(Optional.of(VALID_ACCOUNT_TWO));
     when(ACCOUNTS_MANAGER.get(VALID_UUID_TWO)).thenReturn(Optional.of(VALID_ACCOUNT_TWO));
-    when(ACCOUNTS_MANAGER.get(argThat((ArgumentMatcher<AmbiguousIdentifier>) identifier -> identifier != null && identifier.hasUserLogin() && identifier.getUserLogin().equals(VALID_NUMBER_TWO)))).thenReturn(Optional.of(VALID_ACCOUNT_TWO));
-    when(ACCOUNTS_MANAGER.get(argThat((ArgumentMatcher<AmbiguousIdentifier>) identifier -> identifier != null && identifier.hasUuid() && identifier.getUuid().equals(VALID_UUID_TWO)))).thenReturn(Optional.of(VALID_ACCOUNT_TWO));
-
+    
     when(ACCOUNTS_MANAGER.get(DISABLED_NUMBER)).thenReturn(Optional.of(DISABLED_ACCOUNT));
     when(ACCOUNTS_MANAGER.get(DISABLED_UUID)).thenReturn(Optional.of(DISABLED_ACCOUNT));
-    when(ACCOUNTS_MANAGER.get(argThat((ArgumentMatcher<AmbiguousIdentifier>) identifier -> identifier != null && identifier.hasUserLogin() && identifier.getUserLogin().equals(DISABLED_NUMBER)))).thenReturn(Optional.of(DISABLED_ACCOUNT));
-    when(ACCOUNTS_MANAGER.get(argThat((ArgumentMatcher<AmbiguousIdentifier>) identifier -> identifier != null && identifier.hasUuid() && identifier.getUuid().equals(DISABLED_UUID)))).thenReturn(Optional.of(DISABLED_ACCOUNT));
-
+   
     when(ACCOUNTS_MANAGER.get(UNDISCOVERABLE_NUMBER)).thenReturn(Optional.of(UNDISCOVERABLE_ACCOUNT));
     when(ACCOUNTS_MANAGER.get(UNDISCOVERABLE_UUID)).thenReturn(Optional.of(UNDISCOVERABLE_ACCOUNT));
-    when(ACCOUNTS_MANAGER.get(argThat((ArgumentMatcher<AmbiguousIdentifier>) identifier -> identifier != null && identifier.hasUserLogin() && identifier.getUserLogin().equals(UNDISCOVERABLE_NUMBER)))).thenReturn(Optional.of(UNDISCOVERABLE_ACCOUNT));
-    when(ACCOUNTS_MANAGER.get(argThat((ArgumentMatcher<AmbiguousIdentifier>) identifier -> identifier != null && identifier.hasUuid() && identifier.getUuid().equals(UNDISCOVERABLE_UUID)))).thenReturn(Optional.of(UNDISCOVERABLE_ACCOUNT));
-
+    
+    AccountsHelper.setupMockUpdateForAuthHelper(ACCOUNTS_MANAGER);
+    
     for (TestAccount testAccount : TEST_ACCOUNTS) {
       testAccount.setup(ACCOUNTS_MANAGER);
     }
 
-    AuthFilter<BasicCredentials, Account> accountAuthFilter = new BasicCredentialAuthFilter.Builder<Account>().setAuthenticator(new AccountAuthenticator(ACCOUNTS_MANAGER)).buildAuthFilter();
-    AuthFilter<BasicCredentials, DisabledPermittedAccount> disabledPermittedAccountAuthFilter = new BasicCredentialAuthFilter.Builder<DisabledPermittedAccount>().setAuthenticator(new DisabledPermittedAccountAuthenticator(ACCOUNTS_MANAGER)).buildAuthFilter();
+    AuthFilter<BasicCredentials, AuthenticatedAccount> accountAuthFilter = new BasicCredentialAuthFilter.Builder<AuthenticatedAccount>().setAuthenticator(
+        new AccountAuthenticator(ACCOUNTS_MANAGER)).buildAuthFilter();
+    AuthFilter<BasicCredentials, DisabledPermittedAuthenticatedAccount> disabledPermittedAccountAuthFilter = new BasicCredentialAuthFilter.Builder<DisabledPermittedAuthenticatedAccount>().setAuthenticator(
+        new DisabledPermittedAccountAuthenticator(ACCOUNTS_MANAGER)).buildAuthFilter();    
 
-    /*
-     * federation excluded, reserved for future use
-     *
-     * List<FederatedPeer> peer = new LinkedList<FederatedPeer>() {{ add(new
-     * FederatedPeer("cyanogen", "https://foo", "foofoo", "bazzzzz")); }};
-     * 
-     * FederationConfiguration federationConfiguration =
-     * mock(FederationConfiguration.class);
-     * when(federationConfiguration.getPeers()).thenReturn(peer);
-     * 
-     */
-
-//    return new AuthDynamicFeature(new BasicCredentialAuthFilter.Builder<Account>()
-//                                      .setAuthenticator(new AccountAuthenticator(ACCOUNTS_MANAGER))
-    /*
-     * federation excluded, reserved for future use
-     * 
-     * .setPrincipal(Account.class) .buildAuthFilter(), new
-     * BasicCredentialAuthFilter.Builder<FederatedPeer>() .setAuthenticator(new
-     * FederatedPeerAuthenticator(federationConfiguration))
-     * .setPrincipal(FederatedPeer.class)
-     */
-//                                      .buildAuthFilter());
-
-    return new PolymorphicAuthDynamicFeature<>(ImmutableMap.of(Account.class, accountAuthFilter,
-        DisabledPermittedAccount.class, disabledPermittedAccountAuthFilter));
+    return new PolymorphicAuthDynamicFeature<>(ImmutableMap.of(AuthenticatedAccount.class, accountAuthFilter,
+        DisabledPermittedAuthenticatedAccount.class, disabledPermittedAccountAuthFilter));
 
   }
 
-  public static String getAuthHeader(String number, String password) {
-    return "Basic " + Base64.getEncoder().encodeToString((number + ":" + password).getBytes());
+  public static String getAuthHeader(UUID uuid, String password) {
+    return getAuthHeader(uuid.toString(), password);
+  }
+
+  public static String getProvisioningAuthHeader(String number, String password) {
+    return getAuthHeader(number, password);
+  }
+
+  private static String getAuthHeader(String identifier, String password) {
+    return "Basic " + Base64.getEncoder().encodeToString((identifier + ":" + password).getBytes());
   }
 
   public static String getUnidentifiedAccessHeader(byte[] key) {
@@ -239,7 +212,7 @@ public class AuthHelper {
     }
 
     public String getAuthHeader() {
-      return AuthHelper.getAuthHeader(number, password);
+      return AuthHelper.getAuthHeader(uuid, password);
     }
 
     private void setup(final AccountsManager accountsManager) {
@@ -251,14 +224,11 @@ public class AuthHelper {
       when(account.getDevice(1L)).thenReturn(Optional.of(device));
       when(account.getMasterDevice()).thenReturn(Optional.of(device));
       when(account.getUserLogin()).thenReturn(number);
-      when(account.getUuid()).thenReturn(uuid);
-      when(account.getAuthenticatedDevice()).thenReturn(Optional.of(device));
+      when(account.getUuid()).thenReturn(uuid);      
       when(account.getRelay()).thenReturn(Optional.empty());
       when(account.isEnabled()).thenReturn(true);
       when(accountsManager.get(number)).thenReturn(Optional.of(account));
-      when(accountsManager.get(uuid)).thenReturn(Optional.of(account));
-      when(accountsManager.get(argThat((ArgumentMatcher<AmbiguousIdentifier>) identifier -> identifier != null && identifier.hasUserLogin() && identifier.getUserLogin().equals(number)))).thenReturn(Optional.of(account));
-      when(accountsManager.get(argThat((ArgumentMatcher<AmbiguousIdentifier>) identifier -> identifier != null && identifier.hasUuid() && identifier.getUuid().equals(uuid)))).thenReturn(Optional.of(account));
+      when(accountsManager.get(uuid)).thenReturn(Optional.of(account));      
     }
   }
 

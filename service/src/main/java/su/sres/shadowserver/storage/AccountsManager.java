@@ -1,10 +1,11 @@
 /*
- * Original software: Copyright 2013-2020 Signal Messenger, LLC
- * Modified software: Copyright 2019-2022 Anton Alipov, sole trader
+ * Original software: Copyright 2013-2021 Signal Messenger, LLC
+ * Modified software: Copyright 2019-2023 Anton Alipov, sole trader
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 package su.sres.shadowserver.storage;
 
+import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.SharedMetricRegistries;
 import com.codahale.metrics.Timer;
@@ -16,6 +17,7 @@ import io.lettuce.core.RedisException;
 import io.lettuce.core.cluster.api.sync.RedisAdvancedClusterCommands;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Metrics;
+import io.micrometer.core.instrument.Tags;
 import net.logstash.logback.argument.StructuredArguments;
 
 import org.apache.commons.lang3.StringUtils;
@@ -24,7 +26,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -34,15 +35,23 @@ import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
+import javax.annotation.Nullable;
+
 import redis.clients.jedis.Jedis;
-import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
-import su.sres.shadowserver.auth.AmbiguousIdentifier;
+import su.sres.shadowserver.auth.AuthenticationCredentials;
+import su.sres.shadowserver.configuration.dynamic.DynamicAccountsScyllaDbMigrationConfiguration;
+import su.sres.shadowserver.controllers.AccountController;
+import su.sres.shadowserver.entities.AccountAttributes;
 import su.sres.shadowserver.redis.FaultTolerantRedisCluster;
 import su.sres.shadowserver.storage.DirectoryManager.BatchOperationHandle;
 import su.sres.shadowserver.util.Constants;
 import su.sres.shadowserver.util.SystemMapper;
+import su.sres.shadowserver.util.Util;
 
 import static com.codahale.metrics.MetricRegistry.name;
 
@@ -58,14 +67,19 @@ public class AccountsManager {
   private static final Timer getByUserLoginTimer = metricRegistry.timer(name(AccountsManager.class, "getByUserLogin"));
   private static final Timer getByUuidTimer = metricRegistry.timer(name(AccountsManager.class, "getByUuid"));
 
+  // TODO Remove this meter when external dependencies have been resolved
+  // Note that this is deliberately namespaced to `AccountController` for metric
+  // continuity.
+  private static final Meter newUserMeter = metricRegistry.meter(name(AccountController.class, "brand_new_user"));
+
   private static final Timer redisSetTimer = metricRegistry.timer(name(AccountsManager.class, "redisSet"));
   private static final Timer redisUserLoginGetTimer = metricRegistry
       .timer(name(AccountsManager.class, "redisUserLoginGet"));
   private static final Timer redisUuidGetTimer = metricRegistry.timer(name(AccountsManager.class, "redisUuidGet"));
   private static final Timer redisDeleteTimer = metricRegistry.timer(name(AccountsManager.class, "redisDelete"));
 
+  private static final String CREATE_COUNTER_NAME = name(AccountsManager.class, "createCounter");
   private static final String DELETE_COUNTER_NAME = name(AccountsManager.class, "deleteCounter");
-  private static final String DELETE_ERROR_COUNTER_NAME = name(AccountsManager.class, "deleteError");
   private static final String DELETION_REASON_TAG_NAME = "reason";
 
   private static final String SCYLLA_MIGRATION_ERROR_COUNTER_NAME = name(AccountsManager.class, "migration", "error");
@@ -77,11 +91,14 @@ public class AccountsManager {
   private final Accounts accounts;
   private final AccountsScyllaDb accountsScyllaDb;
   private final FaultTolerantRedisCluster cacheCluster;
+  private final DeletedAccounts deletedAccounts;
   private final DirectoryManager directory;
   private final KeysScyllaDb keysScyllaDb;
   private final MessagesManager messagesManager;
+  private final MigrationMismatchedAccounts mismatchedAccounts;
   private final UsernamesManager usernamesManager;
   private final ProfilesManager profilesManager;
+  private final StoredVerificationCodeManager pendingAccounts;
   private final ObjectMapper mapper;
 
   private final ObjectMapper migrationComparisonMapper;
@@ -106,18 +123,24 @@ public class AccountsManager {
 
   private final AtomicInteger accountCreateLock;
 
-  public AccountsManager(Accounts accounts, AccountsScyllaDb accountsScyllaDb, DirectoryManager directory, FaultTolerantRedisCluster cacheCluster, final KeysScyllaDb keysScyllaDb, final MessagesManager messagesManager, final UsernamesManager usernamesManager, final ProfilesManager profilesManager) {
+  private final DynamicAccountsScyllaDbMigrationConfiguration dynConfig = new DynamicAccountsScyllaDbMigrationConfiguration();
+
+  public AccountsManager(Accounts accounts, AccountsScyllaDb accountsScyllaDb, DirectoryManager directory, FaultTolerantRedisCluster cacheCluster, final DeletedAccounts deletedAccounts, final KeysScyllaDb keysScyllaDb, final MessagesManager messagesManager, final MigrationMismatchedAccounts mismatchedAccounts, final UsernamesManager usernamesManager, final ProfilesManager profilesManager,
+      final StoredVerificationCodeManager pendingAccounts) {
     this.accounts = accounts;
     this.accountsScyllaDb = accountsScyllaDb;
     this.directory = directory;
     this.cacheCluster = cacheCluster;
+    this.deletedAccounts = deletedAccounts;
     this.keysScyllaDb = keysScyllaDb;
     this.messagesManager = messagesManager;
+    this.mismatchedAccounts = mismatchedAccounts;
     this.usernamesManager = usernamesManager;
     this.profilesManager = profilesManager;
+    this.pendingAccounts = pendingAccounts;
     this.mapper = SystemMapper.getMapper();
     this.migrationComparisonMapper = mapper.copy();
-    migrationComparisonMapper.addMixIn(Account.class, AccountComparisonMixin.class);
+
     migrationComparisonMapper.addMixIn(Device.class, DeviceComparisonMixin.class);
 
     accountCreateLock = new AtomicInteger(0);
@@ -128,7 +151,10 @@ public class AccountsManager {
     return accounts.getAll(offset, length);
   }
 
-  public boolean create(Account account) {
+  public Account create(final String userLogin,
+      final String password,
+      final String signalAgent,
+      final AccountAttributes accountAttributes) {
 
     accountCreateLock.getAndIncrement();
     setAccountCreationLock();
@@ -137,34 +163,62 @@ public class AccountsManager {
     long newDirectoryVersion = directoryVersion + 1L;
 
     try (Timer.Context ignored = createTimer.time()) {
+      final Account account = new Account();
+
+      Device device = new Device();
+      device.setId(Device.MASTER_ID);
+      device.setAuthenticationCredentials(new AuthenticationCredentials(password));
+      device.setFetchesMessages(accountAttributes.getFetchesMessages());
+      device.setRegistrationId(accountAttributes.getRegistrationId());
+      device.setName(accountAttributes.getName());
+      device.setCapabilities(accountAttributes.getCapabilities());
+      device.setCreated(System.currentTimeMillis());
+      device.setLastSeen(Util.todayInMillis());
+      device.setUserAgent(signalAgent);
+
+      account.setUserLogin(userLogin);
+
+      Optional<UUID> oUUID = deletedAccounts.findUuid(userLogin);
+
+      // This one will treat the new account the an old one being restored.
+      // Potentially dangerous from the perspective of impersonation attack!
+      if (oUUID.isPresent()) {
+        account.setUuid(oUUID.get());
+        deletedAccounts.remove(userLogin);
+
+      } else {
+        account.setUuid(UUID.randomUUID());
+      }
+
+      account.addDevice(device);
+
+      account.setUnidentifiedAccessKey(accountAttributes.getUnidentifiedAccessKey());
+      account.setUnrestrictedUnidentifiedAccess(accountAttributes.isUnrestrictedUnidentifiedAccess());
+      account.setDiscoverableByUserLogin(accountAttributes.isDiscoverableByUserLogin());
+
       final UUID originalUuid = account.getUuid();
 
-      boolean freshUser = databaseCreate(account, newDirectoryVersion);
+      boolean freshUser = primaryCreate(account, newDirectoryVersion);
 
-      // databaseCreate() sometimes updates the UUID, if there was a userLogin
-      // conflict.
-      // for metrics, we want scylla to run with the same original UUID
+      // create() sometimes updates the UUID, if there was a user login conflict.
+      // for metrics, we want secondary to run with the same original UUID
       final UUID actualUuid = account.getUuid();
 
       try {
-        if (scyllaWriteEnabled()) {
+        if (secondaryWriteEnabled()) {
           account.setUuid(originalUuid);
 
-          runSafelyAndRecordMetrics(() -> scyllaCreate(account, newDirectoryVersion), Optional.of(account.getUuid()), freshUser,
-              (databaseResult, dynamoResult) -> {
-                if (!account.getUuid().equals(actualUuid)) {
-                  logger.warn("scyllaCreate() did not return correct UUID");
-                }
-
-                if (databaseResult.equals(dynamoResult)) {
+          runSafelyAndRecordMetrics(() -> secondaryCreate(account, newDirectoryVersion), Optional.of(account.getUuid()), freshUser,
+              (primaryResult, secondaryResult) -> {
+                if (primaryResult.equals(secondaryResult)) {
                   return Optional.empty();
                 }
 
-                if (dynamoResult) {
-                  return Optional.of("scyllaFreshUser");
+                if (secondaryResult) {
+                  return Optional.of("secondaryFreshUser");
                 }
 
-                return Optional.of("dbFreshUser");
+                return Optional.of("primaryFreshUser");
               },
               "create");
         }
@@ -186,7 +240,26 @@ public class AccountsManager {
       // building incremental updates
       directory.buildIncrementalUpdates(newDirectoryVersion);
 
-      return freshUser;
+      final Tags tags;
+
+      if (freshUser) {
+        tags = Tags.of("type", "new");
+        newUserMeter.mark();
+      } else {
+        tags = Tags.of("type", "reregister");
+      }
+
+      Metrics.counter(CREATE_COUNTER_NAME, tags).increment();
+
+      pendingAccounts.remove(userLogin);
+
+      if (!originalUuid.equals(actualUuid)) {
+        messagesManager.clear(actualUuid);
+        keysScyllaDb.delete(actualUuid);
+        profilesManager.deleteAll(actualUuid);
+      }
+
+      return account;
     } finally {
 
       if (accountCreateLock.decrementAndGet() == 0) {
@@ -199,41 +272,127 @@ public class AccountsManager {
   // TODO: if directory stores anything except usernames in future, we'll need to
   // make this more complicated and include a lock as well. Mind the calls in
   // AccountController!
-  public void update(Account account) {
+  public Account update(Account account, Consumer<Account> updater) {
+    return update(account, a -> {
+      updater.accept(a);
+      // assume that all updaters passed to the public method actually modify the
+      // account
+      return true;
+    });
+  }
+
+  /**
+   * Specialized version of {@link #updateDevice(Account, long, Consumer)} that
+   * minimizes potentially contentious and redundant updates of
+   * {@code device.lastSeen}
+   */
+  public Account updateDeviceLastSeen(Account account, Device device, final long lastSeen) {
+
+    return update(account, a -> {
+
+      final Optional<Device> maybeDevice = a.getDevice(device.getId());
+
+      return maybeDevice.map(d -> {
+        if (d.getLastSeen() >= lastSeen) {
+          return false;
+        }
+
+        d.setLastSeen(lastSeen);
+
+        return true;
+
+      }).orElse(false);
+    });
+  }
+
+  /**
+   * @param account account to update
+   * @param updater must return {@code true} if the account was actually updated
+   */
+  private Account update(Account account, Function<Account, Boolean> updater) {
+
+    final Account updatedAccount;
 
     try (Timer.Context ignored = updateTimer.time()) {
-      account.setScyllaDbMigrationVersion(account.getScyllaDbMigrationVersion() + 1);
-      redisSet(account);
+
+      redisDelete(account);
+
+      final UUID uuid = account.getUuid();
 
       // isRemoval hardcoded to false for now, tbc in future
-      databaseUpdate(account, false, -1L);
+      updatedAccount = updateWithRetries(account, updater, this::primaryUpdate, () -> primaryGet(uuid).get());
 
-      if (scyllaWriteEnabled()) {
-        runSafelyAndRecordMetrics(() -> {
+      if (secondaryWriteEnabled()) {
+        runSafelyAndRecordMetrics(() -> secondaryGet(uuid).map(secondaryAccount -> {
           try {
-            scyllaUpdate(account);
-          } catch (final ConditionalCheckFailedException e) {
-            // meaning we are trying to update an account missing in scylla, but it should
-            // be present elsewhere, so do not update the directory version
-            // normally this should not be the case
-            scyllaCreate(account, getDirectoryVersion());
+            return updateWithRetries(secondaryAccount, updater, this::secondaryUpdate, () -> secondaryGet(uuid).get());
+          } catch (final OptimisticLockRetryLimitExceededException e) {
+            if (!dynConfig.isScyllaPrimary()) {
+              accountsScyllaDb.putUuidForMigrationRetry(uuid);
+            }
+
+            throw e;
           }
-          return true;
-        }, Optional.of(account.getUuid()), true,
-            (databaseSuccess, dynamoSuccess) -> Optional.empty(), // both values are always true
+        }),
+            Optional.of(uuid),
+            Optional.of(updatedAccount),
+            this::compareAccounts,
             "update");
       }
 
+      redisSet(updatedAccount);
     }
+
+    return updatedAccount;
   }
 
-  public Optional<Account> get(AmbiguousIdentifier identifier) {
-    if (identifier.hasUserLogin())
-      return get(identifier.getUserLogin());
-    else if (identifier.hasUuid())
-      return get(identifier.getUuid());
-    else
-      throw new AssertionError();
+  private Account updateWithRetries(Account account, Function<Account, Boolean> updater, Consumer<Account> persister,
+      Supplier<Account> retriever) {
+
+    if (!updater.apply(account)) {
+      return account;
+    }
+
+    final int maxTries = 10;
+    int tries = 0;
+
+    while (tries < maxTries) {
+
+      try {
+        persister.accept(account);
+
+        final Account updatedAccount;
+        try {
+          updatedAccount = mapper.readValue(mapper.writeValueAsBytes(account), Account.class);
+          updatedAccount.setUuid(account.getUuid());
+        } catch (final IOException e) {
+          // this should really, truly, never happen
+          throw new IllegalArgumentException(e);
+        }
+
+        account.markStale();
+
+        return updatedAccount;
+      } catch (final ContestedOptimisticLockException e) {
+        tries++;
+        account = retriever.get();
+        if (!updater.apply(account)) {
+          return account;
+        }
+      }
+
+    }
+
+    throw new OptimisticLockRetryLimitExceededException();
+  }
+
+  public Account updateDevice(Account account, long deviceId, Consumer<Device> deviceUpdater) {
+    return update(account, a -> {
+      a.getDevice(deviceId).ifPresent(deviceUpdater);
+      // assume that all updaters passed to the public method actually modify the
+      // device
+      return true;
+    });
   }
 
   public Optional<Account> get(String userLogin) {
@@ -241,11 +400,11 @@ public class AccountsManager {
       Optional<Account> account = redisGet(userLogin);
 
       if (!account.isPresent()) {
-        account = databaseGet(userLogin);
+        account = primaryGet(userLogin);
         account.ifPresent(value -> redisSet(value));
 
-        if (scyllaReadEnabled()) {
-          runSafelyAndRecordMetrics(() -> scyllaGet(userLogin), Optional.empty(), account, this::compareAccounts,
+        if (secondaryReadEnabled()) {
+          runSafelyAndRecordMetrics(() -> secondaryGet(userLogin), Optional.empty(), account, this::compareAccounts,
               "getByUserLogin");
         }
       }
@@ -254,27 +413,16 @@ public class AccountsManager {
     }
   }
 
-  /*
-   * possibly related to federation, reserved for future use
-   * 
-   * 
-   * public boolean isRelayListed(String number) { byte[] token =
-   * Util.getContactToken(number); Optional<ClientContact> contact =
-   * directory.get(token);
-   * 
-   * return contact.isPresent() && !Util.isEmpty(contact.get().getRelay()); }
-   */
-
   public Optional<Account> get(UUID uuid) {
     try (Timer.Context ignored = getByUuidTimer.time()) {
       Optional<Account> account = redisGet(uuid);
 
       if (!account.isPresent()) {
-        account = databaseGet(uuid);
+        account = primaryGet(uuid);
         account.ifPresent(value -> redisSet(value));
 
-        if (scyllaReadEnabled()) {
-          runSafelyAndRecordMetrics(() -> scyllaGet(uuid), Optional.of(uuid), account, this::compareAccounts,
+        if (secondaryReadEnabled()) {
+          runSafelyAndRecordMetrics(() -> secondaryGet(uuid), Optional.of(uuid), account, this::compareAccounts,
               "getByUuid");
         }
       }
@@ -283,12 +431,22 @@ public class AccountsManager {
     }
   }
 
-  public List<Account> getAllFrom(int length) {
+  public AccountCrawlChunk getAllFrom(int length) {
     return accounts.getAllFrom(length);
   }
 
-  public List<Account> getAllFrom(UUID uuid, int length) {
+  public AccountCrawlChunk getAllFrom(UUID uuid, int length) {
     return accounts.getAllFrom(uuid, length);
+  }
+
+  public AccountCrawlChunk getAllFromScylla(int length) {
+    final int maxPageSize = dynConfig.getScyllaCrawlerScanPageSize();
+    return accountsScyllaDb.getAllFromStart(length, maxPageSize);
+  }
+
+  public AccountCrawlChunk getAllFromScylla(UUID uuid, int length) {
+    final int maxPageSize = dynConfig.getScyllaCrawlerScanPageSize();
+    return accountsScyllaDb.getAllFrom(uuid, length, maxPageSize);
   }
 
   public void delete(final HashSet<Account> accountsToDelete, final DeletionReason deletionReason) {
@@ -304,21 +462,23 @@ public class AccountsManager {
 
         usernamesManager.delete(account.getUuid());
         profilesManager.deleteAll(account.getUuid());
-        keysScyllaDb.delete(account);
+        keysScyllaDb.delete(account.getUuid());
         messagesManager.clear(account.getUuid());
         redisDelete(account);
-        databaseDelete(account, newDirectoryVersion);
+        primaryDelete(account, newDirectoryVersion);
 
-        if (scyllaDeleteEnabled()) {
+        if (secondaryDeleteEnabled()) {
           try {
-            scyllaDelete(account, newDirectoryVersion);
+            secondaryDelete(account, newDirectoryVersion);
           } catch (final Exception e) {
-            logger.error("Could not delete account {} from scylla", account.getUuid().toString());
+            logger.error("Could not delete account {} from secondary", account.getUuid().toString());
             Metrics.counter(SCYLLA_MIGRATION_ERROR_COUNTER_NAME, "action", "delete").increment();
           }
         }
 
         Metrics.counter(DELETE_COUNTER_NAME, DELETION_REASON_TAG_NAME, deletionReason.tagValue).increment();
+
+        deletedAccounts.put(account.getUuid(), account.getUserLogin());
 
       }
 
@@ -335,9 +495,6 @@ public class AccountsManager {
 
     } catch (final Exception e) {
       logger.warn("Failed to delete account(s)", e);
-
-      Metrics.counter(DELETE_ERROR_COUNTER_NAME,
-          DELETION_REASON_TAG_NAME, deletionReason.tagValue).increment();
 
       throw e;
 
@@ -410,7 +567,82 @@ public class AccountsManager {
 
   private void redisDelete(final Account account) {
     try (final Timer.Context ignored = redisDeleteTimer.time()) {
-      cacheCluster.useCluster(connection -> connection.sync().del(getAccountMapKey(account.getUserLogin()), getAccountEntityKey(account.getUuid())));
+      cacheCluster.useCluster(connection -> connection.sync()
+          .del(getAccountMapKey(account.getUserLogin()), getAccountEntityKey(account.getUuid())));
+    }
+  }
+
+  private Optional<Account> primaryGet(String userLogin) {
+    return dynConfig.isScyllaPrimary()
+        ?
+        scyllaGet(userLogin) :
+        databaseGet(userLogin);
+  }
+
+  private Optional<Account> secondaryGet(String userLogin) {
+    return dynConfig.isScyllaPrimary()
+        ?
+        databaseGet(userLogin) :
+        scyllaGet(userLogin);
+  }
+
+  private Optional<Account> primaryGet(UUID uuid) {
+    return dynConfig.isScyllaPrimary()
+        ?
+        scyllaGet(uuid) :
+        databaseGet(uuid);
+  }
+
+  private Optional<Account> secondaryGet(UUID uuid) {
+    return dynConfig.isScyllaPrimary()
+        ?
+        databaseGet(uuid) :
+        scyllaGet(uuid);
+  }
+
+  private boolean primaryCreate(Account account, long directoryVersion) {
+    return dynConfig.isScyllaPrimary()
+        ?
+        scyllaCreate(account, directoryVersion) :
+        databaseCreate(account, directoryVersion);
+  }
+
+  private boolean secondaryCreate(Account account, long directoryVersion) {
+    return dynConfig.isScyllaPrimary()
+        ?
+        databaseCreate(account, directoryVersion) :
+        scyllaCreate(account, directoryVersion);
+  }
+
+  private void primaryUpdate(Account account) {
+    if (dynConfig.isScyllaPrimary()) {
+      scyllaUpdate(account);
+    } else {
+      databaseUpdate(account);
+    }
+  }
+
+  private void secondaryUpdate(Account account) {
+    if (dynConfig.isScyllaPrimary()) {
+      databaseUpdate(account);
+    } else {
+      scyllaUpdate(account);
+    }
+  }
+
+  private void primaryDelete(Account account, long directoryVersion) {
+    if (dynConfig.isScyllaPrimary()) {
+      scyllaDelete(account, directoryVersion);
+    } else {
+      databaseDelete(account, directoryVersion);
+    }
+  }
+
+  private void secondaryDelete(Account account, long directoryVersion) {
+    if (dynConfig.isScyllaPrimary()) {
+      databaseDelete(account, directoryVersion);
+    } else {
+      scyllaDelete(account, directoryVersion);
     }
   }
 
@@ -424,6 +656,10 @@ public class AccountsManager {
 
   private boolean databaseCreate(Account account, long directoryVersion) {
     return accounts.create(account, directoryVersion);
+  }
+
+  private void databaseUpdate(Account account) {
+    accounts.update(account);
   }
 
   private void databaseUpdate(Account account, boolean isRemoval, long directoryVersion) {
@@ -444,6 +680,7 @@ public class AccountsManager {
   public long getDirectoryVersion() {
     Jedis jedis = directory.accessDirectoryCache().getWriteResource();
 
+    @Nullable
     String currentVersion = jedis.get(DIRECTORY_VERSION);
 
     jedis.close();
@@ -593,69 +830,71 @@ public class AccountsManager {
     accountsScyllaDb.delete(account.getUuid(), directoryVersion);
   }
 
-  private boolean scyllaDeleteEnabled() {
-    return true;
+  private boolean secondaryDeleteEnabled() {
+    return dynConfig.isDeleteEnabled();
   }
 
-  private boolean scyllaReadEnabled() {
-    return true;
+  private boolean secondaryReadEnabled() {
+    return dynConfig.isReadEnabled();
   }
 
-  private boolean scyllaWriteEnabled() {
-    return scyllaDeleteEnabled()
-        && true;
+  private boolean secondaryWriteEnabled() {
+    return secondaryDeleteEnabled()
+        && dynConfig.isWriteEnabled();
   }
 
   @SuppressWarnings("OptionalUsedAsFieldOrParameterType")
-  public Optional<String> compareAccounts(final Optional<Account> maybeDatabaseAccount, final Optional<Account> maybeScyllaAccount) {
+  public Optional<String> compareAccounts(final Optional<Account> maybePrimaryAccount, final Optional<Account> maybeSecondaryAccount) {
 
-    if (maybeDatabaseAccount.isEmpty() && maybeScyllaAccount.isEmpty()) {
+    if (maybePrimaryAccount.isEmpty() && maybeSecondaryAccount.isEmpty()) {
       return Optional.empty();
     }
 
-    if (maybeDatabaseAccount.isEmpty()) {
-      return Optional.of("dbMissing");
+    if (maybePrimaryAccount.isEmpty()) {
+      return Optional.of("primaryMissing");
     }
 
-    if (maybeScyllaAccount.isEmpty()) {
-      return Optional.of("scyllaMissing");
+    if (maybeSecondaryAccount.isEmpty()) {
+      return Optional.of("secondaryMissing");
     }
 
-    final Account databaseAccount = maybeDatabaseAccount.get();
-    final Account scyllaAccount = maybeScyllaAccount.get();
+    final Account primaryAccount = maybePrimaryAccount.get();
+    final Account secondaryAccount = maybeSecondaryAccount.get();
 
-    final int uuidCompare = databaseAccount.getUuid().compareTo(scyllaAccount.getUuid());
+    final int uuidCompare = primaryAccount.getUuid().compareTo(secondaryAccount.getUuid());
 
     if (uuidCompare != 0) {
       return Optional.of("uuid");
     }
 
-    final int userLoginCompare = databaseAccount.getUserLogin().compareTo(scyllaAccount.getUserLogin());
+    final int userLoginCompare = primaryAccount.getUserLogin().compareTo(secondaryAccount.getUserLogin());
 
     if (userLoginCompare != 0) {
       return Optional.of("userLogin");
     }
-    
-    if (!Objects.equals(databaseAccount.getIdentityKey(), scyllaAccount.getIdentityKey())) {
+
+    if (!Objects.equals(primaryAccount.getIdentityKey(), secondaryAccount.getIdentityKey())) {
       return Optional.of("identityKey");
     }
 
-    if (!Objects.equals(databaseAccount.getCurrentProfileVersion(), scyllaAccount.getCurrentProfileVersion())) {
+    if (!Objects.equals(primaryAccount.getCurrentProfileVersion(), secondaryAccount.getCurrentProfileVersion())) {
       return Optional.of("currentProfileVersion");
     }
 
-    if (!Objects.equals(databaseAccount.getProfileName(), scyllaAccount.getProfileName())) {
+    if (!Objects.equals(primaryAccount.getProfileName(), secondaryAccount.getProfileName())) {
       return Optional.of("profileName");
     }
 
-    if (!Objects.equals(databaseAccount.getAvatar(), scyllaAccount.getAvatar())) {
+    if (!Objects.equals(primaryAccount.getAvatar(), secondaryAccount.getAvatar())) {
       return Optional.of("avatar");
     }
 
-    if (!Objects.equals(databaseAccount.getUnidentifiedAccessKey(), scyllaAccount.getUnidentifiedAccessKey())) {
-      if (databaseAccount.getUnidentifiedAccessKey().isPresent() && scyllaAccount.getUnidentifiedAccessKey().isPresent()) {
+    if (!Objects.equals(primaryAccount.getUnidentifiedAccessKey(), secondaryAccount.getUnidentifiedAccessKey())) {
+      if (primaryAccount.getUnidentifiedAccessKey().isPresent() && secondaryAccount.getUnidentifiedAccessKey()
+          .isPresent()) {
 
-        if (Arrays.compare(databaseAccount.getUnidentifiedAccessKey().get(), scyllaAccount.getUnidentifiedAccessKey().get()) != 0) {
+        if (Arrays.compare(primaryAccount.getUnidentifiedAccessKey().get(),
+            secondaryAccount.getUnidentifiedAccessKey().get()) != 0) {
           return Optional.of("unidentifiedAccessKey");
         }
 
@@ -664,43 +903,55 @@ public class AccountsManager {
       }
     }
 
-    if (!Objects.equals(databaseAccount.isUnrestrictedUnidentifiedAccess(), scyllaAccount.isUnrestrictedUnidentifiedAccess())) {
+    if (!Objects.equals(primaryAccount.isUnrestrictedUnidentifiedAccess(),
+        secondaryAccount.isUnrestrictedUnidentifiedAccess())) {
       return Optional.of("unrestrictedUnidentifiedAccess");
     }
 
-    if (!Objects.equals(databaseAccount.isDiscoverableByUserLogin(), scyllaAccount.isDiscoverableByUserLogin())) {
-      return Optional.of("discoverableByPhoneNumber");
+    if (!Objects.equals(primaryAccount.isDiscoverableByUserLogin(), secondaryAccount.isDiscoverableByUserLogin())) {
+      return Optional.of("discoverableByUserLogin");
+    }
+
+    if (primaryAccount.getMasterDevice().isPresent() && secondaryAccount.getMasterDevice().isPresent()) {
+      if (!Objects.equals(primaryAccount.getMasterDevice().get().getSignedPreKey(),
+          secondaryAccount.getMasterDevice().get().getSignedPreKey())) {
+        return Optional.of("masterDeviceSignedPreKey");
+      }
     }
 
     try {
-      
-      if (databaseAccount.getMasterDevice().isPresent() && scyllaAccount.getMasterDevice().isPresent()) {
-        if (!Objects.equals(databaseAccount.getMasterDevice().get().getSignedPreKey(), scyllaAccount.getMasterDevice().get().getSignedPreKey())) {
-          return Optional.of("masterDeviceSignedPreKey");
-        }
-        
-        if (!Objects.equals(databaseAccount.getMasterDevice().get().getPushTimestamp(), scyllaAccount.getMasterDevice().get().getPushTimestamp())) {
-          return Optional.of("masterDevicePushTimestamp");
-        }
-      }
-      
-      if (!serializedEquals(databaseAccount.getDevices(), scyllaAccount.getDevices())) {
+      if (!serializedEquals(primaryAccount.getDevices(), secondaryAccount.getDevices())) {
         return Optional.of("devices");
       }
 
-      if (!serializedEquals(databaseAccount, scyllaAccount)) {
+      if (primaryAccount.getVersion() != secondaryAccount.getVersion()) {
+        return Optional.of("version");
+      }
+
+      if (primaryAccount.getMasterDevice().isPresent() && secondaryAccount.getMasterDevice().isPresent()) {
+        if (Math.abs(primaryAccount.getMasterDevice().get().getPushTimestamp() -
+            secondaryAccount.getMasterDevice().get().getPushTimestamp()) > 60 * 1_000L) {
+          // These are generally few milliseconds off, because the setter uses
+          // System.currentTimeMillis() internally,
+          // but we can be more relaxed
+          return Optional.of("masterDevicePushTimestamp");
+        }
+      }
+
+      if (!serializedEquals(primaryAccount, secondaryAccount)) {
         return Optional.of("serialization");
       }
 
     } catch (JsonProcessingException e) {
       throw new RuntimeException(e);
     }
-    
+
     return Optional.empty();
   }
 
   @SuppressWarnings("OptionalUsedAsFieldOrParameterType")
-  private <T> void runSafelyAndRecordMetrics(Callable<T> callable, Optional<UUID> maybeUuid, final T databaseResult, final BiFunction<T, T, Optional<String>> mismatchClassifier, final String action) {
+  private <T> void runSafelyAndRecordMetrics(Callable<T> callable, Optional<UUID> maybeUuid, final T primaryResult,
+      final BiFunction<T, T, Optional<String>> mismatchClassifier, final String action) {
 
     if (maybeUuid.isPresent()) {
       // the only time we don’t have a UUID is in getByUserLogin, which is
@@ -715,8 +966,8 @@ public class AccountsManager {
 
     try {
 
-      final T scyllaResult = callable.call();
-      compare(databaseResult, scyllaResult, mismatchClassifier, action, maybeUuid);
+      final T secondaryResult = callable.call();
+      compare(primaryResult, secondaryResult, mismatchClassifier, action, maybeUuid);
 
     } catch (final Exception e) {
       logger.error("Error running " + action + " in Scylla", e);
@@ -726,31 +977,27 @@ public class AccountsManager {
   }
 
   @SuppressWarnings("OptionalUsedAsFieldOrParameterType")
-  private <T> void compare(final T databaseResult, final T scyllaResult, final BiFunction<T, T, Optional<String>> mismatchClassifier, final String action, final Optional<UUID> maybeUUid) {
+  private <T> void compare(final T primaryResult, final T secondaryResult,
+      final BiFunction<T, T, Optional<String>> mismatchClassifier, final String action,
+      final Optional<UUID> maybeUUid) {
     SCYLLA_MIGRATION_COMPARISON_COUNTER.increment();
 
-    mismatchClassifier.apply(databaseResult, scyllaResult)
-    .ifPresent(mismatchType -> {
-      final String mismatchDescription = action + ":" + mismatchType;
-      Metrics.counter(SCYLLA_MIGRATION_MISMATCH_COUNTER_NAME,
-          "mismatchType", mismatchDescription)
-          .increment();
+    mismatchClassifier.apply(primaryResult, secondaryResult)
+        .ifPresent(mismatchType -> {
+          final String mismatchDescription = action + ":" + mismatchType;
+          Metrics.counter(SCYLLA_MIGRATION_MISMATCH_COUNTER_NAME,
+              "mismatchType", mismatchDescription)
+              .increment();
 
-      if (maybeUUid.isPresent()
-         // && dynamicConfiguration.getAccountsDynamoDbMigrationConfiguration().isLogMismatches()
-         )
-      {
-        final String abbreviatedCallChain = getAbbreviatedCallChain(new RuntimeException().getStackTrace());
+          maybeUUid.ifPresent(uuid -> {
 
-        logger.info("Mismatched account data: {}", StructuredArguments.entries(Map.of(
-            "type", mismatchDescription,
-            "uuid", maybeUUid.get(),
-            "callChain", abbreviatedCallChain
-        )));
-      }
-    });
+            if (dynConfig.isPostCheckMismatches()) {
+              mismatchedAccounts.put(uuid);
+            }            
+          });
+        });
   }
-  
+
   private String getAbbreviatedCallChain(final StackTraceElement[] stackTrace) {
     return Arrays.stream(stackTrace)
         .filter(stackTraceElement -> stackTraceElement.getClassName().contains("su.sres"))
@@ -759,23 +1006,20 @@ public class AccountsManager {
         .collect(Collectors.joining(" -> "));
   }
 
-  private static abstract class AccountComparisonMixin extends Account {
-
-    @JsonIgnore
-    private int scyllaDbMigrationVersion;
-  }
-  
   private static abstract class DeviceComparisonMixin extends Device {
 
     @JsonIgnore
     private long lastSeen;
 
+    @JsonIgnore
+    private long pushTimestamp;
+
   }
-  
-  private boolean serializedEquals(final Object database, final Object scylla) throws JsonProcessingException {
-    final byte[] databaseSerialized = migrationComparisonMapper.writeValueAsBytes(database);
-    final byte[] scyllaSerialized = migrationComparisonMapper.writeValueAsBytes(scylla);
-    final int serializeCompare = Arrays.compare(databaseSerialized, scyllaSerialized);
+
+  private boolean serializedEquals(final Object primary, final Object secondary) throws JsonProcessingException {
+    final byte[] primarySerialized = migrationComparisonMapper.writeValueAsBytes(primary);
+    final byte[] secondarySerialized = migrationComparisonMapper.writeValueAsBytes(secondary);
+    final int serializeCompare = Arrays.compare(primarySerialized, secondarySerialized);
 
     return serializeCompare == 0;
   }

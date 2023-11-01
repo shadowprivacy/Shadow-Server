@@ -12,7 +12,6 @@ import su.sres.shadowserver.redis.AbstractRedisClusterTest;
 
 import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
@@ -34,7 +33,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import static org.junit.Assert.assertEquals;
@@ -93,34 +91,7 @@ public class MessagesCacheTest extends AbstractRedisClusterTest {
 
 	assertEquals(firstId, secondId);
     }
-
-    @Test
-    @Parameters({ "true", "false" })
-    public void testRemoveById(final boolean sealedSender) {
-	final UUID messageGuid = UUID.randomUUID();
-	final MessageProtos.Envelope message = generateRandomMessage(messageGuid, sealedSender);
-
-	final long messageId = messagesCache.insert(messageGuid, DESTINATION_UUID, DESTINATION_DEVICE_ID, message);
-	final Optional<OutgoingMessageEntity> maybeRemovedMessage = messagesCache.remove(DESTINATION_UUID, DESTINATION_DEVICE_ID, messageId);
-
-	assertTrue(maybeRemovedMessage.isPresent());
-	assertEquals(MessagesCache.constructEntityFromEnvelope(messageId, message), maybeRemovedMessage.get());
-	assertEquals(Optional.empty(), messagesCache.remove(DESTINATION_UUID, DESTINATION_DEVICE_ID, messageId));
-    }
-
-    @Test
-    public void testRemoveBySender() {
-	final UUID messageGuid = UUID.randomUUID();
-	final MessageProtos.Envelope message = generateRandomMessage(messageGuid, false);
-
-	messagesCache.insert(messageGuid, DESTINATION_UUID, DESTINATION_DEVICE_ID, message);
-	final Optional<OutgoingMessageEntity> maybeRemovedMessage = messagesCache.remove(DESTINATION_UUID, DESTINATION_DEVICE_ID, message.getSource(), message.getTimestamp());
-
-	assertTrue(maybeRemovedMessage.isPresent());
-	assertEquals(MessagesCache.constructEntityFromEnvelope(0, message), maybeRemovedMessage.get());
-	assertEquals(Optional.empty(), messagesCache.remove(DESTINATION_UUID, DESTINATION_DEVICE_ID, message.getSource(), message.getTimestamp()));
-    }
-
+    
     @Test
     @Parameters({ "true", "false" })
     public void testRemoveByUUID(final boolean sealedSender) {
@@ -369,58 +340,5 @@ public class MessagesCacheTest extends AbstractRedisClusterTest {
 	}
 
 	assertTrue(notified.get());
-    }
-
-    @Test(timeout = 5_000L)
-    public void testInsertAndNotifyEphemeralMessage() throws InterruptedException {
-	final AtomicBoolean notified = new AtomicBoolean(false);
-	final MessageProtos.Envelope message = generateRandomMessage(UUID.randomUUID(), true);
-
-	final MessageAvailabilityListener listener = new MessageAvailabilityListener() {
-	    @Override
-	    public void handleNewMessagesAvailable() {
-	    }
-
-	    @Override
-	    public void handleNewEphemeralMessageAvailable() {
-		synchronized (notified) {
-		    notified.set(true);
-		    notified.notifyAll();
-		}
-	    }
-
-	    @Override
-	    public void handleMessagesPersisted() {
-	    }
-	};
-
-	messagesCache.addMessageAvailabilityListener(DESTINATION_UUID, DESTINATION_DEVICE_ID, listener);
-	messagesCache.insertEphemeral(DESTINATION_UUID, DESTINATION_DEVICE_ID, message);
-
-	synchronized (notified) {
-	    while (!notified.get()) {
-		notified.wait();
-	    }
-	}
-
-	assertTrue(notified.get());
-    }
-
-    @Test
-    public void testTakeEphemeralMessage() {
-	final long currentTime = System.currentTimeMillis();
-	final UUID messageGuid = UUID.randomUUID();
-	final MessageProtos.Envelope message = generateRandomMessage(messageGuid, true, currentTime);
-
-	assertEquals(Optional.empty(), messagesCache.takeEphemeralMessage(DESTINATION_UUID, DESTINATION_DEVICE_ID, currentTime));
-
-	messagesCache.insertEphemeral(DESTINATION_UUID, DESTINATION_DEVICE_ID, message);
-
-	assertEquals(Optional.of(message), messagesCache.takeEphemeralMessage(DESTINATION_UUID, DESTINATION_DEVICE_ID, currentTime));
-	assertEquals(Optional.empty(), messagesCache.takeEphemeralMessage(DESTINATION_UUID, DESTINATION_DEVICE_ID, currentTime));
-
-	messagesCache.insertEphemeral(DESTINATION_UUID, DESTINATION_DEVICE_ID, generateRandomMessage(UUID.randomUUID(), true, 0));
-
-	assertEquals(Optional.empty(), messagesCache.takeEphemeralMessage(DESTINATION_UUID, DESTINATION_DEVICE_ID, currentTime));
-    }
+    }    
 }

@@ -1,32 +1,38 @@
 /*
- * Original software: Copyright 2013-2020 Signal Messenger, LLC
- * Modified software: Copyright 2019-2022 Anton Alipov, sole trader
+ * Original software: Copyright 2013-2021 Signal Messenger, LLC
+ * Modified software: Copyright 2019-2023 Anton Alipov, sole trader
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 package su.sres.shadowserver.auth;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.google.common.annotations.VisibleForTesting;
 
 import su.sres.shadowserver.util.Util;
 
 import java.security.MessageDigest;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.temporal.TemporalAmount;
 import java.util.concurrent.TimeUnit;
 
 public class StoredVerificationCode {
 
   @JsonProperty
-  private String code;
+  private final String code;
 
   @JsonProperty
-  private long timestamp;
+  private final long timestamp;
 
   @JsonProperty
   private String pushCode;
-
-  public StoredVerificationCode() {
-  }
-
-  public StoredVerificationCode(String code, long timestamp, String pushCode) {
+    
+  @JsonCreator
+  public StoredVerificationCode(
+      @JsonProperty("code") final String code,
+      @JsonProperty("timestamp") final long timestamp,
+      @JsonProperty("pushCode") String pushCode) {
     this.code = code;
     this.timestamp = timestamp;
     this.pushCode = pushCode;
@@ -51,7 +57,12 @@ public class StoredVerificationCode {
   }
 
   public boolean isValid(String theirCodeString, int lifetime) {
-    if (timestamp + TimeUnit.HOURS.toMillis(lifetime) < System.currentTimeMillis()) {
+    return isValid(theirCodeString, lifetime, Instant.now());
+  }
+
+  @VisibleForTesting
+  boolean isValid(String theirCodeString, int lifetime, Instant currentTime) {
+    if (Instant.ofEpochMilli(timestamp).plus(Duration.ofHours(lifetime)).isBefore(currentTime)) {
       return false;
     }
 

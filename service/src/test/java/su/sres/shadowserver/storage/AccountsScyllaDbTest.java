@@ -1,12 +1,12 @@
 /*
- * Copyright 2013-2020 Signal Messenger, LLC
+ * Copyright 2013-2021 Signal Messenger, LLC
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
 package su.sres.shadowserver.storage;
 
-import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
-import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -26,12 +26,15 @@ import software.amazon.awssdk.services.dynamodb.model.ScalarAttributeType;
 import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
 import software.amazon.awssdk.services.dynamodb.model.ScanResponse;
 import software.amazon.awssdk.services.dynamodb.model.TransactWriteItemsRequest;
+import software.amazon.awssdk.services.dynamodb.model.TransactionConflictException;
 import software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
@@ -46,6 +49,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
+
+import com.fasterxml.uuid.UUIDComparator;
+
 import su.sres.shadowserver.configuration.CircuitBreakerConfiguration;
 import su.sres.shadowserver.entities.SignedPreKey;
 import su.sres.shadowserver.util.AttributeValues;
@@ -58,7 +64,7 @@ class AccountsScyllaDbTest {
   private static final String MISC_TABLE_NAME = "misc_test";
   
   private static final String MIGRATION_DELETED_ACCOUNTS_TABLE_NAME = "migration_deleted_accounts_test";
-  private static final String MIGRATION_RETRY_ACCOUNTS_TABLE_NAME = "miration_retry_accounts_test";
+  private static final String MIGRATION_RETRY_ACCOUNTS_TABLE_NAME = "migration_retry_accounts_test";
 
   @RegisterExtension
   static DynamoDbExtension dynamoDbExtension = DynamoDbExtension.builder()
@@ -233,6 +239,10 @@ class AccountsScyllaDbTest {
     accountsScyllaDb.create(account, directoryVersion);
     
     verifyStoredState("+14151112222", account.getUuid(), account);
+    
+    account.setProfileName("name");
+
+    accountsScyllaDb.update(account);
 
     UUID secondUuid = UUID.randomUUID();
 
@@ -276,11 +286,91 @@ class AccountsScyllaDbTest {
 
     assertThatThrownBy(() -> accountsScyllaDb.update(unknownAccount)).isInstanceOfAny(ConditionalCheckFailedException.class);
     
-    account.setScyllaDbMigrationVersion(5);
+    account.setProfileName("name");
+
+    accountsScyllaDb.update(account);
+
+    assertThat(account.getVersion()).isEqualTo(2);
+
+    verifyStoredState("+14151112222", account.getUuid(), account);
+
+    account.setVersion(1);
+
+    assertThatThrownBy(() -> accountsScyllaDb.update(account)).isInstanceOfAny(ContestedOptimisticLockException.class);
+
+    account.setVersion(2);
+    account.setProfileName("name2");
 
     accountsScyllaDb.update(account);
 
     verifyStoredState("+14151112222", account.getUuid(), account);
+  }
+  
+  @Test
+  void testUpdateWithMockTransactionConflictException() {
+
+    final DynamoDbClient dynamoDbClient = mock(DynamoDbClient.class);
+    accountsScyllaDb = new AccountsScyllaDb(dynamoDbClient, mock(DynamoDbAsyncClient.class),
+        new ThreadPoolExecutor(1, 1, 0, TimeUnit.SECONDS, new LinkedBlockingDeque<>()),
+        dynamoDbExtension.getTableName(), NUMBERS_TABLE_NAME, MISC_TABLE_NAME, mock(MigrationDeletedAccounts.class),
+        mock(MigrationRetryAccounts.class));
+
+    when(dynamoDbClient.updateItem(any(UpdateItemRequest.class)))
+        .thenThrow(TransactionConflictException.class);
+
+    Device  device  = generateDevice (1                                            );
+    Account account = generateAccount("+14151112222", UUID.randomUUID(), Collections.singleton(device));
+
+    assertThatThrownBy(() -> accountsScyllaDb.update(account)).isInstanceOfAny(ContestedOptimisticLockException.class);
+  }
+  
+  @Test
+  void testRetrieveFrom() {
+    List<Account> users = new ArrayList<>();
+
+    for (int i = 1; i <= 100; i++) {
+      Account account = generateAccount("+1" + String.format("%03d", i), UUID.randomUUID());
+      users.add(account);
+      accountsScyllaDb.create(account, 5L);
+    }
+
+    users.sort((account, t1) -> UUIDComparator.staticCompare(account.getUuid(), t1.getUuid()));
+
+    AccountCrawlChunk retrieved = accountsScyllaDb.getAllFromStart(10, 1);
+    assertThat(retrieved.getAccounts().size()).isEqualTo(10);
+
+    for (int i = 0; i < retrieved.getAccounts().size(); i++) {
+      final Account retrievedAccount = retrieved.getAccounts().get(i);
+
+      final Account expectedAccount = users.stream()
+          .filter(account -> account.getUuid().equals(retrievedAccount.getUuid()))
+          .findAny()
+          .orElseThrow();
+
+      verifyStoredState(expectedAccount.getUserLogin(), expectedAccount.getUuid(), retrievedAccount, expectedAccount);
+
+      users.remove(expectedAccount);
+    }
+
+    for (int j = 0; j < 9; j++) {
+      retrieved = accountsScyllaDb.getAllFrom(retrieved.getLastUuid().orElseThrow(), 10, 1);
+      assertThat(retrieved.getAccounts().size()).isEqualTo(10);
+
+      for (int i = 0; i < retrieved.getAccounts().size(); i++) {
+        final Account retrievedAccount = retrieved.getAccounts().get(i);
+
+        final Account expectedAccount = users.stream()
+            .filter(account -> account.getUuid().equals(retrievedAccount.getUuid()))
+            .findAny()
+            .orElseThrow();
+
+        verifyStoredState(expectedAccount.getUserLogin(), expectedAccount.getUuid(), retrievedAccount, expectedAccount);
+
+        users.remove(expectedAccount);
+      }
+    }
+
+    assertThat(users).isEmpty();
   }
 
   @Test
@@ -442,7 +532,7 @@ class AccountsScyllaDbTest {
     verifyStoredState("+14151112222", firstUuid, account);
 
 
-    account.setScyllaDbMigrationVersion(account.getScyllaDbMigrationVersion() + 1);
+    account.setVersion(account.getVersion() + 1);
 
     migrated = accountsScyllaDb.migrate(account).get();
 
@@ -454,7 +544,7 @@ class AccountsScyllaDbTest {
     SignedPreKey signedPreKey = new SignedPreKey(random.nextInt(), "testPublicKey-" + random.nextInt(), "testSignature-" + random.nextInt());
     return new Device(id, "testName-" + random.nextInt(), "testAuthToken-" + random.nextInt(), "testSalt-" + random.nextInt(),
         "testGcmId-" + random.nextInt(), "testApnId-" + random.nextInt(), "testVoipApnId-" + random.nextInt(), random.nextBoolean(), random.nextInt(), signedPreKey, random.nextInt(), random.nextInt(), "testUserAgent-" + random.nextInt() , 0, new Device.DeviceCapabilities(random.nextBoolean(), random.nextBoolean(), random.nextBoolean(), random.nextBoolean(), random.nextBoolean(), random.nextBoolean(),
-            random.nextBoolean(), random.nextBoolean()));
+            random.nextBoolean(), random.nextBoolean(), random.nextBoolean()));
   }
 
   private Account generateAccount(String number, UUID uuid) {
@@ -483,8 +573,8 @@ class AccountsScyllaDbTest {
       String data = new String(get.item().get(AccountsScyllaDb.ATTR_ACCOUNT_DATA).b().asByteArray(), StandardCharsets.UTF_8);
       assertThat(data).isNotEmpty();
       
-      assertThat(AttributeValues.getInt(get.item(), AccountsScyllaDb.ATTR_MIGRATION_VERSION, -1))
-      .isEqualTo(expecting.getScyllaDbMigrationVersion());
+      assertThat(AttributeValues.getInt(get.item(), AccountsScyllaDb.ATTR_VERSION, -1))
+      .isEqualTo(expecting.getVersion());
 
       Account result = AccountsScyllaDb.fromItem(get.item());
       verifyStoredState(number, uuid, result, expecting);
@@ -497,6 +587,7 @@ class AccountsScyllaDbTest {
     assertThat(result.getUserLogin()).isEqualTo(number);
     assertThat(result.getLastSeen()).isEqualTo(expecting.getLastSeen());
     assertThat(result.getUuid()).isEqualTo(uuid);
+    assertThat(result.getVersion()).isEqualTo(expecting.getVersion());
     assertThat(Arrays.equals(result.getUnidentifiedAccessKey().get(), expecting.getUnidentifiedAccessKey().get())).isTrue();
 
     for (Device expectingDevice : expecting.getDevices()) {

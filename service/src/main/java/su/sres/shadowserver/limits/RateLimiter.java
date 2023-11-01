@@ -16,6 +16,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.UUID;
 
 import javax.annotation.Nullable;
 
@@ -65,13 +66,31 @@ public class RateLimiter {
       }
     }
   }
+  
+  public void validate(final UUID accountUuid) throws RateLimitExceededException {
+    validate(accountUuid.toString());
+  }
+
+  public void validate(final UUID sourceAccountUuid, final UUID destinationAccountUuid)
+      throws RateLimitExceededException {
+
+    validate(sourceAccountUuid.toString() + "__" + destinationAccountUuid.toString());
+  }
 
   public void validate(String key) throws RateLimitExceededException {
     validate(key, 1);
   }
   
+  public boolean hasAvailablePermits(final UUID accountUuid, final int permits) {
+    return hasAvailablePermits(accountUuid.toString(), permits);
+  }
+  
   public boolean hasAvailablePermits(final String key, final int permits) {
     return getBucket(key).getTimeUntilSpaceAvailable(permits).equals(Duration.ZERO);
+  }
+  
+  public void clear(final UUID accountUuid) {
+    clear(accountUuid.toString());
   }
 
   public void clear(String key) {

@@ -18,7 +18,7 @@ import org.glassfish.jersey.server.ApplicationHandler;
 import org.glassfish.jersey.server.ContainerRequest;
 import org.glassfish.jersey.server.ContainerResponse;
 import org.glassfish.jersey.server.ResourceConfig;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.stubbing.Answer;
 import su.sres.websocket.auth.WebsocketAuthValueFactoryProvider;
@@ -71,7 +71,7 @@ import static org.mockito.Mockito.when;
 public class WebSocketResourceProviderTest {
 
   @Test
-  public void testOnConnect() {
+  void testOnConnect() {
     ApplicationHandler applicationHandler = mock(ApplicationHandler.class);
     WebsocketRequestLog requestLog = mock(WebsocketRequestLog.class);
     WebSocketConnectListener connectListener = mock(WebSocketConnectListener.class);
@@ -100,7 +100,7 @@ public class WebSocketResourceProviderTest {
   }
 
   @Test
-  public void testMockedRouteMessageSuccess() throws Exception {
+  void testMockedRouteMessageSuccess() throws Exception {
     ApplicationHandler applicationHandler = mock(ApplicationHandler.class);
     WebsocketRequestLog requestLog = mock(WebsocketRequestLog.class);
     WebSocketResourceProvider<TestPrincipal> provider = new WebSocketResourceProvider<>("127.0.0.1", applicationHandler, requestLog, new TestPrincipal("foo"), new ProtobufWebSocketMessageFactory(), Optional.empty(), 30000);
@@ -171,7 +171,7 @@ public class WebSocketResourceProviderTest {
   }
 
   @Test
-  public void testMockedRouteMessageFailure() throws Exception {
+  void testMockedRouteMessageFailure() throws Exception {
     ApplicationHandler applicationHandler = mock(ApplicationHandler.class);
     WebsocketRequestLog requestLog = mock(WebsocketRequestLog.class);
     WebSocketResourceProvider<TestPrincipal> provider = new WebSocketResourceProvider<>("127.0.0.1", applicationHandler, requestLog, new TestPrincipal("foo"), new ProtobufWebSocketMessageFactory(), Optional.empty(), 30000);
@@ -216,7 +216,7 @@ public class WebSocketResourceProviderTest {
   }
 
   @Test
-  public void testActualRouteMessageSuccess() throws InvalidProtocolBufferException {
+  void testActualRouteMessageSuccess() throws InvalidProtocolBufferException {
     ResourceConfig resourceConfig = new DropwizardResourceConfig();
     resourceConfig.register(new TestResource());
     resourceConfig.register(new WebSocketSessionContextValueFactoryProvider.Binder());
@@ -253,7 +253,7 @@ public class WebSocketResourceProviderTest {
   }
 
   @Test
-  public void testActualRouteMessageNotFound() throws InvalidProtocolBufferException {
+  void testActualRouteMessageNotFound() throws InvalidProtocolBufferException {
     ResourceConfig resourceConfig = new DropwizardResourceConfig();
     resourceConfig.register(new TestResource());
     resourceConfig.register(new WebSocketSessionContextValueFactoryProvider.Binder());
@@ -290,7 +290,7 @@ public class WebSocketResourceProviderTest {
   }
 
   @Test
-  public void testActualRouteMessageAuthorized() throws InvalidProtocolBufferException {
+  void testActualRouteMessageAuthorized() throws InvalidProtocolBufferException {
     ResourceConfig resourceConfig = new DropwizardResourceConfig();
     resourceConfig.register(new TestResource());
     resourceConfig.register(new WebSocketSessionContextValueFactoryProvider.Binder());
@@ -327,7 +327,7 @@ public class WebSocketResourceProviderTest {
   }
 
   @Test
-  public void testActualRouteMessageUnauthorized() throws InvalidProtocolBufferException {
+  void testActualRouteMessageUnauthorized() throws InvalidProtocolBufferException {
     ResourceConfig resourceConfig = new DropwizardResourceConfig();
     resourceConfig.register(new TestResource());
     resourceConfig.register(new WebSocketSessionContextValueFactoryProvider.Binder());
@@ -363,7 +363,7 @@ public class WebSocketResourceProviderTest {
   }
 
   @Test
-  public void testActualRouteMessageOptionalAuthorizedPresent() throws InvalidProtocolBufferException {
+  void testActualRouteMessageOptionalAuthorizedPresent() throws InvalidProtocolBufferException {
     ResourceConfig resourceConfig = new DropwizardResourceConfig();
     resourceConfig.register(new TestResource());
     resourceConfig.register(new WebSocketSessionContextValueFactoryProvider.Binder());
@@ -400,7 +400,7 @@ public class WebSocketResourceProviderTest {
   }
 
   @Test
-  public void testActualRouteMessageOptionalAuthorizedEmpty() throws InvalidProtocolBufferException {
+  void testActualRouteMessageOptionalAuthorizedEmpty() throws InvalidProtocolBufferException {
     ResourceConfig resourceConfig = new DropwizardResourceConfig();
     resourceConfig.register(new TestResource());
     resourceConfig.register(new WebSocketSessionContextValueFactoryProvider.Binder());
@@ -437,7 +437,7 @@ public class WebSocketResourceProviderTest {
   }
 
   @Test
-  public void testActualRouteMessagePutAuthenticatedEntity() throws InvalidProtocolBufferException, JsonProcessingException {
+  void testActualRouteMessagePutAuthenticatedEntity() throws InvalidProtocolBufferException, JsonProcessingException {
     ResourceConfig resourceConfig = new DropwizardResourceConfig();
     resourceConfig.register(new TestResource());
     resourceConfig.register(new WebSocketSessionContextValueFactoryProvider.Binder());
@@ -474,7 +474,7 @@ public class WebSocketResourceProviderTest {
   }
 
   @Test
-  public void testActualRouteMessagePutAuthenticatedBadEntity() throws InvalidProtocolBufferException, JsonProcessingException {
+  void testActualRouteMessagePutAuthenticatedBadEntity() throws InvalidProtocolBufferException, JsonProcessingException {
     ResourceConfig resourceConfig = new DropwizardResourceConfig();
     resourceConfig.register(new TestResource());
     resourceConfig.register(new WebSocketSessionContextValueFactoryProvider.Binder());
@@ -511,7 +511,7 @@ public class WebSocketResourceProviderTest {
   }
 
   @Test
-  public void testActualRouteMessageExceptionMapping() throws InvalidProtocolBufferException {
+  void testActualRouteMessageExceptionMapping() throws InvalidProtocolBufferException {
     ResourceConfig resourceConfig = new DropwizardResourceConfig();
     resourceConfig.register(new TestResource());
     resourceConfig.register(new TestExceptionMapper());
@@ -548,7 +548,7 @@ public class WebSocketResourceProviderTest {
   }
 
   @Test
-  public void testActualRouteSessionContextInjection() throws InvalidProtocolBufferException {
+  void testActualRouteSessionContextInjection() throws InvalidProtocolBufferException {
     ResourceConfig resourceConfig = new DropwizardResourceConfig();
     resourceConfig.register(new TestResource());
     resourceConfig.register(new TestExceptionMapper());
@@ -599,7 +599,7 @@ public class WebSocketResourceProviderTest {
   }
 
   @Test
-  public void testGetHeaderList() {
+  void testGetHeaderList() {
     assertThat(WebSocketResourceProvider.getHeaderList(new MultivaluedHashMap<>())).isEmpty();
 
     {
@@ -614,7 +614,7 @@ public class WebSocketResourceProviderTest {
   }
 
   @Test
-  public void testShouldIncludeUpgradeRequestHeader() {
+  void testShouldIncludeUpgradeRequestHeader() {
     assertThat(WebSocketResourceProvider.shouldIncludeUpgradeRequestHeader("Upgrade")).isFalse();
     assertThat(WebSocketResourceProvider.shouldIncludeUpgradeRequestHeader("Connection")).isFalse();
     assertThat(WebSocketResourceProvider.shouldIncludeUpgradeRequestHeader("Sec-WebSocket-Key")).isFalse();
@@ -623,13 +623,13 @@ public class WebSocketResourceProviderTest {
   }
 
   @Test
-  public void testShouldIncludeRequestMessageHeader() {
+  void testShouldIncludeRequestMessageHeader() {
     assertThat(WebSocketResourceProvider.shouldIncludeRequestMessageHeader("X-Forwarded-For")).isFalse();
     assertThat(WebSocketResourceProvider.shouldIncludeRequestMessageHeader("User-Agent")).isTrue();
   }
 
   @Test
-  public void testGetCombinedHeaders() {
+  void testGetCombinedHeaders() {
     final Map<String, List<String>> upgradeRequestHeaders = Map.of(
         "Host", List.of("server.example.com"),
         "Upgrade", List.of("websocket"),

@@ -1,6 +1,11 @@
 package su.sres.shadowserver.storage;
 
 import com.almworks.sqlite4java.SQLite;
+import com.amazonaws.auth.AWSStaticCredentialsProvider;
+import com.amazonaws.auth.BasicAWSCredentials;
+import com.amazonaws.client.builder.AwsClientBuilder;
+import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
+import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
 import com.amazonaws.services.dynamodbv2.local.main.ServerRunner;
 import com.amazonaws.services.dynamodbv2.local.server.DynamoDBProxyServer;
 
@@ -14,6 +19,7 @@ import software.amazon.awssdk.services.dynamodb.model.CreateTableRequest;
 import software.amazon.awssdk.services.dynamodb.model.GlobalSecondaryIndex;
 import software.amazon.awssdk.services.dynamodb.model.KeySchemaElement;
 import software.amazon.awssdk.services.dynamodb.model.KeyType;
+import software.amazon.awssdk.services.dynamodb.model.LocalSecondaryIndex;
 import software.amazon.awssdk.services.dynamodb.model.ProvisionedThroughput;
 
 import java.net.ServerSocket;
@@ -26,7 +32,7 @@ import org.junit.jupiter.api.extension.ExtensionContext;
 
 public class DynamoDbExtension implements BeforeEachCallback, AfterEachCallback {
 
-  static final  String DEFAULT_TABLE_NAME = "test_table";
+  static final String DEFAULT_TABLE_NAME = "test_table";
 
   static final ProvisionedThroughput DEFAULT_PROVISIONED_THROUGHPUT = ProvisionedThroughput.builder()
       .readCapacityUnits(20L)
@@ -42,19 +48,25 @@ public class DynamoDbExtension implements BeforeEachCallback, AfterEachCallback 
 
   private final List<AttributeDefinition> attributeDefinitions;
   private final List<GlobalSecondaryIndex> globalSecondaryIndexes;
+  private final List<LocalSecondaryIndex> localSecondaryIndexes;
 
   private final long readCapacityUnits;
   private final long writeCapacityUnits;
 
   private DynamoDbClient dynamoDB2;
   private DynamoDbAsyncClient dynamoAsyncDB2;
+  private AmazonDynamoDB legacyDynamoClient;
 
-  private DynamoDbExtension(String tableName, String hashKey, String rangeKey, List<AttributeDefinition> attributeDefinitions, List<GlobalSecondaryIndex> globalSecondaryIndexes, long readCapacityUnits,
+  private DynamoDbExtension(String tableName, String hashKey, String rangeKey,
+      List<AttributeDefinition> attributeDefinitions, List<GlobalSecondaryIndex> globalSecondaryIndexes,
+      final List<LocalSecondaryIndex> localSecondaryIndexes,
+      long readCapacityUnits,
       long writeCapacityUnits) {
 
     this.tableName = tableName;
     this.hashKeyName = hashKey;
     this.rangeKeyName = rangeKey;
+    this.localSecondaryIndexes = localSecondaryIndexes;
 
     this.readCapacityUnits = readCapacityUnits;
     this.writeCapacityUnits = writeCapacityUnits;
@@ -104,6 +116,7 @@ public class DynamoDbExtension implements BeforeEachCallback, AfterEachCallback 
         .keySchema(keySchemaElements)
         .attributeDefinitions(attributeDefinitions.isEmpty() ? null : attributeDefinitions)
         .globalSecondaryIndexes(globalSecondaryIndexes.isEmpty() ? null : globalSecondaryIndexes)
+        .localSecondaryIndexes(localSecondaryIndexes.isEmpty() ? null : localSecondaryIndexes)
         .provisionedThroughput(ProvisionedThroughput.builder()
             .readCapacityUnits(readCapacityUnits)
             .writeCapacityUnits(writeCapacityUnits)
@@ -114,15 +127,18 @@ public class DynamoDbExtension implements BeforeEachCallback, AfterEachCallback 
   }
 
   private void startServer() throws Exception {
-    // Even though we're using AWS SDK v2, Dynamo's local implementation's canonical location
-    // is within v1 (https://github.com/aws/aws-sdk-java-v2/issues/982).  This does support
+    // Even though we're using AWS SDK v2, Dynamo's local implementation's canonical
+    // location
+    // is within v1 (https://github.com/aws/aws-sdk-java-v2/issues/982). This does
+    // support
     // v2 clients, though.
-    SQLite.setLibraryPath("target/lib");  // if you see a library failed to load error, you need to run mvn test-compile at least once first
+    SQLite.setLibraryPath("target/lib"); // if you see a library failed to load error, you need to run mvn test-compile
+                                         // at least once first
     ServerSocket serverSocket = new ServerSocket(0);
     serverSocket.setReuseAddress(false);
     port = serverSocket.getLocalPort();
     serverSocket.close();
-    server = ServerRunner.createServerFromCommandLineArgs(new String[]{"-inMemory", "-port", String.valueOf(port)});
+    server = ServerRunner.createServerFromCommandLineArgs(new String[] { "-inMemory", "-port", String.valueOf(port) });
     server.start();
   }
 
@@ -139,9 +155,14 @@ public class DynamoDbExtension implements BeforeEachCallback, AfterEachCallback 
         .credentialsProvider(StaticCredentialsProvider.create(
             AwsBasicCredentials.create("accessKey", "secretKey")))
         .build();
+    legacyDynamoClient = AmazonDynamoDBClientBuilder.standard()
+        .withEndpointConfiguration(
+            new AwsClientBuilder.EndpointConfiguration("http://localhost:" + port, "local-test-region"))
+        .withCredentials(new AWSStaticCredentialsProvider(new BasicAWSCredentials("accessKey", "secretKey")))
+        .build();
   }
 
-  static class DynamoDbExtensionBuilder {
+  public static class DynamoDbExtensionBuilder {
     private String tableName = DEFAULT_TABLE_NAME;
 
     private String hashKey;
@@ -149,6 +170,7 @@ public class DynamoDbExtension implements BeforeEachCallback, AfterEachCallback 
 
     private List<AttributeDefinition> attributeDefinitions = new ArrayList<>();
     private List<GlobalSecondaryIndex> globalSecondaryIndexes = new ArrayList<>();
+    private List<LocalSecondaryIndex> localSecondaryIndexes = new ArrayList<>();
 
     private long readCapacityUnits = DEFAULT_PROVISIONED_THROUGHPUT.readCapacityUnits();
     private long writeCapacityUnits = DEFAULT_PROVISIONED_THROUGHPUT.writeCapacityUnits();
@@ -157,22 +179,22 @@ public class DynamoDbExtension implements BeforeEachCallback, AfterEachCallback 
 
     }
 
-    DynamoDbExtensionBuilder tableName(String databaseName) {
+    public DynamoDbExtensionBuilder tableName(String databaseName) {
       this.tableName = databaseName;
       return this;
     }
 
-    DynamoDbExtensionBuilder hashKey(String hashKey) {
+    public DynamoDbExtensionBuilder hashKey(String hashKey) {
       this.hashKey = hashKey;
       return this;
     }
 
-    DynamoDbExtensionBuilder rangeKey(String rangeKey) {
+    public DynamoDbExtensionBuilder rangeKey(String rangeKey) {
       this.rangeKey = rangeKey;
       return this;
     }
 
-    DynamoDbExtensionBuilder attributeDefinition(AttributeDefinition attributeDefinition) {
+    public DynamoDbExtensionBuilder attributeDefinition(AttributeDefinition attributeDefinition) {
       attributeDefinitions.add(attributeDefinition);
       return this;
     }
@@ -182,9 +204,14 @@ public class DynamoDbExtension implements BeforeEachCallback, AfterEachCallback 
       return this;
     }
 
-    DynamoDbExtension build() {
+    public DynamoDbExtensionBuilder localSecondaryIndex(LocalSecondaryIndex index) {
+      localSecondaryIndexes.add(index);
+      return this;
+    }
+
+    public DynamoDbExtension build() {
       return new DynamoDbExtension(tableName, hashKey, rangeKey,
-          attributeDefinitions, globalSecondaryIndexes, readCapacityUnits, writeCapacityUnits);
+          attributeDefinitions, globalSecondaryIndexes, localSecondaryIndexes, readCapacityUnits, writeCapacityUnits);
     }
   }
 
@@ -194,6 +221,10 @@ public class DynamoDbExtension implements BeforeEachCallback, AfterEachCallback 
 
   public DynamoDbAsyncClient getDynamoDbAsyncClient() {
     return dynamoAsyncDB2;
+  }
+
+  public AmazonDynamoDB getLegacyDynamoClient() {
+    return legacyDynamoClient;
   }
 
   public String getTableName() {

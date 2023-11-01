@@ -16,43 +16,41 @@ import javax.ws.rs.Produces;
 import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
-import java.io.IOException;
 import java.util.Base64;
 
 import io.dropwizard.auth.Auth;
+import su.sres.shadowserver.auth.AuthenticatedAccount;
 import su.sres.shadowserver.entities.ProvisioningMessage;
 import su.sres.shadowserver.limits.RateLimiters;
 import su.sres.shadowserver.push.ProvisioningManager;
-import su.sres.shadowserver.storage.Account;
-import su.sres.shadowserver.websocket.InvalidWebsocketAddressException;
 import su.sres.shadowserver.websocket.ProvisioningAddress;
 
 @Path("/v1/provisioning")
 public class ProvisioningController {
 
-    private final RateLimiters rateLimiters;
-    private final ProvisioningManager provisioningManager;
+  private final RateLimiters rateLimiters;
+  private final ProvisioningManager provisioningManager;
 
-    public ProvisioningController(RateLimiters rateLimiters, ProvisioningManager provisioningManager) {
-	this.rateLimiters = rateLimiters;
-	this.provisioningManager = provisioningManager;
+  public ProvisioningController(RateLimiters rateLimiters, ProvisioningManager provisioningManager) {
+    this.rateLimiters = rateLimiters;
+    this.provisioningManager = provisioningManager;
+  }
+
+  @Timed
+  @Path("/{destination}")
+  @PUT
+  @Consumes(MediaType.APPLICATION_JSON)
+  @Produces(MediaType.APPLICATION_JSON)
+  public void sendProvisioningMessage(@Auth AuthenticatedAccount auth,
+      @PathParam("destination") String destinationName,
+      @Valid ProvisioningMessage message)
+      throws RateLimitExceededException {
+
+    rateLimiters.getMessagesLimiter().validate(auth.getAccount().getUuid());
+
+    if (!provisioningManager.sendProvisioningMessage(new ProvisioningAddress(destinationName, 0),
+        Base64.getDecoder().decode(message.getBody()))) {
+      throw new WebApplicationException(Response.Status.NOT_FOUND);
     }
-
-    @Timed
-    @Path("/{destination}")
-    @PUT
-    @Consumes(MediaType.APPLICATION_JSON)
-    @Produces(MediaType.APPLICATION_JSON)
-    public void sendProvisioningMessage(@Auth Account source,
-	    @PathParam("destination") String destinationName,
-	    @Valid ProvisioningMessage message)
-	    throws RateLimitExceededException, InvalidWebsocketAddressException, IOException {
-	rateLimiters.getMessagesLimiter().validate(source.getUserLogin());
-
-	if (!provisioningManager.sendProvisioningMessage(new ProvisioningAddress(destinationName, 0),
-	    Base64.getDecoder().decode(message.getBody())))
-	{
-	    throw new WebApplicationException(Response.Status.NOT_FOUND);
-	}
-    }
+  }
 }

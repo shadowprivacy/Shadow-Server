@@ -13,7 +13,6 @@ import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import su.sres.shadowserver.entities.PreKey;
 
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -118,7 +117,7 @@ public class KeysScyllaDbTest {
     assertEquals(2, keysDynamoDb.getCount(account, DEVICE_ID));
     assertEquals(1, keysDynamoDb.getCount(account, DEVICE_ID + 1));
 
-    keysDynamoDb.delete(account);
+    keysDynamoDb.delete(account.getUuid());
 
     assertEquals(0, keysDynamoDb.getCount(account, DEVICE_ID));
     assertEquals(0, keysDynamoDb.getCount(account, DEVICE_ID + 1));
@@ -132,7 +131,7 @@ public class KeysScyllaDbTest {
     assertEquals(2, keysDynamoDb.getCount(account, DEVICE_ID));
     assertEquals(1, keysDynamoDb.getCount(account, DEVICE_ID + 1));
 
-    keysDynamoDb.delete(account, DEVICE_ID);
+    keysDynamoDb.delete(account.getUuid(), DEVICE_ID);
 
     assertEquals(0, keysDynamoDb.getCount(account, DEVICE_ID));
     assertEquals(1, keysDynamoDb.getCount(account, DEVICE_ID + 1));

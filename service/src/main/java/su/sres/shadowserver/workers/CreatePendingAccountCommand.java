@@ -5,10 +5,6 @@
  */
 package su.sres.shadowserver.workers;
 
-import com.amazonaws.ClientConfiguration;
-import com.amazonaws.auth.AWSStaticCredentialsProvider;
-import com.amazonaws.auth.BasicAWSCredentials;
-import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.google.common.annotations.VisibleForTesting;
 
@@ -49,6 +45,7 @@ import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.storage.Accounts;
 import su.sres.shadowserver.storage.AccountsManager;
 import su.sres.shadowserver.storage.AccountsScyllaDb;
+import su.sres.shadowserver.storage.DeletedAccounts;
 import su.sres.shadowserver.storage.DirectoryManager;
 import su.sres.shadowserver.storage.FaultTolerantDatabase;
 import su.sres.shadowserver.storage.KeysScyllaDb;
@@ -56,16 +53,17 @@ import su.sres.shadowserver.storage.MessagesCache;
 import su.sres.shadowserver.storage.MessagesManager;
 import su.sres.shadowserver.storage.MessagesScyllaDb;
 import su.sres.shadowserver.storage.MigrationDeletedAccounts;
+import su.sres.shadowserver.storage.MigrationMismatchedAccounts;
 import su.sres.shadowserver.storage.MigrationRetryAccounts;
-import su.sres.shadowserver.storage.PendingAccounts;
-import su.sres.shadowserver.storage.PendingAccountsManager;
 import su.sres.shadowserver.storage.Profiles;
 import su.sres.shadowserver.storage.ProfilesManager;
 import su.sres.shadowserver.storage.ReportMessageManager;
 import su.sres.shadowserver.storage.ReportMessageScyllaDb;
 import su.sres.shadowserver.storage.ReservedUsernames;
+import su.sres.shadowserver.storage.StoredVerificationCodeManager;
 import su.sres.shadowserver.storage.Usernames;
 import su.sres.shadowserver.storage.UsernamesManager;
+import su.sres.shadowserver.storage.VerificationCodeStore;
 import su.sres.shadowserver.util.Pair;
 import su.sres.shadowserver.util.ScyllaDbFromConfig;
 import su.sres.shadowserver.util.ServerLicenseUtil;
@@ -172,16 +170,19 @@ public class CreatePendingAccountCommand extends EnvironmentCommand<WhisperServe
 
       FaultTolerantDatabase accountDatabase = new FaultTolerantDatabase("accounts_database_add_pending_user", accountJdbi, configuration.getAccountsDatabaseConfiguration().getCircuitBreakerConfiguration());
 
-      ClientResources redisClusterClientResources = ClientResources.builder().build();
+      ClientResources redisClusterClientResources = ClientResources.builder().build();          
 
       MessageScyllaDbConfiguration scyllaMessageConfig = configuration.getMessageScyllaDbConfiguration();
       ScyllaDbConfiguration scyllaKeysConfig = configuration.getKeysScyllaDbConfiguration();
       AccountsScyllaDbConfiguration scyllaAccountsConfig = configuration.getAccountsScyllaDbConfiguration();
-      
+            
       ScyllaDbConfiguration scyllaMigrationDeletedAccountsConfig = configuration.getMigrationDeletedAccountsScyllaDbConfiguration();
       ScyllaDbConfiguration scyllaMigrationRetryAccountsConfig = configuration.getMigrationRetryAccountsScyllaDbConfiguration();  
+      ScyllaDbConfiguration scyllaDeletedAccountsConfig = configuration.getDeletedAccountsScyllaDbConfiguration();
       
-      ScyllaDbConfiguration scyllaReportMessageConfig = configuration.getReportMessageScyllaDbConfiguration();      
+      ScyllaDbConfiguration scyllaReportMessageConfig = configuration.getReportMessageScyllaDbConfiguration();
+      ScyllaDbConfiguration scyllaMismatchedAccountsConfig = configuration.getMigrationMismatchedAccountsScyllaDbConfiguration();
+      ScyllaDbConfiguration scyllaPendingAccountsConfig = configuration.getPendingAccountsScyllaDbConfiguration();
       
       ThreadPoolExecutor accountsScyllaDbMigrationThreadPool = new ThreadPoolExecutor(1, 1, 0, TimeUnit.SECONDS,
           new LinkedBlockingDeque<>());
@@ -190,11 +191,16 @@ public class CreatePendingAccountCommand extends EnvironmentCommand<WhisperServe
       DynamoDbClient messageScyllaDb = ScyllaDbFromConfig.client(scyllaMessageConfig);
       DynamoDbClient preKeysScyllaDb = ScyllaDbFromConfig.client(scyllaKeysConfig);
       DynamoDbClient accountsScyllaDbClient = ScyllaDbFromConfig.client(scyllaAccountsConfig);
+      DynamoDbClient deletedAccountsScyllaDbClient = ScyllaDbFromConfig.client(scyllaDeletedAccountsConfig);
+      DynamoDbClient mismatchedAccountsScyllaDbClient = ScyllaDbFromConfig.client(scyllaMismatchedAccountsConfig);
       DynamoDbAsyncClient accountsScyllaDbAsyncClient = ScyllaDbFromConfig.asyncClient(scyllaAccountsConfig, accountsScyllaDbMigrationThreadPool);
       
       DynamoDbClient migrationDeletedAccountsScyllaDb = ScyllaDbFromConfig.client(scyllaMigrationDeletedAccountsConfig);
       DynamoDbClient migrationRetryAccountsScyllaDb = ScyllaDbFromConfig.client(scyllaMigrationRetryAccountsConfig);
+      DynamoDbClient pendingAccountsScyllaDbClient = ScyllaDbFromConfig.client(scyllaPendingAccountsConfig);
       
+      DeletedAccounts deletedAccounts = new DeletedAccounts(deletedAccountsScyllaDbClient, scyllaDeletedAccountsConfig.getTableName());
+      MigrationMismatchedAccounts mismatchedAccounts = new MigrationMismatchedAccounts(mismatchedAccountsScyllaDbClient, scyllaMismatchedAccountsConfig.getTableName());
       MigrationDeletedAccounts migrationDeletedAccounts = new MigrationDeletedAccounts(migrationDeletedAccountsScyllaDb, scyllaMigrationDeletedAccountsConfig.getTableName());
       MigrationRetryAccounts migrationRetryAccounts = new MigrationRetryAccounts(migrationRetryAccountsScyllaDb, scyllaMigrationRetryAccountsConfig.getTableName());
 
@@ -210,14 +216,15 @@ public class CreatePendingAccountCommand extends EnvironmentCommand<WhisperServe
 
       Accounts accounts = new Accounts(accountDatabase);
       AccountsScyllaDb accountsScyllaDb = new AccountsScyllaDb(accountsScyllaDbClient, accountsScyllaDbAsyncClient, accountsScyllaDbMigrationThreadPool, scyllaAccountsConfig.getTableName(), scyllaAccountsConfig.getUserLoginTableName(), scyllaAccountsConfig.getMiscTableName(), migrationDeletedAccounts, migrationRetryAccounts);
-      PendingAccounts pendingAccounts = new PendingAccounts(accountDatabase);
+      VerificationCodeStore pendingAccounts = new VerificationCodeStore(pendingAccountsScyllaDbClient, scyllaPendingAccountsConfig.getTableName());
       Usernames usernames = new Usernames(accountDatabase);
       Profiles profiles = new Profiles(accountDatabase);
       ReservedUsernames reservedUsernames = new ReservedUsernames(accountDatabase);
       KeysScyllaDb keysScyllaDb = new KeysScyllaDb(preKeysScyllaDb, scyllaKeysConfig.getTableName());
       MessagesScyllaDb messagesScyllaDb = new MessagesScyllaDb(messageScyllaDb, scyllaMessageConfig.getTableName(), scyllaMessageConfig.getTimeToLive());
-
-      PendingAccountsManager pendingAccountsManager = new PendingAccountsManager(pendingAccounts, cacheCluster);
+            
+      final int lifetime = configuration.getLocalParametersConfiguration().getAccountLifetime();
+      StoredVerificationCodeManager pendingAccountsManager = new StoredVerificationCodeManager(pendingAccounts, lifetime);
 
       DirectoryManager directory = new DirectoryManager(redisClient);
       MessagesCache messagesCache = new MessagesCache(messageInsertCacheCluster, messageReadDeleteCluster, keyspaceNotificationDispatchExecutor);
@@ -231,7 +238,7 @@ public class CreatePendingAccountCommand extends EnvironmentCommand<WhisperServe
       ReportMessageManager reportMessageManager = new ReportMessageManager(reportMessageScyllaDb, Metrics.globalRegistry);
       MessagesManager messagesManager = new MessagesManager(messagesScyllaDb, messagesCache, pushLatencyManager, reportMessageManager);
 
-      AccountsManager accountsManager = new AccountsManager(accounts, accountsScyllaDb, directory, cacheCluster, keysScyllaDb, messagesManager, usernamesManager, profilesManager);
+      AccountsManager accountsManager = new AccountsManager(accounts, accountsScyllaDb, directory, cacheCluster, deletedAccounts, keysScyllaDb, messagesManager, mismatchedAccounts, usernamesManager, profilesManager, pendingAccountsManager);
 
       for (String user : users) {
         Optional<Account> existingAccount = accountsManager.get(user);

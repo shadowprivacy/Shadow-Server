@@ -24,11 +24,11 @@ import org.glassfish.jersey.test.grizzly.GrizzlyWebTestContainerFactory;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import su.sres.shadowserver.auth.DisabledPermittedAccount;
+import su.sres.shadowserver.auth.AuthenticatedAccount;
+import su.sres.shadowserver.auth.DisabledPermittedAuthenticatedAccount;
 import su.sres.shadowserver.limits.RateLimitChallengeManager;
 import su.sres.shadowserver.mappers.RetryLaterExceptionMapper;
 import su.sres.shadowserver.push.NotPushRegisteredException;
-import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.util.AuthHelper;
 import su.sres.shadowserver.util.SystemMapper;
 
@@ -41,7 +41,7 @@ class ChallengeControllerTest {
 
   private static final ResourceExtension EXTENSION = ResourceExtension.builder()
       .addProvider(AuthHelper.getAuthFilter())
-      .addProvider(new PolymorphicAuthValueFactoryProvider.Binder<>(Set.of(Account.class, DisabledPermittedAccount.class)))
+      .addProvider(new PolymorphicAuthValueFactoryProvider.Binder<>(Set.of(AuthenticatedAccount.class, DisabledPermittedAuthenticatedAccount.class)))
       .setMapper(SystemMapper.getMapper())
       .setTestContainerFactory(new GrizzlyWebTestContainerFactory())
       .addResource(new RetryLaterExceptionMapper())
@@ -62,7 +62,7 @@ class ChallengeControllerTest {
 
     final Response response = EXTENSION.target("/v1/challenge")
         .request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID, AuthHelper.VALID_PASSWORD))
         .put(Entity.json(pushChallengeJson));
 
     assertEquals(200, response.getStatus());
@@ -81,7 +81,7 @@ class ChallengeControllerTest {
 
     final Response response = EXTENSION.target("/v1/challenge")
         .request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID, AuthHelper.VALID_PASSWORD))
         .put(Entity.json(pushChallengeJson));
 
     assertEquals(429, response.getStatus());
@@ -99,7 +99,7 @@ class ChallengeControllerTest {
     final Response response = EXTENSION.target("/v1/challenge")
         .request()
         .header("X-Forwarded-For", "10.0.0.1")
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID, AuthHelper.VALID_PASSWORD))
         .put(Entity.json(recaptchaChallengeJson));
 
     assertEquals(200, response.getStatus());
@@ -120,7 +120,7 @@ class ChallengeControllerTest {
     final Response response = EXTENSION.target("/v1/challenge")
         .request()
         .header("X-Forwarded-For", "10.0.0.1")
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID, AuthHelper.VALID_PASSWORD))
         .put(Entity.json(recaptchaChallengeJson));
 
     assertEquals(429, response.getStatus());
@@ -137,7 +137,7 @@ class ChallengeControllerTest {
 
     final Response response = EXTENSION.target("/v1/challenge")
         .request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID, AuthHelper.VALID_PASSWORD))
         .put(Entity.json(recaptchaChallengeJson));
 
     assertEquals(400, response.getStatus());
@@ -153,7 +153,7 @@ class ChallengeControllerTest {
     final Response response = EXTENSION.target("/v1/challenge")
         .request()
         .header("X-Forwarded-For", "10.0.0.1")
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID, AuthHelper.VALID_PASSWORD))
         .put(Entity.json(unrecognizedJson));
 
     assertEquals(400, response.getStatus());
@@ -166,7 +166,7 @@ class ChallengeControllerTest {
     {
       final Response response = EXTENSION.target("/v1/challenge/push")
           .request()
-          .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+          .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID, AuthHelper.VALID_PASSWORD))
           .post(Entity.text(""));
 
       assertEquals(200, response.getStatus());
@@ -177,7 +177,7 @@ class ChallengeControllerTest {
 
       final Response response = EXTENSION.target("/v1/challenge/push")
           .request()
-          .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER_TWO, AuthHelper.VALID_PASSWORD_TWO))
+          .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID_TWO, AuthHelper.VALID_PASSWORD_TWO))
           .post(Entity.text(""));
 
       assertEquals(404, response.getStatus());
@@ -192,7 +192,7 @@ class ChallengeControllerTest {
 
     final Response response = EXTENSION.target("/v1/challenge")
         .request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID, AuthHelper.VALID_PASSWORD))
         .put(Entity.json(unrecognizedJson));
 
     assertEquals(422, response.getStatus());

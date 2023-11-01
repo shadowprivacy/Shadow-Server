@@ -42,6 +42,7 @@ import su.sres.shadowserver.redis.ReplicatedJedisPool;
 import su.sres.shadowserver.storage.Accounts;
 import su.sres.shadowserver.storage.AccountsManager;
 import su.sres.shadowserver.storage.AccountsScyllaDb;
+import su.sres.shadowserver.storage.DeletedAccounts;
 import su.sres.shadowserver.storage.DirectoryManager;
 import su.sres.shadowserver.storage.FaultTolerantDatabase;
 import su.sres.shadowserver.storage.KeysScyllaDb;
@@ -49,14 +50,17 @@ import su.sres.shadowserver.storage.MessagesCache;
 import su.sres.shadowserver.storage.MessagesManager;
 import su.sres.shadowserver.storage.MessagesScyllaDb;
 import su.sres.shadowserver.storage.MigrationDeletedAccounts;
+import su.sres.shadowserver.storage.MigrationMismatchedAccounts;
 import su.sres.shadowserver.storage.MigrationRetryAccounts;
 import su.sres.shadowserver.storage.Profiles;
 import su.sres.shadowserver.storage.ProfilesManager;
 import su.sres.shadowserver.storage.ReportMessageManager;
 import su.sres.shadowserver.storage.ReportMessageScyllaDb;
 import su.sres.shadowserver.storage.ReservedUsernames;
+import su.sres.shadowserver.storage.StoredVerificationCodeManager;
 import su.sres.shadowserver.storage.Usernames;
 import su.sres.shadowserver.storage.UsernamesManager;
+import su.sres.shadowserver.storage.VerificationCodeStore;
 import su.sres.shadowserver.util.ScyllaDbFromConfig;
 
 // TODO: Migrate to Scylla
@@ -88,6 +92,9 @@ public class DirectoryCommand extends EnvironmentCommand<WhisperServerConfigurat
       MessageScyllaDbConfiguration scyllaMessageConfig = configuration.getMessageScyllaDbConfiguration();
       ScyllaDbConfiguration scyllaKeysConfig = configuration.getKeysScyllaDbConfiguration();
       AccountsScyllaDbConfiguration scyllaAccountsConfig = configuration.getAccountsScyllaDbConfiguration();
+      ScyllaDbConfiguration scyllaDeletedAccountsConfig = configuration.getDeletedAccountsScyllaDbConfiguration();
+      ScyllaDbConfiguration scyllaMismatchedAccountsConfig = configuration.getMigrationMismatchedAccountsScyllaDbConfiguration();
+      ScyllaDbConfiguration scyllaPendingAccountsConfig = configuration.getPendingAccountsScyllaDbConfiguration();
       
       ScyllaDbConfiguration scyllaMigrationDeletedAccountsConfig = configuration.getMigrationDeletedAccountsScyllaDbConfiguration();
       ScyllaDbConfiguration scyllaMigrationRetryAccountsConfig = configuration.getMigrationRetryAccountsScyllaDbConfiguration(); 
@@ -101,22 +108,26 @@ public class DirectoryCommand extends EnvironmentCommand<WhisperServerConfigurat
       DynamoDbClient messageScyllaDb = ScyllaDbFromConfig.client(scyllaMessageConfig);
       DynamoDbClient preKeysScyllaDb = ScyllaDbFromConfig.client(scyllaKeysConfig);
       DynamoDbClient accountsScyllaDbClient = ScyllaDbFromConfig.client(scyllaAccountsConfig);
+      DynamoDbClient deletedAccountsScyllaDbClient = ScyllaDbFromConfig.client(scyllaDeletedAccountsConfig);
+      DynamoDbClient mismatchedAccountsScyllaDbClient = ScyllaDbFromConfig.client(scyllaMismatchedAccountsConfig);
       DynamoDbAsyncClient accountsScyllaDbAsyncClient = ScyllaDbFromConfig.asyncClient(scyllaAccountsConfig, accountsScyllaDbMigrationThreadPool);
-      
+            
       DynamoDbClient migrationDeletedAccountsScyllaDb = ScyllaDbFromConfig.client(scyllaMigrationDeletedAccountsConfig);
       DynamoDbClient migrationRetryAccountsScyllaDb = ScyllaDbFromConfig.client(scyllaMigrationRetryAccountsConfig);
+      DynamoDbClient pendingAccountsScyllaDbClient = ScyllaDbFromConfig.client(scyllaPendingAccountsConfig);
       
+      DeletedAccounts deletedAccounts = new DeletedAccounts(deletedAccountsScyllaDbClient, scyllaDeletedAccountsConfig.getTableName());
+      MigrationMismatchedAccounts mismatchedAccounts = new MigrationMismatchedAccounts(mismatchedAccountsScyllaDbClient, scyllaMismatchedAccountsConfig.getTableName());
       MigrationDeletedAccounts migrationDeletedAccounts = new MigrationDeletedAccounts(migrationDeletedAccountsScyllaDb, scyllaMigrationDeletedAccountsConfig.getTableName());
-      MigrationRetryAccounts migrationRetryAccounts = new MigrationRetryAccounts(migrationRetryAccountsScyllaDb, scyllaMigrationRetryAccountsConfig.getTableName());      
+      MigrationRetryAccounts migrationRetryAccounts = new MigrationRetryAccounts(migrationRetryAccountsScyllaDb, scyllaMigrationRetryAccountsConfig.getTableName());
+      VerificationCodeStore pendingAccounts = new VerificationCodeStore(pendingAccountsScyllaDbClient, scyllaPendingAccountsConfig.getTableName());
   
       FaultTolerantRedisCluster cacheCluster = new FaultTolerantRedisCluster("main_cache_cluster", configuration.getCacheClusterConfiguration(), redisClusterClientResources);
       FaultTolerantRedisCluster messageInsertCacheCluster = new FaultTolerantRedisCluster("message_insert_cluster", configuration.getMessageCacheConfiguration().getRedisClusterConfiguration(), redisClusterClientResources);
       FaultTolerantRedisCluster messageReadDeleteCluster = new FaultTolerantRedisCluster("message_read_delete_cluster", configuration.getMessageCacheConfiguration().getRedisClusterConfiguration(), redisClusterClientResources);
       FaultTolerantRedisCluster metricsCluster = new FaultTolerantRedisCluster("metrics_cluster", configuration.getMetricsClusterConfiguration(), redisClusterClientResources);
 
-      ExecutorService keyspaceNotificationDispatchExecutor = environment.lifecycle().executorService(name(getClass(), "keyspaceNotification-%d")).maxThreads(4).build();
-      
-      
+      ExecutorService keyspaceNotificationDispatchExecutor = environment.lifecycle().executorService(name(getClass(), "keyspaceNotification-%d")).maxThreads(4).build();    
           
       Accounts accounts = new Accounts(accountDatabase);
       AccountsScyllaDb accountsScyllaDb = new AccountsScyllaDb(accountsScyllaDbClient, accountsScyllaDbAsyncClient, accountsScyllaDbMigrationThreadPool, scyllaAccountsConfig.getTableName(), scyllaAccountsConfig.getUserLoginTableName(), scyllaAccountsConfig.getMiscTableName(), migrationDeletedAccounts, migrationRetryAccounts);
@@ -143,7 +154,9 @@ public class DirectoryCommand extends EnvironmentCommand<WhisperServerConfigurat
       ReportMessageManager reportMessageManager = new ReportMessageManager(reportMessageScyllaDb, Metrics.globalRegistry);
       MessagesManager messagesManager = new MessagesManager(messagesScyllaDb, messagesCache, pushLatencyManager, reportMessageManager);
 
-      AccountsManager accountsManager = new AccountsManager(accounts, accountsScyllaDb, directory, cacheCluster, keysScyllaDb, messagesManager, usernamesManager, profilesManager);
+      final int lifetime = configuration.getLocalParametersConfiguration().getAccountLifetime();
+      StoredVerificationCodeManager pendingAccountsManager = new StoredVerificationCodeManager(pendingAccounts, lifetime);
+      AccountsManager accountsManager = new AccountsManager(accounts, accountsScyllaDb, directory, cacheCluster, deletedAccounts, keysScyllaDb, messagesManager, mismatchedAccounts, usernamesManager, profilesManager, pendingAccountsManager);
 
       PlainDirectoryUpdater updater = new PlainDirectoryUpdater(accountsManager);
 

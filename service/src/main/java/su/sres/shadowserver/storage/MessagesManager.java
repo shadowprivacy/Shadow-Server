@@ -1,6 +1,6 @@
 /*
- * Original software: Copyright 2013-2020 Signal Messenger, LLC
- * Modified software: Copyright 2019-2022 Anton Alipov, sole trader
+ * Original software: Copyright 2013-2021 Signal Messenger, LLC
+ * Modified software: Copyright 2019-2023 Anton Alipov, sole trader
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 package su.sres.shadowserver.storage;
@@ -29,10 +29,12 @@ public class MessagesManager {
   private static final int RESULT_SET_CHUNK_SIZE = 100;
 
   private static final MetricRegistry metricRegistry = SharedMetricRegistries.getOrCreate(Constants.METRICS_NAME);
-  private static final Meter cacheHitByNameMeter = metricRegistry.meter(name(MessagesManager.class, "cacheHitByName"));
-  private static final Meter cacheMissByNameMeter = metricRegistry.meter(name(MessagesManager.class, "cacheMissByName"));
   private static final Meter cacheHitByGuidMeter = metricRegistry.meter(name(MessagesManager.class, "cacheHitByGuid"));
-  private static final Meter cacheMissByGuidMeter = metricRegistry.meter(name(MessagesManager.class, "cacheMissByGuid"));
+  private static final Meter cacheMissByGuidMeter = metricRegistry.meter(
+      name(MessagesManager.class, "cacheMissByGuid"));
+
+  // migrated from MessagePersister, name is not a typo
+  private final Meter persistMessageMeter = metricRegistry.meter(name(MessagePersister.class, "persistMessage"));
 
   private final MessagesScyllaDb messagesScyllaDb;
   private final MessagesCache messagesCache;
@@ -56,10 +58,7 @@ public class MessagesManager {
     }
   }
 
-  public void insertEphemeral(final UUID destinationUuid, final long destinationDevice, final Envelope message) {
-    messagesCache.insertEphemeral(destinationUuid, destinationDevice, message);
-  }
-
+  @Deprecated
   public Optional<Envelope> takeEphemeralMessage(final UUID destinationUuid, final long destinationDevice) {
     return messagesCache.takeEphemeralMessage(destinationUuid, destinationDevice);
   }
@@ -93,29 +92,14 @@ public class MessagesManager {
     messagesCache.clear(destinationUuid, deviceId);
 
     messagesScyllaDb.deleteAllMessagesForDevice(destinationUuid, deviceId);
-  }
-
-  public Optional<OutgoingMessageEntity> delete(
-      UUID destinationUuid, long destinationDeviceId, String source, long timestamp) {
-    Optional<OutgoingMessageEntity> removed = messagesCache.remove(destinationUuid, destinationDeviceId, source, timestamp);
-
-    if (removed.isEmpty()) {
-
-      removed = messagesScyllaDb.deleteMessageByDestinationAndSourceAndTimestamp(destinationUuid, destinationDeviceId, source, timestamp);
-      cacheMissByNameMeter.mark();
-    } else {
-      cacheHitByNameMeter.mark();
-    }
-
-    return removed;
-  }
+  }  
 
   public Optional<OutgoingMessageEntity> delete(UUID destinationUuid, long destinationDeviceId, UUID guid) {
     Optional<OutgoingMessageEntity> removed = messagesCache.remove(destinationUuid, destinationDeviceId, guid);
 
     if (removed.isEmpty()) {
 
-      removed = messagesScyllaDb.deleteMessageByDestinationAndGuid(destinationUuid, destinationDeviceId, guid);
+      removed = messagesScyllaDb.deleteMessageByDestinationAndGuid(destinationUuid, guid);
       cacheMissByGuidMeter.mark();
     } else {
       cacheHitByGuidMeter.mark();
@@ -126,9 +110,15 @@ public class MessagesManager {
 
   public void persistMessages(final UUID destinationUuid, final long destinationDeviceId, final List<Envelope> messages) {
 
-    messagesScyllaDb.store(messages, destinationUuid, destinationDeviceId);
+    final List<Envelope> nonEphemeralMessages = messages.stream()
+        .filter(envelope -> !envelope.getEphemeral())
+        .collect(Collectors.toList());
 
-    messagesCache.remove(destinationUuid, destinationDeviceId, messages.stream().map(message -> UUID.fromString(message.getServerGuid())).collect(Collectors.toList()));
+    messagesScyllaDb.store(nonEphemeralMessages, destinationUuid, destinationDeviceId);
+    messagesCache.remove(destinationUuid, destinationDeviceId,
+        messages.stream().map(message -> UUID.fromString(message.getServerGuid())).collect(Collectors.toList()));
+
+    persistMessageMeter.mark(nonEphemeralMessages.size());
   }
 
   public void addMessageAvailabilityListener(

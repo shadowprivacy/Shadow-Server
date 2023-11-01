@@ -121,8 +121,8 @@ public class GCMSender {
       // noinspection OptionalGetWithoutIsPresent
       Device device = account.get().getDevice(message.getDeviceId()).get();
       if (device.getUninstalledFeedbackTimestamp() == 0) {
-        device.setUninstalledFeedbackTimestamp(Util.todayInMillis());
-        accountsManager.update(account.get());
+        accountsManager.updateDevice(account.get(), message.getDeviceId(), d ->
+        d.setUninstalledFeedbackTimestamp(Util.todayInMillis()));
       }
     }
 
@@ -130,32 +130,26 @@ public class GCMSender {
   }
 
   private void handleCanonicalRegistrationId(GcmMessage message, Result result) {
-    logger.warn(String.format("Actually received 'CanonicalRegistrationId' ::: (canonical=%s), (original=%s)",
-        result.getCanonicalRegistrationId(), message.getGcmId()));
+    logger.warn("Actually received 'CanonicalRegistrationId' ::: (canonical={}}), (original={}})",
+        result.getCanonicalRegistrationId(), message.getGcmId());
 
-    Optional<Account> account = getAccountForEvent(message);
-
-    if (account.isPresent()) {
-      // noinspection OptionalGetWithoutIsPresent
-      Device device = account.get().getDevice(message.getDeviceId()).get();
-      device.setGcmId(result.getCanonicalRegistrationId());
-
-      accountsManager.update(account.get());
-    }
+    getAccountForEvent(message).ifPresent(account ->
+    accountsManager.updateDevice(
+        account,
+        message.getDeviceId(),
+        d -> d.setGcmId(result.getCanonicalRegistrationId())));
 
     canonical.mark();
   }
 
   private void handleGenericError(GcmMessage message, Result result) {
-    logger.warn(String.format("Unrecoverable Error ::: (error=%s), (gcm_id=%s), " +
-        "(destination=%s), (device_id=%d)",
-        result.getError(), message.getGcmId(), message.getNumber(),
-        message.getDeviceId()));
+    logger.warn("Unrecoverable Error ::: (error={}}), (gcm_id={}}), (destination={}}), (device_id={}})",
+        result.getError(), message.getGcmId(), message.getUuid(), message.getDeviceId());
     failure.mark();
   }
 
   private Optional<Account> getAccountForEvent(GcmMessage message) {
-    Optional<Account> account = accountsManager.get(message.getNumber());
+    Optional<Account> account = message.getUuid().flatMap(accountsManager::get);
 
     if (account.isPresent()) {
       Optional<Device> device = account.get().getDevice(message.getDeviceId());

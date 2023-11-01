@@ -1,6 +1,6 @@
 /*
- * Original software: Copyright 2013-2020 Signal Messenger, LLC
- * Modified software: Copyright 2019-2022 Anton Alipov, sole trader
+ * Original software: Copyright 2013-2021 Signal Messenger, LLC
+ * Modified software: Copyright 2019-2023 Anton Alipov, sole trader
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 package su.sres.shadowserver.websocket;
@@ -14,9 +14,10 @@ import java.util.Optional;
 
 import io.dropwizard.auth.basic.BasicCredentials;
 import su.sres.shadowserver.auth.AccountAuthenticator;
+import su.sres.shadowserver.auth.AuthenticatedAccount;
 import su.sres.shadowserver.storage.Account;
 
-public class WebSocketAccountAuthenticator implements WebSocketAuthenticator<Account> {
+public class WebSocketAccountAuthenticator implements WebSocketAuthenticator<AuthenticatedAccount> {
 
 	private final AccountAuthenticator accountAuthenticator;
 
@@ -25,7 +26,7 @@ public class WebSocketAccountAuthenticator implements WebSocketAuthenticator<Acc
 	}
 
 	@Override
-	public AuthenticationResult<Account> authenticate(UpgradeRequest request) {
+	public AuthenticationResult<AuthenticatedAccount> authenticate(UpgradeRequest request) {
 		Map<String, List<String>> parameters = request.getParameterMap();
 		List<String> usernames = parameters.get("login");
 		List<String> passwords = parameters.get("password");

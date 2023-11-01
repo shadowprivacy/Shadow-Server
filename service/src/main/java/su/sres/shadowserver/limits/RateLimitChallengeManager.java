@@ -56,12 +56,13 @@ public class RateLimitChallengeManager {
   }
 
   public void answerPushChallenge(final Account account, final String challenge) throws RateLimitExceededException {
-    rateLimiters.getPushChallengeAttemptLimiter().validate(account.getUserLogin());
-
+    rateLimiters.getPushChallengeAttemptLimiter().validate(account.getUuid());  
+ 
     final boolean challengeSuccess = pushChallengeManager.answerChallenge(account, challenge);
 
     if (challengeSuccess) {
-      rateLimiters.getPushChallengeSuccessLimiter().validate(account.getUserLogin());
+      rateLimiters.getPushChallengeSuccessLimiter().validate(account.getUuid());      
+         
       resetRateLimits(account);
     }
   }
@@ -69,22 +70,24 @@ public class RateLimitChallengeManager {
   public void answerRecaptchaChallenge(final Account account, final String captcha, final String mostRecentProxyIp)
       throws RateLimitExceededException {
 
-    rateLimiters.getRecaptchaChallengeAttemptLimiter().validate(account.getUserLogin());
-
+    rateLimiters.getRecaptchaChallengeAttemptLimiter().validate(account.getUuid());   
+ 
     final boolean challengeSuccess = recaptchaClient.verify(captcha, mostRecentProxyIp);
     
     Metrics.counter(RECAPTCHA_ATTEMPT_COUNTER_NAME,        
         SUCCESS_TAG_NAME, String.valueOf(challengeSuccess)).increment();
 
     if (challengeSuccess) {
-      rateLimiters.getRecaptchaChallengeSuccessLimiter().validate(account.getUserLogin());
+      rateLimiters.getRecaptchaChallengeSuccessLimiter().validate(account.getUuid());     
+         
       resetRateLimits(account);
     }
   }
 
   private void resetRateLimits(final Account account) throws RateLimitExceededException {
     try {
-      rateLimiters.getRateLimitResetLimiter().validate(account.getUserLogin());
+      rateLimiters.getRateLimitResetLimiter().validate(account.getUuid());     
+         
     } catch (final RateLimitExceededException e) {
       Metrics.counter(RESET_RATE_LIMIT_EXCEEDED_COUNTER_NAME).increment();
 
@@ -95,13 +98,13 @@ public class RateLimitChallengeManager {
     unsealedSenderRateLimiter.handleRateLimitReset(account);
   }
 
-  public boolean shouldIssueRateLimitChallenge(final String userAgent) {
+  public boolean isClientBelowMinimumVersion(final String userAgent) {
     try {
       final UserAgent client = UserAgentUtil.parseUserAgentString(userAgent);
       final Optional<Semver> minimumClientVersion = dynamicConfig.getMinimumSupportedVersion(client.getPlatform());
 
-      return minimumClientVersion.map(version -> version.isLowerThanOrEqualTo(client.getVersion()))
-          .orElse(false);
+      return minimumClientVersion.map(version -> version.isGreaterThan(client.getVersion()))
+          .orElse(true);
     } catch (final UnrecognizedUserAgentException ignored) {
       return false;
     }
@@ -112,14 +115,14 @@ public class RateLimitChallengeManager {
 
     final String key = account.getUserLogin();
 
-    if (rateLimiters.getRecaptchaChallengeAttemptLimiter().hasAvailablePermits(key, 1) &&
-        rateLimiters.getRecaptchaChallengeSuccessLimiter().hasAvailablePermits(key, 1)) {
+    if (rateLimiters.getRecaptchaChallengeAttemptLimiter().hasAvailablePermits(account.getUuid(), 1) &&
+        rateLimiters.getRecaptchaChallengeSuccessLimiter().hasAvailablePermits(account.getUuid(), 1)) {
 
       options.add(OPTION_RECAPTCHA);
     }
 
-    if (rateLimiters.getPushChallengeAttemptLimiter().hasAvailablePermits(key, 1) &&
-        rateLimiters.getPushChallengeSuccessLimiter().hasAvailablePermits(key, 1)) {
+    if (rateLimiters.getPushChallengeAttemptLimiter().hasAvailablePermits(account.getUuid(), 1) &&
+        rateLimiters.getPushChallengeSuccessLimiter().hasAvailablePermits(account.getUuid(), 1)) {
 
       options.add(OPTION_PUSH_CHALLENGE);
     }

@@ -6,28 +6,36 @@
 package su.sres.shadowserver.util;
 
 import com.github.tomakehurst.wiremock.junit.WireMockRule;
-import org.junit.Rule;
-import org.junit.Test;
+import com.github.tomakehurst.wiremock.junit5.WireMockTest;
 
 import su.sres.shadowserver.configuration.MinioConfiguration;
-import su.sres.shadowserver.redis.AbstractRedisClusterTest;
+import su.sres.shadowserver.redis.RedisClusterExtension;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ScheduledExecutorService;
 
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.RegisterExtension;
+
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options;
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-public class TorExitNodeManagerTest extends AbstractRedisClusterTest {
+@WireMockTest
+class TorExitNodeManagerTest {
 
-  @Rule
-  public WireMockRule wireMockRule = new WireMockRule(options().dynamicPort().dynamicHttpsPort());
+  @RegisterExtension
+  static final RedisClusterExtension REDIS_CLUSTER_EXTENSION = RedisClusterExtension.builder().build();
+   
+  // @Rule
+  // public WireMockRule wireMockRule = new WireMockRule(options().dynamicPort().dynamicHttpsPort());
   
   @Test
-  public void testIsTorExitNode() {
+  void testIsTorExitNode() {
     final MinioConfiguration configuration = mock(MinioConfiguration.class);
     
     when(configuration.getRegion()).thenReturn("ap-northeast-3");

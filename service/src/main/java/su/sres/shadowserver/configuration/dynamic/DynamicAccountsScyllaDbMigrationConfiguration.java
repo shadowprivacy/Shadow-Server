@@ -5,8 +5,11 @@ import com.google.common.annotations.VisibleForTesting;
 
 public class DynamicAccountsScyllaDbMigrationConfiguration {
   @JsonProperty
-  boolean backgroundMigrationEnabled = true;
+  boolean scyllaPrimary = false;
   
+  @JsonProperty
+  boolean backgroundMigrationEnabled = true;
+
   @JsonProperty
   int backgroundMigrationExecutorThreads = 1;
 
@@ -20,14 +23,35 @@ public class DynamicAccountsScyllaDbMigrationConfiguration {
   boolean readEnabled = true;
   
   @JsonProperty
+  boolean postCheckMismatches = true;
+
+  @JsonProperty
   boolean logMismatches = true;
+
+  @JsonProperty
+  boolean crawlerPreReadNextChunkEnabled = false;
+
+  @JsonProperty
+  boolean scyllaCrawlerEnabled = true;
+
+  @JsonProperty
+  int scyllaCrawlerScanPageSize = 10;
 
   public boolean isBackgroundMigrationEnabled() {
     return backgroundMigrationEnabled;
   }
   
+  public boolean isScyllaPrimary() {
+    return scyllaPrimary;
+  }
+
   public int getBackgroundMigrationExecutorThreads() {
     return backgroundMigrationExecutorThreads;
+  }
+
+  @VisibleForTesting
+  public void setBackgroundMigrationEnabled(boolean backgroundMigrationEnabled) {
+    this.backgroundMigrationEnabled = backgroundMigrationEnabled;
   }
 
   public void setDeleteEnabled(boolean deleteEnabled) {
@@ -55,8 +79,33 @@ public class DynamicAccountsScyllaDbMigrationConfiguration {
     return readEnabled;
   }
   
+  public boolean isPostCheckMismatches() {
+    return postCheckMismatches;
+  }
+
   public boolean isLogMismatches() {
     return logMismatches;
   }
 
+  public boolean isCrawlerPreReadNextChunkEnabled() {
+    return crawlerPreReadNextChunkEnabled;
+  }
+
+  public boolean isScyllaCrawlerEnabled() {
+    return scyllaCrawlerEnabled;
+  }
+
+  public int getScyllaCrawlerScanPageSize() {
+    return scyllaCrawlerScanPageSize;
+  }
+
+  @VisibleForTesting
+  public void setLogMismatches(boolean logMismatches) {
+    this.logMismatches = logMismatches;
+  }
+
+  @VisibleForTesting
+  public void setBackgroundMigrationExecutorThreads(int threads) {
+    this.backgroundMigrationExecutorThreads = threads;
+  }
 }

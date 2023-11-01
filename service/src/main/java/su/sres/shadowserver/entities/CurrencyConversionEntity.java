@@ -2,6 +2,7 @@ package su.sres.shadowserver.entities;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import java.math.BigDecimal;
 import java.util.Map;
 
 public class CurrencyConversionEntity {
@@ -10,9 +11,9 @@ public class CurrencyConversionEntity {
   private String base;
 
   @JsonProperty
-  private Map<String, Double> conversions;
+  private Map<String, BigDecimal> conversions;
 
-  public CurrencyConversionEntity(String base, Map<String, Double> conversions) {
+  public CurrencyConversionEntity(String base, Map<String, BigDecimal> conversions) {
     this.base = base;
     this.conversions = conversions;
   }
@@ -24,7 +25,7 @@ public class CurrencyConversionEntity {
     return base;
   }
 
-  public Map<String, Double> getConversions() {
+  public Map<String, BigDecimal> getConversions() {
     return conversions;
   }
 

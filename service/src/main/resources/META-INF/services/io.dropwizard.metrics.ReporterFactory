@@ -1,2 +1,1 @@
-su.sres.shadowserver.metrics.JsonMetricsReporterFactory
 su.sres.shadowserver.metrics.SignalDatadogReporterFactory

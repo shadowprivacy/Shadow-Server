@@ -278,12 +278,15 @@ public class Device {
 
     @JsonProperty
     private boolean announcementGroup;
+    
+    @JsonProperty
+    private boolean changeUserLogin;
 
     public DeviceCapabilities() {
     }
 
     public DeviceCapabilities(boolean gv2, final boolean gv2_2, final boolean gv2_3, boolean storage, boolean transfer,
-        boolean gv1Migration, final boolean senderKey, final boolean announcementGroup) {
+        boolean gv1Migration, final boolean senderKey, final boolean announcementGroup, final boolean changeUserLogin) {
       this.gv2 = gv2;
       this.gv2_2 = gv2_2;
       this.gv2_3 = gv2_3;
@@ -292,6 +295,7 @@ public class Device {
       this.gv1Migration = gv1Migration;
       this.senderKey = senderKey;
       this.announcementGroup = announcementGroup;
+      this.changeUserLogin = changeUserLogin;
     }
 
     public boolean isGv2() {
@@ -324,6 +328,10 @@ public class Device {
 
     public boolean isAnnouncementGroup() {
       return announcementGroup;
+    }
+    
+    public boolean isChangeUserLogin() {
+      return changeUserLogin;
     }
   }
 }

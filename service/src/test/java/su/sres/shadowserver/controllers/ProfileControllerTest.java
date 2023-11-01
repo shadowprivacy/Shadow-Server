@@ -1,13 +1,12 @@
 /*
- * Original software: Copyright 2013-2020 Signal Messenger, LLC
- * Modified software: Copyright 2019-2022 Anton Alipov, sole trader
+ * Original software: Copyright 2013-2021 Signal Messenger, LLC
+ * Modified software: Copyright 2019-2023 Anton Alipov, sole trader
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 package su.sres.shadowserver.controllers;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.argThat;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
@@ -20,11 +19,12 @@ import static org.mockito.Mockito.when;
 import com.google.common.collect.ImmutableSet;
 
 import org.apache.commons.lang3.RandomStringUtils;
+import org.assertj.core.api.Condition;
 import org.glassfish.jersey.test.grizzly.GrizzlyWebTestContainerFactory;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import org.mockito.ArgumentMatcher;
 import org.signal.zkgroup.InvalidInputException;
 import org.signal.zkgroup.profiles.ProfileKey;
 import org.signal.zkgroup.profiles.ProfileKeyCommitment;
@@ -35,8 +35,11 @@ import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 
 import java.io.IOException;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
+import java.util.List;
 import java.util.Optional;
 
 import io.dropwizard.auth.PolymorphicAuthValueFactoryProvider;
@@ -52,8 +55,9 @@ import io.minio.errors.InvalidResponseException;
 import io.minio.errors.MinioException;
 import io.minio.errors.ServerException;
 import io.minio.errors.XmlParserException;
-import su.sres.shadowserver.auth.AmbiguousIdentifier;
-import su.sres.shadowserver.auth.DisabledPermittedAccount;
+import su.sres.shadowserver.auth.AuthenticatedAccount;
+import su.sres.shadowserver.auth.DisabledPermittedAuthenticatedAccount;
+import su.sres.shadowserver.entities.Badge;
 import su.sres.shadowserver.entities.CreateProfileRequest;
 import su.sres.shadowserver.entities.Profile;
 import su.sres.shadowserver.entities.ProfileAvatarUploadAttributes;
@@ -66,11 +70,12 @@ import su.sres.shadowserver.storage.AccountsManager;
 import su.sres.shadowserver.storage.ProfilesManager;
 import su.sres.shadowserver.storage.UsernamesManager;
 import su.sres.shadowserver.storage.VersionedProfile;
+import su.sres.shadowserver.util.AccountsHelper;
 import su.sres.shadowserver.util.AuthHelper;
 import su.sres.shadowserver.util.SystemMapper;
 
 @ExtendWith(DropwizardExtensionsSupport.class)
-public class ProfileControllerTest {
+class ProfileControllerTest {
 
   private static AccountsManager accountsManager = mock(AccountsManager.class);
   private static ProfilesManager profilesManager = mock(ProfilesManager.class);
@@ -87,14 +92,23 @@ public class ProfileControllerTest {
   private Account profileAccount;
 
   public static final ResourceExtension resources;
-  // static initializer for resources
+  
   static {
     try {
       resources = ResourceExtension.builder().addProvider(AuthHelper.getAuthFilter())
           .addProvider(new PolymorphicAuthValueFactoryProvider.Binder<>(
-              ImmutableSet.of(Account.class, DisabledPermittedAccount.class)))
+              ImmutableSet.of(AuthenticatedAccount.class, DisabledPermittedAuthenticatedAccount.class)))
           .setMapper(SystemMapper.getMapper()).setTestContainerFactory(new GrizzlyWebTestContainerFactory())
           .addResource(new ProfileController(rateLimiters, accountsManager, profilesManager, usernamesManager,
+              (acceptableLanguages, accountBadges) -> {
+                try {
+                  return List.of(
+                      new Badge("TEST1", "other", new URL("https://example.com/badge/1"), "Test Badge", "This badge is in unit tests.")
+                  );
+                } catch (MalformedURLException e) {
+                  throw new AssertionError(e);
+                }
+              },
               minioClient, postPolicyGenerator, policySigner, "profiles", zkProfileOperations,
               true))
           .build();
@@ -104,9 +118,11 @@ public class ProfileControllerTest {
   }
 
   @BeforeEach
-  public void setup() throws Exception {
+  void setup() {
 
     reset(minioClient);
+    
+    AccountsHelper.setupMockUpdate(accountsManager);
 
     when(rateLimiters.getProfileLimiter()).thenReturn(rateLimiter);
     when(rateLimiters.getUsernameLookupLimiter()).thenReturn(usernameRateLimiter);
@@ -122,6 +138,7 @@ public class ProfileControllerTest {
     when(profileAccount.isGv1MigrationSupported()).thenReturn(false);
     when(profileAccount.isSenderKeySupported()).thenReturn(false);
     when(profileAccount.isAnnouncementGroupSupported()).thenReturn(false);
+    when(profileAccount.isChangeUserLoginSupported()).thenReturn(false);
     when(profileAccount.getCurrentProfileVersion()).thenReturn(Optional.empty());
 
     Account capabilitiesAccount = mock(Account.class);
@@ -134,22 +151,15 @@ public class ProfileControllerTest {
     when(capabilitiesAccount.isGv1MigrationSupported()).thenReturn(true);
     when(capabilitiesAccount.isSenderKeySupported()).thenReturn(true);
     when(capabilitiesAccount.isAnnouncementGroupSupported()).thenReturn(true);
+    when(capabilitiesAccount.isChangeUserLoginSupported()).thenReturn(true);
 
     when(accountsManager.get(AuthHelper.VALID_NUMBER_TWO)).thenReturn(Optional.of(profileAccount));
     when(accountsManager.get(AuthHelper.VALID_UUID_TWO)).thenReturn(Optional.of(profileAccount));
     when(usernamesManager.get(AuthHelper.VALID_UUID_TWO)).thenReturn(Optional.of("n00bkiller"));
     when(usernamesManager.get("n00bkiller")).thenReturn(Optional.of(AuthHelper.VALID_UUID_TWO));
-    when(accountsManager.get(argThat((ArgumentMatcher<AmbiguousIdentifier>) identifier -> identifier != null
-        && identifier.hasUserLogin() && identifier.getUserLogin().equals(AuthHelper.VALID_NUMBER_TWO))))
-            .thenReturn(Optional.of(profileAccount));
-    when(accountsManager.get(argThat((ArgumentMatcher<AmbiguousIdentifier>) identifier -> identifier != null
-        && identifier.hasUuid() && identifier.getUuid().equals(AuthHelper.VALID_UUID_TWO))))
-            .thenReturn(Optional.of(profileAccount));
-
+    
     when(accountsManager.get(AuthHelper.VALID_NUMBER)).thenReturn(Optional.of(capabilitiesAccount));
-    when(accountsManager.get(argThat((ArgumentMatcher<AmbiguousIdentifier>) identifier -> identifier != null
-        && identifier.hasUserLogin() && identifier.getUserLogin().equals(AuthHelper.VALID_NUMBER))))
-            .thenReturn(Optional.of(capabilitiesAccount));
+    when(accountsManager.get(AuthHelper.VALID_UUID)).thenReturn(Optional.of(capabilitiesAccount));
 
     when(profilesManager.get(eq(AuthHelper.VALID_UUID), eq("someversion"))).thenReturn(Optional.empty());
     when(profilesManager.get(eq(AuthHelper.VALID_UUID_TWO), eq("validversion"))).thenReturn(Optional.of(new VersionedProfile(
@@ -161,104 +171,89 @@ public class ProfileControllerTest {
     clearInvocations(usernameRateLimiter);
     clearInvocations(profilesManager);
   }
+  
+  @AfterEach
+  void teardown() {
+    reset(accountsManager);
+  }
 
   @Test
-  public void testProfileGetByUuid() throws RateLimitExceededException {
+  void testProfileGetByUuid() throws RateLimitExceededException {
     Profile profile = resources.getJerseyTest().target("/v1/profile/" + AuthHelper.VALID_UUID_TWO).request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID, AuthHelper.VALID_PASSWORD))
         .get(Profile.class);
 
     assertThat(profile.getIdentityKey()).isEqualTo("bar");
     assertThat(profile.getName()).isEqualTo("baz");
     assertThat(profile.getAvatar()).isEqualTo("bang");
     assertThat(profile.getUsername()).isEqualTo("n00bkiller");
+    assertThat(profile.getBadges()).hasSize(1).element(0).has(new Condition<>(
+        badge -> "Test Badge".equals(badge.getName()), "has badge with expected name"));
 
-    verify(accountsManager, times(1))
-        .get(argThat((ArgumentMatcher<AmbiguousIdentifier>) identifier -> identifier != null
-            && identifier.hasUuid() && identifier.getUuid().equals(AuthHelper.VALID_UUID_TWO)));
+    verify(accountsManager).get(AuthHelper.VALID_UUID_TWO);
     verify(usernamesManager, times(1)).get(eq(AuthHelper.VALID_UUID_TWO));
-    verify(rateLimiter, times(1)).validate(eq(AuthHelper.VALID_NUMBER));
-  }
+    verify(rateLimiter, times(1)).validate(AuthHelper.VALID_UUID);
+  }  
 
   @Test
-  public void testProfileGetByNumber() throws RateLimitExceededException {
-    Profile profile = resources.getJerseyTest().target("/v1/profile/" + AuthHelper.VALID_NUMBER_TWO).request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
-        .get(Profile.class);
-
-    assertThat(profile.getIdentityKey()).isEqualTo("bar");
-    assertThat(profile.getName()).isEqualTo("baz");
-    assertThat(profile.getAvatar()).isEqualTo("bang");
-    assertThat(profile.getCapabilities().isGv2()).isFalse();
-    assertThat(profile.getCapabilities().isGv1Migration()).isFalse();
-    assertThat(profile.getUsername()).isNull();
-    assertThat(profile.getUuid()).isNull();
-
-    verify(accountsManager, times(1))
-        .get(argThat((ArgumentMatcher<AmbiguousIdentifier>) identifier -> identifier != null
-            && identifier.hasUserLogin() && identifier.getUserLogin().equals(AuthHelper.VALID_NUMBER_TWO)));
-    verifyNoMoreInteractions(usernamesManager);
-    verify(rateLimiter, times(1)).validate(eq(AuthHelper.VALID_NUMBER));
-  }
-
-  @Test
-  public void testProfileGetByUsername() throws RateLimitExceededException {
+  void testProfileGetByUsername() throws RateLimitExceededException {
     Profile profile = resources.getJerseyTest().target("/v1/profile/username/n00bkiller").request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID, AuthHelper.VALID_PASSWORD))
         .get(Profile.class);
 
     assertThat(profile.getIdentityKey()).isEqualTo("bar");
     assertThat(profile.getName()).isEqualTo("baz");
     assertThat(profile.getAvatar()).isEqualTo("bang");
-    assertThat(profile.getUsername()).isEqualTo("n00bkiller");
+    assertThat(profile.getUsername()).isEqualTo("n00bkiller");    
     assertThat(profile.getUuid()).isEqualTo(AuthHelper.VALID_UUID_TWO);
+    assertThat(profile.getBadges()).hasSize(1).element(0).has(new Condition<>(
+        badge -> "Test Badge".equals(badge.getName()), "has badge with expected name"));
 
     verify(accountsManager, times(1)).get(eq(AuthHelper.VALID_UUID_TWO));
     verify(usernamesManager, times(1)).get(eq("n00bkiller"));
-    verify(usernameRateLimiter, times(1)).validate(eq(AuthHelper.VALID_UUID.toString()));
+    verify(usernameRateLimiter, times(1)).validate(eq(AuthHelper.VALID_UUID));
   }
 
   @Test
-  public void testProfileGetUnauthorized() {
-    Response response = resources.getJerseyTest().target("/v1/profile/" + AuthHelper.VALID_NUMBER_TWO).request()
+  void testProfileGetUnauthorized() {
+    Response response = resources.getJerseyTest().target("/v1/profile/" + AuthHelper.VALID_UUID_TWO).request()
         .get();
 
     assertThat(response.getStatus()).isEqualTo(401);
   }
 
   @Test
-  public void testProfileGetByUsernameUnauthorized() {
+  void testProfileGetByUsernameUnauthorized() {
     Response response = resources.getJerseyTest().target("/v1/profile/username/n00bkiller").request().get();
 
     assertThat(response.getStatus()).isEqualTo(401);
   }
 
   @Test
-  public void testProfileGetByUsernameNotFound() throws RateLimitExceededException {
+  void testProfileGetByUsernameNotFound() throws RateLimitExceededException {
     Response response = resources.getJerseyTest().target("/v1/profile/username/n00bkillerzzzzz").request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID, AuthHelper.VALID_PASSWORD))
         .get();
 
     assertThat(response.getStatus()).isEqualTo(404);
 
     verify(usernamesManager, times(1)).get(eq("n00bkillerzzzzz"));
-    verify(usernameRateLimiter, times(1)).validate(eq(AuthHelper.VALID_UUID.toString()));
+    verify(usernameRateLimiter, times(1)).validate(eq(AuthHelper.VALID_UUID));
   }
 
   @Test
-  public void testProfileGetDisabled() {
-    Response response = resources.getJerseyTest().target("/v1/profile/" + AuthHelper.VALID_NUMBER_TWO).request()
-        .header("Authorization",
-            AuthHelper.getAuthHeader(AuthHelper.DISABLED_NUMBER, AuthHelper.DISABLED_PASSWORD))
+  void testProfileGetDisabled() {
+    Response response = resources.getJerseyTest().target("/v1/profile/" + AuthHelper.VALID_UUID_TWO).request()
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.DISABLED_UUID, AuthHelper.DISABLED_PASSWORD))
         .get();
 
     assertThat(response.getStatus()).isEqualTo(401);
   }
 
   @Test
-  public void testProfileCapabilities() {
-    Profile profile = resources.getJerseyTest().target("/v1/profile/" + AuthHelper.VALID_NUMBER).request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+  void testProfileCapabilities() {
+    Profile profile = resources.getJerseyTest().target("/v1/profile/" + AuthHelper.VALID_UUID).request()
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID, AuthHelper.VALID_PASSWORD))
         .get(Profile.class);
 
     assertThat(profile.getCapabilities().isGv2()).isEqualTo(true);
@@ -268,9 +263,9 @@ public class ProfileControllerTest {
 
     profile = resources
         .getJerseyTest()
-        .target("/v1/profile/" + AuthHelper.VALID_NUMBER_TWO)
+        .target("/v1/profile/" + AuthHelper.VALID_UUID_TWO)
         .request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER_TWO, AuthHelper.VALID_PASSWORD_TWO))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID_TWO, AuthHelper.VALID_PASSWORD_TWO))
         .get(Profile.class);
 
     assertThat(profile.getCapabilities().isGv2()).isFalse();
@@ -280,37 +275,37 @@ public class ProfileControllerTest {
   }
 
   @Test
-  public void testSetProfileNameDeprecated() {
+  void testSetProfileNameDeprecated() {
     Response response = resources.getJerseyTest()
         .target("/v1/profile/name/123456789012345678901234567890123456789012345678901234567890123456789012")
         .request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID, AuthHelper.VALID_PASSWORD))
         .put(Entity.text(""));
 
     assertThat(response.getStatus()).isEqualTo(204);
 
-    verify(accountsManager, times(1)).update(any(Account.class));
+    verify(accountsManager, times(1)).update(any(Account.class), any());
   }
 
   @Test
-  public void testSetProfileNameExtendedDeprecated() {
+  void testSetProfileNameExtendedDeprecated() {
     Response response = resources.getJerseyTest().target(
         "/v1/profile/name/123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678")
         .request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID, AuthHelper.VALID_PASSWORD))
         .put(Entity.text(""));
 
     assertThat(response.getStatus()).isEqualTo(204);
 
-    verify(accountsManager, times(1)).update(any(Account.class));
+    verify(accountsManager, times(1)).update(any(Account.class), any());
   }
 
   @Test
-  public void testSetProfileNameWrongSizeDeprecated() {
+  void testSetProfileNameWrongSizeDeprecated() {
     Response response = resources.getJerseyTest().target(
         "/v1/profile/name/1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890")
         .request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID, AuthHelper.VALID_PASSWORD))
         .put(Entity.text(""));
 
     assertThat(response.getStatus()).isEqualTo(400);
@@ -320,11 +315,11 @@ public class ProfileControllerTest {
 /////
 
   @Test
-  public void testSetProfileWantAvatarUpload() throws InvalidInputException {
+  void testSetProfileWantAvatarUpload() throws InvalidInputException {
     ProfileKeyCommitment commitment = new ProfileKey(new byte[32]).getCommitment(AuthHelper.VALID_UUID);
 
     ProfileAvatarUploadAttributes uploadAttributes = resources.getJerseyTest().target("/v1/profile/").request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID, AuthHelper.VALID_PASSWORD))
         .put(Entity.entity(new CreateProfileRequest(commitment, "someversion", "123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678", null, null,
             null, true), MediaType.APPLICATION_JSON_TYPE), ProfileAvatarUploadAttributes.class);
 
@@ -345,11 +340,11 @@ public class ProfileControllerTest {
   }
 
   @Test
-  public void testSetProfileWantAvatarUploadWithBadProfileSize() throws InvalidInputException {
+  void testSetProfileWantAvatarUploadWithBadProfileSize() throws InvalidInputException {
     ProfileKeyCommitment commitment = new ProfileKey(new byte[32]).getCommitment(AuthHelper.VALID_UUID);
 
     Response response = resources.getJerseyTest().target("/v1/profile/").request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID, AuthHelper.VALID_PASSWORD))
         .put(Entity.entity(new CreateProfileRequest(commitment, "someversion", "1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890", null, null,
             null, true), MediaType.APPLICATION_JSON_TYPE));
 
@@ -357,14 +352,13 @@ public class ProfileControllerTest {
   }
 
   @Test
-  public void testSetProfileWithoutAvatarUpload() throws InvalidInputException {
+  void testSetProfileWithoutAvatarUpload() throws InvalidInputException {
     ProfileKeyCommitment commitment = new ProfileKey(new byte[32]).getCommitment(AuthHelper.VALID_UUID);
 
     clearInvocations(AuthHelper.VALID_ACCOUNT_TWO);
 
     Response response = resources.getJerseyTest().target("/v1/profile/").request()
-        .header("Authorization",
-            AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER_TWO, AuthHelper.VALID_PASSWORD_TWO))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID_TWO, AuthHelper.VALID_PASSWORD_TWO))
         .put(Entity.entity(new CreateProfileRequest(commitment, "anotherversion", "123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678", null, null,
             null, false), MediaType.APPLICATION_JSON_TYPE));
 
@@ -391,13 +385,12 @@ public class ProfileControllerTest {
   }
 
   @Test
-  public void testSetProfileWithAvatarUploadAndPreviousAvatar()
+  void testSetProfileWithAvatarUploadAndPreviousAvatar()
       throws InvalidInputException, MinioException, InvalidKeyException, IOException, NoSuchAlgorithmException {
     ProfileKeyCommitment commitment = new ProfileKey(new byte[32]).getCommitment(AuthHelper.VALID_UUID_TWO);
 
     ProfileAvatarUploadAttributes uploadAttributes = resources.getJerseyTest().target("/v1/profile/").request()
-        .header("Authorization",
-            AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER_TWO, AuthHelper.VALID_PASSWORD_TWO))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID_TWO, AuthHelper.VALID_PASSWORD_TWO))
         .put(Entity.entity(new CreateProfileRequest(commitment, "validversion", "123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678", null, null,
             null, true), MediaType.APPLICATION_JSON_TYPE), ProfileAvatarUploadAttributes.class);
 
@@ -420,7 +413,7 @@ public class ProfileControllerTest {
   }
 
   @Test
-  public void testSetProfileExtendedName() throws InvalidInputException, InvalidKeyException, ErrorResponseException, IllegalArgumentException, InsufficientDataException, InternalException, InvalidResponseException, NoSuchAlgorithmException, ServerException, XmlParserException, IOException {
+  void testSetProfileExtendedName() throws InvalidInputException, InvalidKeyException, ErrorResponseException, IllegalArgumentException, InsufficientDataException, InternalException, InvalidResponseException, NoSuchAlgorithmException, ServerException, XmlParserException, IOException {
     ProfileKeyCommitment commitment = new ProfileKey(new byte[32]).getCommitment(AuthHelper.VALID_UUID_TWO);
 
     final String name = RandomStringUtils.randomAlphabetic(380);
@@ -428,7 +421,7 @@ public class ProfileControllerTest {
     resources.getJerseyTest()
         .target("/v1/profile/")
         .request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER_TWO, AuthHelper.VALID_PASSWORD_TWO))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID_TWO, AuthHelper.VALID_PASSWORD_TWO))
         .put(Entity.entity(new CreateProfileRequest(commitment, "validversion", name, null, null, null, true), MediaType.APPLICATION_JSON_TYPE), ProfileAvatarUploadAttributes.class);
 
     ArgumentCaptor<VersionedProfile> profileArgumentCaptor = ArgumentCaptor.forClass(VersionedProfile.class);
@@ -448,7 +441,7 @@ public class ProfileControllerTest {
   }
 
   @Test
-  public void testSetProfileEmojiAndBioText() throws InvalidInputException {
+  void testSetProfileEmojiAndBioText() throws InvalidInputException {
     ProfileKeyCommitment commitment = new ProfileKey(new byte[32]).getCommitment(AuthHelper.VALID_UUID);
 
     clearInvocations(AuthHelper.VALID_ACCOUNT_TWO);
@@ -460,7 +453,7 @@ public class ProfileControllerTest {
     Response response = resources.getJerseyTest()
         .target("/v1/profile/")
         .request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER_TWO, AuthHelper.VALID_PASSWORD_TWO))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID_TWO, AuthHelper.VALID_PASSWORD_TWO))
         .put(Entity.entity(new CreateProfileRequest(commitment, "anotherversion", name, emoji, text, null, false), MediaType.APPLICATION_JSON_TYPE));
 
     assertThat(response.getStatus()).isEqualTo(200);
@@ -487,7 +480,7 @@ public class ProfileControllerTest {
   }
 
   @Test
-  public void testSetProfilePaymentAddress() throws InvalidInputException {
+  void testSetProfilePaymentAddress() throws InvalidInputException {
     ProfileKeyCommitment commitment = new ProfileKey(new byte[32]).getCommitment(AuthHelper.VALID_UUID);
 
     clearInvocations(AuthHelper.VALID_ACCOUNT_TWO);
@@ -498,7 +491,7 @@ public class ProfileControllerTest {
     Response response = resources.getJerseyTest()
         .target("/v1/profile")
         .request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER_TWO, AuthHelper.VALID_PASSWORD_TWO))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID_TWO, AuthHelper.VALID_PASSWORD_TWO))
         .put(Entity.entity(new CreateProfileRequest(commitment, "yetanotherversion", name, null, null, paymentAddress, false), MediaType.APPLICATION_JSON_TYPE));
 
     assertThat(response.getStatus()).isEqualTo(200);
@@ -525,10 +518,10 @@ public class ProfileControllerTest {
   }
 
   @Test
-  public void testGetProfileByVersion() throws RateLimitExceededException {
+  void testGetProfileByVersion() throws RateLimitExceededException {
     Profile profile = resources.getJerseyTest().target("/v1/profile/" + AuthHelper.VALID_UUID_TWO + "/validversion")
         .request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID, AuthHelper.VALID_PASSWORD))
         .get(Profile.class);
 
     assertThat(profile.getIdentityKey()).isEqualTo("bar");
@@ -545,11 +538,11 @@ public class ProfileControllerTest {
     verify(usernamesManager, times(1)).get(eq(AuthHelper.VALID_UUID_TWO));
     verify(profilesManager, times(1)).get(eq(AuthHelper.VALID_UUID_TWO), eq("validversion"));
 
-    verify(rateLimiter, times(1)).validate(eq(AuthHelper.VALID_NUMBER));
+    verify(rateLimiter, times(1)).validate(AuthHelper.VALID_UUID);
   }
 
   @Test
-  public void testSetProfileUpdatesAccountCurrentVersion() throws InvalidInputException {
+  void testSetProfileUpdatesAccountCurrentVersion() throws InvalidInputException {
     ProfileKeyCommitment commitment = new ProfileKey(new byte[32]).getCommitment(AuthHelper.VALID_UUID_TWO);
 
     clearInvocations(AuthHelper.VALID_ACCOUNT_TWO);
@@ -560,7 +553,7 @@ public class ProfileControllerTest {
     Response response = resources.getJerseyTest()
         .target("/v1/profile")
         .request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER_TWO, AuthHelper.VALID_PASSWORD_TWO))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID_TWO, AuthHelper.VALID_PASSWORD_TWO))
         .put(Entity.entity(new CreateProfileRequest(commitment, "someversion", name, null, null, paymentAddress, false), MediaType.APPLICATION_JSON_TYPE));
 
     assertThat(response.getStatus()).isEqualTo(200);
@@ -570,13 +563,13 @@ public class ProfileControllerTest {
   }
 
   @Test
-  public void testGetProfileReturnsNoPaymentAddressIfCurrentVersionMismatch() {
+  void testGetProfileReturnsNoPaymentAddressIfCurrentVersionMismatch() {
     when(profilesManager.get(AuthHelper.VALID_UUID_TWO, "validversion")).thenReturn(
         Optional.of(new VersionedProfile(null, null, null, null, null, "paymentaddress", null)));
     Profile profile = resources.getJerseyTest()
         .target("/v1/profile/" + AuthHelper.VALID_UUID_TWO + "/validversion")
         .request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID, AuthHelper.VALID_PASSWORD))
         .get(Profile.class);
     assertThat(profile.getPaymentAddress()).isEqualTo("paymentaddress");
 
@@ -584,7 +577,7 @@ public class ProfileControllerTest {
     profile = resources.getJerseyTest()
         .target("/v1/profile/" + AuthHelper.VALID_UUID_TWO + "/validversion")
         .request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID, AuthHelper.VALID_PASSWORD))
         .get(Profile.class);
     assertThat(profile.getPaymentAddress()).isEqualTo("paymentaddress");
 
@@ -592,8 +585,11 @@ public class ProfileControllerTest {
     profile = resources.getJerseyTest()
         .target("/v1/profile/" + AuthHelper.VALID_UUID_TWO + "/validversion")
         .request()
-        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_NUMBER, AuthHelper.VALID_PASSWORD))
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID, AuthHelper.VALID_PASSWORD))
         .get(Profile.class);
     assertThat(profile.getPaymentAddress()).isNull();
+    assertThat(profile.getBadges()).hasSize(1).element(0).has(new Condition<>(
+        badge -> "Test Badge".equals(badge.getName()), "has badge with expected name"));
+
   }
 }

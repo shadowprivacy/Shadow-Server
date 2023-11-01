@@ -19,6 +19,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import io.dropwizard.auth.Auth;
 import io.dropwizard.jersey.protobuf.ProtocolBufferMediaType;
+import su.sres.shadowserver.auth.AuthenticatedAccount;
 import su.sres.shadowserver.limits.RateLimiters;
 import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.storage.AccountsManager;
@@ -53,8 +54,8 @@ public class PlainDirectoryController {
   @GET
   @Path("/download/{version}")
   @Produces(ProtocolBufferMediaType.APPLICATION_PROTOBUF)
-  public DirectoryResponse downloadDirectory(@PathParam("version") String receivedVersion, @Auth Account account) throws RateLimitExceededException {
-    rateLimiters.getDirectoryLimiter().validate(account.getUserLogin());
+  public DirectoryResponse downloadDirectory(@PathParam("version") String receivedVersion, @Auth AuthenticatedAccount auth) throws RateLimitExceededException {
+    rateLimiters.getDirectoryLimiter().validate(auth.getAccount().getUuid());
 
     long remoteVersion = Long.parseLong(receivedVersion);
     long localVersion = accountsManager.getDirectoryVersion();
@@ -121,8 +122,8 @@ public class PlainDirectoryController {
   @GET
   @Path("/download/forcefull")
   @Produces(ProtocolBufferMediaType.APPLICATION_PROTOBUF)
-  public DirectoryResponse downloadFullDirectory(@Auth Account account) throws RateLimitExceededException {
-    rateLimiters.getDirectoryLimiter().validate(account.getUserLogin());
+  public DirectoryResponse downloadFullDirectory(@Auth AuthenticatedAccount auth) throws RateLimitExceededException {
+    rateLimiters.getDirectoryLimiter().validate(auth.getAccount().getUuid());
 
     long localVersion = accountsManager.getDirectoryVersion();
 

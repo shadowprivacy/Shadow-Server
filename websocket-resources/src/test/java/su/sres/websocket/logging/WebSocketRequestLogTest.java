@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2020 Signal Messenger, LLC
+ * Copyright 2013-2021 Signal Messenger, LLC
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 package su.sres.websocket.logging;
@@ -7,7 +7,10 @@ package su.sres.websocket.logging;
 import org.glassfish.jersey.internal.MapPropertiesDelegate;
 import org.glassfish.jersey.server.ContainerRequest;
 import org.glassfish.jersey.server.ContainerResponse;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
 import su.sres.websocket.WebSocketSecurityContext;
 import su.sres.websocket.session.ContextPrincipal;
 import su.sres.websocket.session.WebSocketSessionContext;
@@ -18,6 +21,7 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 
 import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.core.OutputStreamAppender;
@@ -28,8 +32,20 @@ import static org.mockito.Mockito.mock;
 
 public class WebSocketRequestLogTest {
   
-  @Test
-  public void testLogLineWithoutHeaders() throws InterruptedException {
+  private final static Locale ORIGINAL_DEFAULT_LOCALE = Locale.getDefault();
+
+  @BeforeEach
+  void beforeEachTest() {
+    Locale.setDefault(Locale.ENGLISH);
+  }
+
+  @AfterEach
+  void afterEachTest() {
+    Locale.setDefault(ORIGINAL_DEFAULT_LOCALE);
+  }    
+  
+  @Test  
+  void testLogLineWithoutHeaders() throws InterruptedException {
     WebSocketSessionContext sessionContext = mock(WebSocketSessionContext.class);
 
     ListAppender<WebsocketEvent>  listAppender         = new ListAppender<>();
@@ -47,10 +63,10 @@ public class WebSocketRequestLogTest {
 
     String loggedLine = new String(listAppender.outputStream.toByteArray());    
     assertThat(loggedLine).matches("123\\.456\\.789\\.123 \\- \\- \\[[0-9]{2}\\/[a-zA-Z]{3}\\/[0-9]{4}:[0-9]{2}:[0-9]{2}:[0-9]{2} (\\-|\\+)[0-9]{4}\\] \"GET \\/v1\\/test WS\" 200 \\- \"\\-\" \"\\-\"\n");
-  }
+  }  
   
-  @Test
-  public void testLogLineWithHeaders() throws InterruptedException {
+  @Test  
+  void testLogLineWithHeaders() throws InterruptedException {
     WebSocketSessionContext sessionContext = mock(WebSocketSessionContext.class);
 
     ListAppender<WebsocketEvent>  listAppender         = new ListAppender<>();
@@ -105,7 +121,8 @@ public class WebSocketRequestLogTest {
     }
 
     @Override
-    public void start() {
+    public
+    void start() {
       setOutputStream(outputStream);
       super.start();
     }

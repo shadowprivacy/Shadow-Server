@@ -10,6 +10,19 @@
   <modelVersion>4.0.0</modelVersion>
 
   <artifactId>service</artifactId>
+  
+  <pluginRepositories>
+    <pluginRepository>
+      <id>ossrh-snapshots</id>
+      <url>https://oss.sonatype.org/content/repositories/snapshots</url>
+      <releases>
+        <enabled>false</enabled>
+      </releases>
+      <snapshots>
+        <enabled>true</enabled>
+      </snapshots>
+    </pluginRepository>
+  </pluginRepositories>
 
   <dependencies>
     <dependency>
@@ -219,12 +232,7 @@
     <dependency>
       <groupId>io.micrometer</groupId>
       <artifactId>micrometer-core</artifactId>
-    </dependency>
-
-    <dependency>
-      <groupId>io.micrometer</groupId>
-      <artifactId>micrometer-registry-wavefront</artifactId>
-    </dependency>
+    </dependency>    
 
     <dependency>
       <groupId>io.micrometer</groupId>
@@ -259,7 +267,7 @@
     <dependency>
       <groupId>com.fasterxml.jackson.jaxrs</groupId>
       <artifactId>jackson-jaxrs-json-provider</artifactId>
-    </dependency>
+    </dependency>    
 
     <dependency>
       <groupId>software.amazon.awssdk</groupId>
@@ -279,6 +287,18 @@
     <dependency>
       <groupId>com.amazonaws</groupId>
       <artifactId>aws-java-sdk-s3</artifactId>
+    </dependency>
+    
+    <dependency>
+      <groupId>com.amazonaws</groupId>
+      <artifactId>dynamodb-lock-client</artifactId>
+      <version>1.1.0</version>
+      <exclusions>
+        <exclusion>
+          <groupId>commons-logging</groupId>
+          <artifactId>commons-logging</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
 
     <dependency>
@@ -421,6 +441,11 @@
           <artifactId>antlr4-runtime</artifactId>
         </exclusion>
       </exclusions>
+    </dependency>
+    
+    <dependency>
+      <groupId>com.google.cloud</groupId>
+      <artifactId>google-cloud-recaptchaenterprise</artifactId>      
     </dependency>
 
     <dependency>
@@ -566,12 +591,13 @@
       </plugin>
 
       <plugin>
-        <groupId>com.bazaarvoice.maven.plugins</groupId>
+        <groupId>org.signal</groupId>
         <artifactId>s3-upload-maven-plugin</artifactId>
-        <version>1.5</version>
+        <version>1.6-SNAPSHOT</version>
         <configuration>
           <source>${project.build.directory}/${project.build.finalName}-bin.tar.gz</source>
           <bucketName>${deploy.bucketName}</bucketName>
+          <region>${deploy.bucketRegion}</region>
           <destination>${project.build.finalName}-bin.tar.gz</destination>
         </configuration>
         <executions>

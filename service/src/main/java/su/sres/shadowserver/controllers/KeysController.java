@@ -1,6 +1,6 @@
 /*
- * Original software: Copyright 2013-2020 Signal Messenger, LLC
- * Modified software: Copyright 2019-2022 Anton Alipov, sole trader
+ * Original software: Copyright 2013-2021 Signal Messenger, LLC
+ * Modified software: Copyright 2019-2023 Anton Alipov, sole trader
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 package su.sres.shadowserver.controllers;
@@ -9,9 +9,9 @@ import static com.codahale.metrics.MetricRegistry.name;
 
 import com.codahale.metrics.annotation.Timed;
 
-import su.sres.shadowserver.auth.AmbiguousIdentifier;
 import su.sres.shadowserver.auth.Anonymous;
-import su.sres.shadowserver.auth.DisabledPermittedAccount;
+import su.sres.shadowserver.auth.AuthenticatedAccount;
+import su.sres.shadowserver.auth.DisabledPermittedAuthenticatedAccount;
 import su.sres.shadowserver.auth.OptionalAccess;
 
 import javax.validation.Valid;
@@ -32,6 +32,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 import io.dropwizard.auth.Auth;
 import io.micrometer.core.instrument.Metrics;
@@ -44,9 +45,6 @@ import su.sres.shadowserver.entities.SignedPreKey;
 import su.sres.shadowserver.limits.PreKeyRateLimiter;
 import su.sres.shadowserver.limits.RateLimitChallengeException;
 import su.sres.shadowserver.limits.RateLimitChallengeManager;
-// excluded federation, reserved for future use
-// import su.sres.shadowserver.federation.FederatedClientManager;
-// import su.sres.shadowserver.federation.NoSuchPeerException;
 import su.sres.shadowserver.limits.RateLimiters;
 import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.storage.AccountsManager;
@@ -60,39 +58,27 @@ public class KeysController {
   private final RateLimiters rateLimiters;
   private final KeysScyllaDb keysScyllaDb;
   private final AccountsManager accounts;
-  
+
   private final PreKeyRateLimiter preKeyRateLimiter;
 
   private final RateLimitChallengeManager rateLimitChallengeManager;
-  
-  private static final String RATE_LIMITED_GET_PREKEYS_COUNTER_NAME = name(KeysController.class, "rateLimitedGetPreKeys");
-      
-  // excluded federation, reserved for future use
-  // private final FederatedClientManager federatedClientManager;
 
-  /*
-   * excluded federation, reserved for future use
-   * 
-   * 
-   * public KeysController(RateLimiters rateLimiters, Keys keys, AccountsManager
-   * accounts, FederatedClientManager federatedClientManager) { this.rateLimiters
-   * = rateLimiters; this.keys = keys; this.accounts = accounts;
-   * this.federatedClientManager = federatedClientManager; }
-   */
-  public KeysController(RateLimiters rateLimiters, KeysScyllaDb keysScyllaDb, AccountsManager accounts, PreKeyRateLimiter preKeyRateLimiter,      
+  private static final String RATE_LIMITED_GET_PREKEYS_COUNTER_NAME = name(KeysController.class, "rateLimitedGetPreKeys");
+
+  public KeysController(RateLimiters rateLimiters, KeysScyllaDb keysScyllaDb, AccountsManager accounts, PreKeyRateLimiter preKeyRateLimiter,
       RateLimitChallengeManager rateLimitChallengeManager) {
     this.rateLimiters = rateLimiters;
     this.keysScyllaDb = keysScyllaDb;
     this.accounts = accounts;
     this.preKeyRateLimiter = preKeyRateLimiter;
-    
+
     this.rateLimitChallengeManager = rateLimitChallengeManager;
   }
 
   @GET
   @Produces(MediaType.APPLICATION_JSON)
-  public PreKeyCount getStatus(@Auth Account account) {
-    int count = keysScyllaDb.getCount(account, account.getAuthenticatedDevice().get().getId());
+  public PreKeyCount getStatus(@Auth AuthenticatedAccount auth) {
+    int count = keysScyllaDb.getCount(auth.getAccount(), auth.getAuthenticatedDevice().getId());
 
     if (count > 0) {
       count = count - 1;
@@ -104,109 +90,71 @@ public class KeysController {
   @Timed
   @PUT
   @Consumes(MediaType.APPLICATION_JSON)
-  public void setKeys(@Auth DisabledPermittedAccount disabledPermittedAccount, @Valid PreKeyState preKeys) {
-
-    Account account = disabledPermittedAccount.getAccount();
-    Device device = account.getAuthenticatedDevice().get();
+  public void setKeys(@Auth DisabledPermittedAuthenticatedAccount disabledPermittedAuth, @Valid PreKeyState preKeys) {
+    Account account = disabledPermittedAuth.getAccount();
+    Device device = disabledPermittedAuth.getAuthenticatedDevice();
     boolean updateAccount = false;
 
     if (!preKeys.getSignedPreKey().equals(device.getSignedPreKey())) {
-
-      device.setSignedPreKey(preKeys.getSignedPreKey());
       updateAccount = true;
     }
 
     if (!preKeys.getIdentityKey().equals(account.getIdentityKey())) {
-
-      account.setIdentityKey(preKeys.getIdentityKey());
       updateAccount = true;
     }
 
     if (updateAccount) {
-      accounts.update(account);
+      account = accounts.update(account, a -> {
+        a.getDevice(device.getId()).ifPresent(d -> d.setSignedPreKey(preKeys.getSignedPreKey()));
+        a.setIdentityKey(preKeys.getIdentityKey());
+      });
     }
 
     keysScyllaDb.store(account, device.getId(), preKeys.getPreKeys());
   }
 
-  /*
-   * excluded federation, reserved for future use
-   * 
-   * 
-   * public Optional<PreKeyResponse> getDeviceKeys(@Auth Account account,
-   * 
-   * @PathParam("number") String number,
-   * 
-   * @PathParam("device_id") String deviceId,
-   * 
-   * @QueryParam("relay") Optional<String> relay) throws
-   * RateLimitExceededException { try { if (relay.isPresent()) { return
-   * federatedClientManager.getClient(relay.get()).getKeysV2(number, deviceId); }
-   * 
-   * Account target = getAccount(number, deviceId);
-   * 
-   * if (account.isRateLimited()) {
-   * rateLimiters.getPreKeysLimiter().validate(account.getNumber() + "__" + number
-   * + "." + deviceId); }
-   * 
-   * Optional<List<KeyRecord>> targetKeys = getLocalKeys(target, deviceId);
-   * List<PreKeyResponseItem> devices = new LinkedList<>();
-   * 
-   * for (Device device : target.getDevices()) { if (device.isActive() &&
-   * (deviceId.equals("*") || device.getId() == Long.parseLong(deviceId))) {
-   * SignedPreKey signedPreKey = device.getSignedPreKey(); PreKey preKey = null;
-   * 
-   * if (targetKeys.isPresent()) { for (KeyRecord keyRecord : targetKeys.get()) {
-   * if (!keyRecord.isLastResort() && keyRecord.getDeviceId() == device.getId()) {
-   * preKey = new PreKey(keyRecord.getKeyId(), keyRecord.getPublicKey()); } } }
-   * 
-   * if (signedPreKey != null || preKey != null) { devices.add(new
-   * PreKeyResponseItem(device.getId(), device.getRegistrationId(), signedPreKey,
-   * preKey)); } } }
-   * 
-   * if (devices.isEmpty()) return Optional.absent(); else return Optional.of(new
-   * PreKeyResponse(target.getIdentityKey(), devices)); } catch
-   * (NoSuchPeerException | NoSuchUserException e) { throw new
-   * WebApplicationException(Response.status(404).build()); } }
-   * 
-   */
-
   @Timed
   @GET
   @Path("/{identifier}/{device_id}")
   @Produces(MediaType.APPLICATION_JSON)
-  public Response getDeviceKeys(@Auth Optional<Account> account,
+  public Response getDeviceKeys(@Auth Optional<AuthenticatedAccount> auth,
       @HeaderParam(OptionalAccess.UNIDENTIFIED) Optional<Anonymous> accessKey,
-      @PathParam("identifier") AmbiguousIdentifier targetName, @PathParam("device_id") String deviceId, @HeaderParam("User-Agent")                String userAgent)
-          throws RateLimitExceededException, RateLimitChallengeException {      
-    if (!account.isPresent() && !accessKey.isPresent()) {
+      @PathParam("identifier") UUID targetUuid, @PathParam("device_id") String deviceId, @HeaderParam("User-Agent") String userAgent)
+      throws RateLimitExceededException, RateLimitChallengeException, ServerRejectedException {
+
+    if (!auth.isPresent() && !accessKey.isPresent()) {
       throw new WebApplicationException(Response.Status.UNAUTHORIZED);
     }
 
-    Optional<Account> target = accounts.get(targetName);
+    final Optional<Account> account = auth.map(AuthenticatedAccount::getAccount);
+
+    Optional<Account> target = accounts.get(targetUuid);
     OptionalAccess.verify(account, accessKey, target, deviceId);
 
     assert (target.isPresent());
-    
+
     if (account.isPresent()) {
-      rateLimiters.getPreKeysLimiter().validate(account.get().getUserLogin() + "." + account.get().getAuthenticatedDevice().get().getId() +  "__" + target.get().getUserLogin() + "." + deviceId);
+      rateLimiters.getPreKeysLimiter().validate(
+          account.get().getUuid() + "." + auth.get().getAuthenticatedDevice().getId() + "__" + target.get().getUuid()
+              + "." + deviceId);
 
       try {
         preKeyRateLimiter.validate(account.get());
       } catch (RateLimitExceededException e) {
 
-        final boolean enforceLimit = rateLimitChallengeManager.shouldIssueRateLimitChallenge(userAgent);
+        final boolean legacyClient = rateLimitChallengeManager.isClientBelowMinimumVersion(userAgent);
 
-        Metrics.counter(RATE_LIMITED_GET_PREKEYS_COUNTER_NAME,            
-            "enforced", String.valueOf(enforceLimit))
+        Metrics.counter(RATE_LIMITED_GET_PREKEYS_COUNTER_NAME,
+            "legacyClient", String.valueOf(legacyClient))
             .increment();
 
-        if (enforceLimit) {
-          throw new RateLimitChallengeException(account.get(), e.getRetryDuration());
+        if (legacyClient) {
+          throw new ServerRejectedException();
         }
+        throw new RateLimitChallengeException(account.get(), e.getRetryDuration());
       }
     }
-    
+
     Map<Long, PreKey> preKeysByDeviceId = getLocalKeys(target.get(), deviceId);
     List<PreKeyResponseItem> responseItems = new LinkedList<>();
 
@@ -221,27 +169,28 @@ public class KeysController {
       }
     }
 
-    if (responseItems.isEmpty()) return Response.status(404).build();
-    else                         return Response.ok().entity(new PreKeyResponse(target.get().getIdentityKey(), responseItems)).build();
+    if (responseItems.isEmpty())
+      return Response.status(404).build();
+    else
+      return Response.ok().entity(new PreKeyResponse(target.get().getIdentityKey(), responseItems)).build();
   }
 
   @Timed
   @PUT
   @Path("/signed")
   @Consumes(MediaType.APPLICATION_JSON)
-  public void setSignedKey(@Auth Account account, @Valid SignedPreKey signedPreKey) {
-    Device device = account.getAuthenticatedDevice().get();
+  public void setSignedKey(@Auth AuthenticatedAccount auth, @Valid SignedPreKey signedPreKey) {
+    Device device = auth.getAuthenticatedDevice();
 
-    device.setSignedPreKey(signedPreKey);
-    accounts.update(account);
+    accounts.updateDevice(auth.getAccount(), device.getId(), d -> d.setSignedPreKey(signedPreKey));
   }
 
   @Timed
   @GET
   @Path("/signed")
   @Produces(MediaType.APPLICATION_JSON)
-  public Optional<SignedPreKey> getSignedKey(@Auth Account account) {
-    Device device = account.getAuthenticatedDevice().get();
+  public Optional<SignedPreKey> getSignedKey(@Auth AuthenticatedAccount auth) {
+    Device device = auth.getAuthenticatedDevice();
     SignedPreKey signedPreKey = device.getSignedPreKey();
 
     if (signedPreKey != null)

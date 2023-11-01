@@ -1,17 +1,17 @@
 /*
- * Original software: Copyright 2013-2020 Signal Messenger, LLC
- * Modified software: Copyright 2019-2022 Anton Alipov, sole trader
+ * Original software: Copyright 2013-2021 Signal Messenger, LLC
+ * Modified software: Copyright 2019-2023 Anton Alipov, sole trader
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 package su.sres.shadowserver.controllers;
 
 import com.codahale.metrics.annotation.Timed;
 import io.dropwizard.auth.Auth;
+import su.sres.shadowserver.auth.AuthenticatedAccount;
 import su.sres.shadowserver.auth.ExternalServiceCredentialGenerator;
 import su.sres.shadowserver.auth.ExternalServiceCredentials;
 import su.sres.shadowserver.currency.CurrencyConversionManager;
 import su.sres.shadowserver.entities.CurrencyConversionEntityList;
-import su.sres.shadowserver.storage.Account;
 
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
@@ -33,15 +33,15 @@ public class PaymentsController {
   @GET
   @Path("/auth")
   @Produces(MediaType.APPLICATION_JSON)
-  public ExternalServiceCredentials getAuth(@Auth Account account) {
-    return paymentsServiceCredentialGenerator.generateFor(account.getUuid().toString());
+  public ExternalServiceCredentials getAuth(@Auth AuthenticatedAccount auth) {
+    return paymentsServiceCredentialGenerator.generateFor(auth.getAccount().getUuid().toString());
   }
 
   @Timed
   @GET
   @Path("/conversions")
   @Produces(MediaType.APPLICATION_JSON)
-  public CurrencyConversionEntityList getConversions(@Auth Account account) {
+  public CurrencyConversionEntityList getConversions(@Auth AuthenticatedAccount auth) {
     return currencyManager.getCurrencyConversions().orElseThrow();
   }
 }

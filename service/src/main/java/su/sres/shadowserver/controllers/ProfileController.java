@@ -1,6 +1,6 @@
 /*
- * Original software: Copyright 2013-2020 Signal Messenger, LLC
- * Modified software: Copyright 2019-2022 Anton Alipov, sole trader
+ * Original software: Copyright 2013-2021 Signal Messenger, LLC
+ * Modified software: Copyright 2019-2023 Anton Alipov, sole trader
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 package su.sres.shadowserver.controllers;
@@ -19,9 +19,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import su.sres.shadowserver.auth.OptionalAccess;
-import su.sres.shadowserver.auth.AmbiguousIdentifier;
 import su.sres.shadowserver.auth.Anonymous;
+import su.sres.shadowserver.auth.AuthenticatedAccount;
 import su.sres.shadowserver.auth.UnidentifiedAccessChecksum;
+import su.sres.shadowserver.badges.ProfileBadgeConverter;
 
 import javax.validation.Valid;
 import javax.validation.valueextraction.Unwrapping;
@@ -31,9 +32,12 @@ import javax.ws.rs.HeaderParam;
 import javax.ws.rs.PUT;
 import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
+import javax.ws.rs.ProcessingException;
 import javax.ws.rs.Produces;
 import javax.ws.rs.QueryParam;
 import javax.ws.rs.WebApplicationException;
+import javax.ws.rs.container.ContainerRequestContext;
+import javax.ws.rs.core.Context;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 
@@ -43,6 +47,9 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -76,6 +83,7 @@ public class ProfileController {
   private final ProfilesManager profilesManager;
   private final AccountsManager accountsManager;
   private final UsernamesManager usernamesManager;
+  private final ProfileBadgeConverter profileBadgeConverter;
 
   private final PolicySigner policySigner;
   private final PostPolicyGenerator policyGenerator;
@@ -89,6 +97,7 @@ public class ProfileController {
       AccountsManager accountsManager,
       ProfilesManager profilesManager,
       UsernamesManager usernamesManager,
+      ProfileBadgeConverter profileBadgeConverter,
       MinioClient minioClient,
       PostPolicyGenerator policyGenerator,
       PolicySigner policySigner,
@@ -100,6 +109,7 @@ public class ProfileController {
     this.accountsManager = accountsManager;
     this.profilesManager = profilesManager;
     this.usernamesManager = usernamesManager;
+    this.profileBadgeConverter = profileBadgeConverter;
     this.zkProfileOperations = zkProfileOperations;
 //		this.bucket = profilesConfiguration.getBucket();
     this.bucket = bucket;
@@ -115,16 +125,16 @@ public class ProfileController {
   @PUT
   @Produces(MediaType.APPLICATION_JSON)
   @Consumes(MediaType.APPLICATION_JSON)
-  public Response setProfile(@Auth Account account, @Valid CreateProfileRequest request) {
+  public Response setProfile(@Auth AuthenticatedAccount auth, @Valid CreateProfileRequest request) {
 
     if (!isZkEnabled)
       throw new WebApplicationException(Response.Status.NOT_FOUND);
 
-    Optional<VersionedProfile> currentProfile = profilesManager.get(account.getUuid(), request.getVersion());
+    Optional<VersionedProfile> currentProfile = profilesManager.get(auth.getAccount().getUuid(), request.getVersion());
     String avatar = request.isAvatar() ? generateAvatarObjectName() : null;
     Optional<ProfileAvatarUploadAttributes> response = Optional.empty();
 
-    profilesManager.set(account.getUuid(),
+    profilesManager.set(auth.getAccount().getUuid(),
         new VersionedProfile(
             request.getVersion(),
             request.getName(),
@@ -143,10 +153,10 @@ public class ProfileController {
         currentAvatar = Optional.of(currentProfile.get().getAvatar());
       }
 
-      if (currentAvatar.isEmpty() && account.getAvatar() != null
-      // && account.getAvatar().startsWith("profiles/")
+      if (currentAvatar.isEmpty() && auth.getAccount().getAvatar() != null
+      // && auth.getAccount().getAvatar().startsWith("profiles/")
       ) {
-        currentAvatar = Optional.of(account.getAvatar());
+        currentAvatar = Optional.of(auth.getAccount().getAvatar());
       }
 
       currentAvatar.ifPresent(s -> {
@@ -161,10 +171,11 @@ public class ProfileController {
       response = Optional.of(generateAvatarUploadForm(avatar));
     }
 
-    account.setProfileName(request.getName());
-    account.setAvatar(avatar);
-    account.setCurrentProfileVersion(request.getVersion());
-    accountsManager.update(account);
+    accountsManager.update(auth.getAccount(), a -> {
+      a.setProfileName(request.getName());
+      a.setAvatar(avatar);
+      a.setCurrentProfileVersion(request.getVersion());
+    });
 
     if (response.isPresent())
       return Response.ok(response).build();
@@ -176,33 +187,40 @@ public class ProfileController {
   @GET
   @Produces(MediaType.APPLICATION_JSON)
   @Path("/{uuid}/{version}")
-  public Optional<Profile> getProfile(@Auth Optional<Account> requestAccount,
+  public Optional<Profile> getProfile(@Auth Optional<AuthenticatedAccount> auth,
       @HeaderParam(OptionalAccess.UNIDENTIFIED) Optional<Anonymous> accessKey,
+      @Context ContainerRequestContext containerRequestContext,
       @PathParam("uuid") UUID uuid,
       @PathParam("version") String version)
       throws RateLimitExceededException {
     if (!isZkEnabled)
       throw new WebApplicationException(Response.Status.NOT_FOUND);
-    return getVersionedProfile(requestAccount, accessKey, uuid, version, Optional.empty());
+    return getVersionedProfile(auth.map(AuthenticatedAccount::getAccount), accessKey,
+        getAcceptableLanguagesForRequest(containerRequestContext), uuid,
+        version, Optional.empty());
   }
 
   @Timed
   @GET
   @Produces(MediaType.APPLICATION_JSON)
   @Path("/{uuid}/{version}/{credentialRequest}")
-  public Optional<Profile> getProfile(@Auth Optional<Account> requestAccount,
+  public Optional<Profile> getProfile(@Auth Optional<AuthenticatedAccount> auth,
       @HeaderParam(OptionalAccess.UNIDENTIFIED) Optional<Anonymous> accessKey,
+      @Context ContainerRequestContext containerRequestContext,
       @PathParam("uuid") UUID uuid,
       @PathParam("version") String version,
       @PathParam("credentialRequest") String credentialRequest)
       throws RateLimitExceededException {
     if (!isZkEnabled)
       throw new WebApplicationException(Response.Status.NOT_FOUND);
-    return getVersionedProfile(requestAccount, accessKey, uuid, version, Optional.of(credentialRequest));
+    return getVersionedProfile(auth.map(AuthenticatedAccount::getAccount), accessKey,
+        getAcceptableLanguagesForRequest(containerRequestContext), uuid,
+        version, Optional.of(credentialRequest));
   }
 
   private Optional<Profile> getVersionedProfile(Optional<Account> requestAccount,
       Optional<Anonymous> accessKey,
+      List<Locale> acceptableLanguages,
       UUID uuid,
       String version,
       Optional<String> credentialRequest)
@@ -215,7 +233,7 @@ public class ProfileController {
       }
 
       if (requestAccount.isPresent()) {
-        rateLimiters.getProfileLimiter().validate(requestAccount.get().getUserLogin());
+        rateLimiters.getProfileLimiter().validate(requestAccount.get().getUuid());
       }
 
       Optional<Account> accountProfile = accountsManager.get(uuid);
@@ -232,7 +250,8 @@ public class ProfileController {
       String avatar = profile.map(VersionedProfile::getAvatar).orElse(accountProfile.get().getAvatar());
       Optional<String> currentProfileVersion = accountProfile.get().getCurrentProfileVersion();
 
-      // Allow requests where either the version matches the latest version on Account or the latest version on Account
+      // Allow requests where either the version matches the latest version on Account
+      // or the latest version on Account
       // is empty to read the payment address.
       final String paymentAddress = profile
           .filter(p -> currentProfileVersion.map(v -> v.equals(version)).orElse(true))
@@ -240,7 +259,7 @@ public class ProfileController {
           .orElse(null);
 
       Optional<ProfileKeyCredentialResponse> credential = getProfileCredential(credentialRequest, profile, uuid);
-            
+
       return Optional.of(new Profile(name,
           about,
           aboutEmoji,
@@ -252,6 +271,7 @@ public class ProfileController {
           UserCapabilities.createForAccount(accountProfile.get()),
           username.orElse(null),
           null,
+          profileBadgeConverter.convert(acceptableLanguages, accountProfile.get().getBadges()),
           credential.orElse(null)));
     } catch (InvalidInputException e) {
       logger.info("Bad profile request", e);
@@ -263,9 +283,12 @@ public class ProfileController {
   @GET
   @Produces(MediaType.APPLICATION_JSON)
   @Path("/username/{username}")
-  public Profile getProfileByUsername(@Auth Account account, @PathParam("username") String username)
+  public Profile getProfileByUsername(
+      @Auth AuthenticatedAccount auth,
+      @Context ContainerRequestContext containerRequestContext,
+      @PathParam("username") String username)
       throws RateLimitExceededException {
-    rateLimiters.getUsernameLookupLimiter().validate(account.getUuid().toString());
+    rateLimiters.getUsernameLookupLimiter().validate(auth.getAccount().getUuid());
 
     username = username.toLowerCase();
 
@@ -280,7 +303,7 @@ public class ProfileController {
     if (accountProfile.isEmpty()) {
       throw new WebApplicationException(Response.status(Response.Status.NOT_FOUND).build());
     }
-        
+
     return new Profile(accountProfile.get().getProfileName(),
         null,
         null,
@@ -292,6 +315,7 @@ public class ProfileController {
         UserCapabilities.createForAccount(accountProfile.get()),
         username,
         accountProfile.get().getUuid(),
+        profileBadgeConverter.convert(getAcceptableLanguagesForRequest(containerRequestContext), accountProfile.get().getBadges()),
         null);
   }
 
@@ -323,9 +347,9 @@ public class ProfileController {
   @PUT
   @Produces(MediaType.APPLICATION_JSON)
   @Path("/name/{name}")
-  public void setProfile(@Auth Account account, @PathParam("name") @ExactlySize(value = { 72, 108 }, payload = { Unwrapping.Unwrap.class }) Optional<String> name) {
-    account.setProfileName(name.orElse(null));
-    accountsManager.update(account);
+  public void setProfile(@Auth AuthenticatedAccount auth,
+      @PathParam("name") @ExactlySize(value = { 72, 108 }, payload = { Unwrapping.Unwrap.class }) Optional<String> name) {
+    accountsManager.update(auth.getAccount(), a -> a.setProfileName(name.orElse(null)));
   }
 
   @Deprecated
@@ -333,29 +357,28 @@ public class ProfileController {
   @GET
   @Produces(MediaType.APPLICATION_JSON)
   @Path("/{identifier}")
-  public Profile getProfile(@Auth Optional<Account> requestAccount,
+  public Profile getProfile(
+      @Auth Optional<AuthenticatedAccount> auth,
       @HeaderParam(OptionalAccess.UNIDENTIFIED) Optional<Anonymous> accessKey,
-      @PathParam("identifier") AmbiguousIdentifier identifier,
+      @Context ContainerRequestContext containerRequestContext,
+      @HeaderParam("User-Agent") String userAgent,
+      @PathParam("identifier") UUID identifier,
       @QueryParam("ca") boolean useCaCertificate)
       throws RateLimitExceededException {
-    if (requestAccount.isEmpty() && accessKey.isEmpty()) {
+
+    if (auth.isEmpty() && accessKey.isEmpty()) {
       throw new WebApplicationException(Response.Status.UNAUTHORIZED);
     }
 
-    if (requestAccount.isPresent()) {
-      rateLimiters.getProfileLimiter().validate(requestAccount.get().getUserLogin());
+    if (auth.isPresent()) {
+      rateLimiters.getProfileLimiter().validate(auth.get().getAccount().getUuid());
     }
 
     Optional<Account> accountProfile = accountsManager.get(identifier);
-    OptionalAccess.verify(requestAccount, accessKey, accountProfile);
+    OptionalAccess.verify(auth.map(AuthenticatedAccount::getAccount), accessKey, accountProfile);
 
-    Optional<String> username = Optional.empty();
+    Optional<String> username = usernamesManager.get(accountProfile.get().getUuid());
 
-    if (!identifier.hasUserLogin()) {
-      // noinspection OptionalGetWithoutIsPresent
-      username = usernamesManager.get(accountProfile.get().getUuid());
-    }    
-   
     return new Profile(accountProfile.get().getProfileName(),
         null,
         null,
@@ -367,6 +390,7 @@ public class ProfileController {
         UserCapabilities.createForAccount(accountProfile.get()),
         username.orElse(null),
         null,
+        profileBadgeConverter.convert(getAcceptableLanguagesForRequest(containerRequestContext), accountProfile.get().getBadges()),
         null);
   }
 
@@ -375,9 +399,9 @@ public class ProfileController {
   @GET
   @Produces(MediaType.APPLICATION_JSON)
   @Path("/form/avatar")
-  public ProfileAvatarUploadAttributes getAvatarUploadForm(@Auth Account account) {
+  public ProfileAvatarUploadAttributes getAvatarUploadForm(@Auth AuthenticatedAccount auth) {
 
-    String previousAvatar = account.getAvatar();
+    String previousAvatar = auth.getAccount().getAvatar();
     String objectName = generateAvatarObjectName();
     ProfileAvatarUploadAttributes profileAvatarUploadAttributes = generateAvatarUploadForm(objectName);
 
@@ -396,8 +420,7 @@ public class ProfileController {
       }
     }
 
-    account.setAvatar(objectName);
-    accountsManager.update(account);
+    accountsManager.update(auth.getAccount(), a -> a.setAvatar(objectName));
 
     return profileAvatarUploadAttributes;
   }
@@ -419,5 +442,14 @@ public class ProfileController {
 
 //		return "profiles/" + Base64.encodeBase64URLSafeString(object);
     return Base64.encodeBase64URLSafeString(object);
+  }
+
+  private List<Locale> getAcceptableLanguagesForRequest(ContainerRequestContext containerRequestContext) {
+    try {
+      return containerRequestContext.getAcceptableLanguages();
+    } catch (final ProcessingException e) {
+      logger.warn("Could not get acceptable languages", e);
+      return List.of();
+    }
   }
 }

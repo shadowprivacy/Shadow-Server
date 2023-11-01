@@ -5,45 +5,36 @@
  */
 package su.sres.shadowserver.auth;
 
-import com.codahale.metrics.Meter;
-import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.SharedMetricRegistries;
 import com.google.common.annotations.VisibleForTesting;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.commons.lang3.StringUtils;
 import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.storage.AccountsManager;
 import su.sres.shadowserver.storage.Device;
-import su.sres.shadowserver.util.Constants;
+import su.sres.shadowserver.storage.RefreshingAccountAndDeviceSupplier;
+import su.sres.shadowserver.util.Pair;
 import su.sres.shadowserver.util.Util;
 
 import java.time.Clock;
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
 import java.util.Optional;
+import java.util.UUID;
 
 import static com.codahale.metrics.MetricRegistry.name;
 import io.dropwizard.auth.basic.BasicCredentials;
-import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.Metrics;
+import io.micrometer.core.instrument.Tags;
 
 public class BaseAccountAuthenticator {
 
-  private final MetricRegistry metricRegistry = SharedMetricRegistries.getOrCreate(Constants.METRICS_NAME);
-  private final Meter authenticationFailedMeter = metricRegistry.meter(name(getClass(), "authentication", "failed"));
-  private final Meter authenticationSucceededMeter = metricRegistry.meter(name(getClass(), "authentication", "succeeded"));
-  private final Meter noSuchAccountMeter = metricRegistry.meter(name(getClass(), "authentication", "noSuchAccount"));
-  private final Meter noSuchDeviceMeter = metricRegistry.meter(name(getClass(), "authentication", "noSuchDevice"));
-  private final Meter accountDisabledMeter = metricRegistry.meter(name(getClass(), "authentication", "accountDisabled"));
-  private final Meter deviceDisabledMeter = metricRegistry.meter(name(getClass(), "authentication", "deviceDisabled"));
-  private final Meter invalidAuthHeaderMeter = metricRegistry.meter(name(getClass(), "authentication", "invalidHeader"));
-
-  private final String daysSinceLastSeenDistributionName = name(getClass(), "authentication", "daysSinceLastSeen");
-
+  private static final String AUTHENTICATION_COUNTER_NAME = name(BaseAccountAuthenticator.class, "authentication");
+  private static final String AUTHENTICATION_SUCCEEDED_TAG_NAME = "succeeded";
+  private static final String AUTHENTICATION_FAILURE_REASON_TAG_NAME = "reason";
+  private static final String AUTHENTICATION_ENABLED_REQUIRED_TAG_NAME = "enabledRequired";
+  
+  private static final String DAYS_SINCE_LAST_SEEN_DISTRIBUTION_NAME = name(BaseAccountAuthenticator.class, "daysSinceLastSeen");
   private static final String IS_PRIMARY_DEVICE_TAG = "isPrimary";
-
-  private final Logger logger = LoggerFactory.getLogger(BaseAccountAuthenticator.class);
 
   private final AccountsManager accountsManager;
   private final Clock clock;
@@ -57,65 +48,99 @@ public class BaseAccountAuthenticator {
     this.accountsManager = accountsManager;
     this.clock = clock;
   }
+  
+  static Pair<String, Long> getIdentifierAndDeviceId(final String basicUsername) {
+    final String identifier;
+    final long deviceId;
 
-  public Optional<Account> authenticate(BasicCredentials basicCredentials, boolean enabledRequired) {
+    final int deviceIdSeparatorIndex = basicUsername.indexOf('.');
+
+    if (deviceIdSeparatorIndex == -1) {
+      identifier = basicUsername;
+      deviceId = Device.MASTER_ID;
+    } else {
+      identifier = basicUsername.substring(0, deviceIdSeparatorIndex);
+      deviceId = Long.parseLong(basicUsername.substring(deviceIdSeparatorIndex + 1));
+    }
+
+    return new Pair<>(identifier, deviceId);
+  }
+
+  public Optional<AuthenticatedAccount> authenticate(BasicCredentials basicCredentials, boolean enabledRequired) {
+    boolean succeeded = false;
+    String failureReason = null;
+    
     try {
-      AuthorizationHeader authorizationHeader = AuthorizationHeader.fromUserAndPassword(basicCredentials.getUsername(), basicCredentials.getPassword());
-      Optional<Account> account = accountsManager.get(authorizationHeader.getIdentifier());
+      final UUID accountUuid;
+      final long deviceId;
+      {
+        final Pair<String, Long> identifierAndDeviceId = getIdentifierAndDeviceId(basicCredentials.getUsername());
 
-      if (!account.isPresent()) {
-        noSuchAccountMeter.mark();
+        accountUuid = UUID.fromString(identifierAndDeviceId.first());
+        deviceId = identifierAndDeviceId.second();
+      }
+      
+      Optional<Account> account = accountsManager.get(accountUuid);
+
+      if (account.isEmpty()) {
+        failureReason = "noSuchAccount";
         return Optional.empty();
       }
 
-      Optional<Device> device = account.get().getDevice(authorizationHeader.getDeviceId());
+      Optional<Device> device = account.get().getDevice(deviceId);
 
-      if (!device.isPresent()) {
-        noSuchDeviceMeter.mark();
+      if (device.isEmpty()) {
+        failureReason = "noSuchDevice";
         return Optional.empty();
       }
 
       if (enabledRequired) {
         if (!device.get().isEnabled()) {
-          deviceDisabledMeter.mark();
+          failureReason = "deviceDisabled";
           return Optional.empty();
         }
 
         if (!account.get().isEnabled()) {
-          accountDisabledMeter.mark();
+          failureReason = "accountDisabled";
           return Optional.empty();
         }
       }
 
       if (device.get().getAuthenticationCredentials().verify(basicCredentials.getPassword())) {
-        authenticationSucceededMeter.mark();
-        account.get().setAuthenticatedDevice(device.get());
-        updateLastSeen(account.get(), device.get());
-        return account;
+        succeeded = true;
+        final Account authenticatedAccount = updateLastSeen(account.get(), device.get());
+        return Optional.of(new AuthenticatedAccount(
+            new RefreshingAccountAndDeviceSupplier(authenticatedAccount, device.get().getId(), accountsManager)));
       }
 
-      authenticationFailedMeter.mark();
       return Optional.empty();
-    } catch (IllegalArgumentException | InvalidAuthorizationHeaderException iae) {
-      invalidAuthHeaderMeter.mark();
+    } catch (IllegalArgumentException iae) {
+      failureReason = "invalidHeader";
       return Optional.empty();
+    } finally {
+      Tags tags = Tags.of(
+          AUTHENTICATION_SUCCEEDED_TAG_NAME, String.valueOf(succeeded),
+          AUTHENTICATION_ENABLED_REQUIRED_TAG_NAME, String.valueOf(enabledRequired));
+
+      if (StringUtils.isNotBlank(failureReason)) {
+        tags = tags.and(AUTHENTICATION_FAILURE_REASON_TAG_NAME, failureReason);
+      }      
+
+      Metrics.counter(AUTHENTICATION_COUNTER_NAME, tags).increment();
     }
   }
 
   @VisibleForTesting
-  public void updateLastSeen(Account account, Device device) {
+  public Account updateLastSeen(Account account, Device device) {
     final long lastSeenOffsetSeconds = Math.abs(account.getUuid().getLeastSignificantBits()) % ChronoUnit.DAYS.getDuration().toSeconds();
     final long todayInMillisWithOffset = Util.todayInMillisGivenOffsetFromNow(clock, Duration.ofSeconds(lastSeenOffsetSeconds).negated());
 
     if (device.getLastSeen() < todayInMillisWithOffset) {
-      DistributionSummary.builder(daysSinceLastSeenDistributionName)
-          .tags(IS_PRIMARY_DEVICE_TAG, String.valueOf(device.isMaster()))
-          .publishPercentileHistogram()
-          .register(Metrics.globalRegistry)
+      Metrics.summary(DAYS_SINCE_LAST_SEEN_DISTRIBUTION_NAME, IS_PRIMARY_DEVICE_TAG, String.valueOf(device.isMaster()))
           .record(Duration.ofMillis(todayInMillisWithOffset - device.getLastSeen()).toDays());
-      device.setLastSeen(Util.todayInMillis(clock));
-      accountsManager.update(account);
+      return accountsManager.updateDeviceLastSeen(account, device, Util.todayInMillis(clock));
     }
+    return account;
   }
 
 }

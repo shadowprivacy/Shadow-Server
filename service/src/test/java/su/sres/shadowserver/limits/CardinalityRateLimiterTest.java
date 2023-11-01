@@ -5,32 +5,27 @@
 
 package su.sres.shadowserver.limits;
 
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.RegisterExtension;
+
 import su.sres.shadowserver.controllers.RateLimitExceededException;
-import su.sres.shadowserver.redis.AbstractRedisClusterTest;
+import su.sres.shadowserver.redis.RedisClusterExtension;
+
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 import java.time.Duration;
 
-import static org.junit.Assert.*;
+class CardinalityRateLimiterTest {
 
-public class CardinalityRateLimiterTest extends AbstractRedisClusterTest {
-
-  @Before
-  public void setUp() throws Exception {
-    super.setUp();
-  }
-
-  @After
-  public void tearDown() throws Exception {
-    super.tearDown();
-  }
+  @RegisterExtension
+  static final RedisClusterExtension REDIS_CLUSTER_EXTENSION = RedisClusterExtension.builder().build();
 
   @Test
-  public void testValidate() {
+  void testValidate() {
     final int maxCardinality = 10;
-    final CardinalityRateLimiter rateLimiter = new CardinalityRateLimiter(getRedisCluster(), "test", Duration.ofDays(1), maxCardinality);
+    final CardinalityRateLimiter rateLimiter = new CardinalityRateLimiter(REDIS_CLUSTER_EXTENSION.getRedisCluster(), "test", Duration.ofDays(1),
+        maxCardinality);
 
     final String source = "+18005551234";
     int validatedAttempts = 0;

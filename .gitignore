@@ -28,3 +28,5 @@ service/src/main/java/su/sres/shadowserver/groups/protos/*
 /bin/
 deployer.properties
 deployer.log
+/service/src/main/resources/su/sres/badges/Badges_*.properties
+.tx/

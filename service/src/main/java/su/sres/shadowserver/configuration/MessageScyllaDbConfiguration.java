@@ -10,7 +10,7 @@ import java.time.Duration;
 
 public class MessageScyllaDbConfiguration extends ScyllaDbConfiguration {
 
-    private Duration timeToLive = Duration.ofDays(7);
+    private Duration timeToLive = Duration.ofDays(14);
 
     @Valid
     public Duration getTimeToLive() {

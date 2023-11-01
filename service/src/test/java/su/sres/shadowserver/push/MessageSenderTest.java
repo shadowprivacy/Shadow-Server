@@ -1,14 +1,16 @@
 /*
- * Original software: Copyright 2013-2020 Signal Messenger, LLC
- * Modified software: Copyright 2019-2022 Anton Alipov, sole trader
+ * Original software: Copyright 2013-2021 Signal Messenger, LLC
+ * Modified software: Copyright 2019-2023 Anton Alipov, sole trader
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 package su.sres.shadowserver.push;
 
 import com.google.protobuf.ByteString;
 import org.apache.commons.lang3.RandomStringUtils;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+
 import su.sres.shadowserver.entities.MessageProtos;
 import su.sres.shadowserver.metrics.PushLatencyManager;
 import su.sres.shadowserver.storage.Account;
@@ -18,136 +20,146 @@ import su.sres.shadowserver.storage.MessagesManager;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyZeroInteractions;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-public class MessageSenderTest {
+class MessageSenderTest {
 
-    private Account account;
-    private Device device;
-    private MessageProtos.Envelope message;
+  private Account account;
+  private Device device;
+  private MessageProtos.Envelope message;
 
-    private ClientPresenceManager clientPresenceManager;
-    private MessagesManager messagesManager;
-    private GCMSender gcmSender;
-    private APNSender apnSender;
-    private MessageSender messageSender;
+  private ClientPresenceManager clientPresenceManager;
+  private MessagesManager messagesManager;
+  private GCMSender gcmSender;
+  private APNSender apnSender;
+  private MessageSender messageSender;
 
-    private static final UUID ACCOUNT_UUID = UUID.randomUUID();
-    private static final long DEVICE_ID = 1L;
+  private static final UUID ACCOUNT_UUID = UUID.randomUUID();
+  private static final long DEVICE_ID = 1L;
 
-    @Before
-    public void setUp() {
+  @BeforeEach
+  void setUp() {
 
-	account = mock(Account.class);
-	device = mock(Device.class);
-	message = generateRandomMessage();
+    account = mock(Account.class);
+    device = mock(Device.class);
+    message = generateRandomMessage();
 
-	clientPresenceManager = mock(ClientPresenceManager.class);
-	messagesManager = mock(MessagesManager.class);
-	gcmSender = mock(GCMSender.class);
-	apnSender = mock(APNSender.class);
-	messageSender = new MessageSender(mock(ApnFallbackManager.class),
-		clientPresenceManager,
-		messagesManager,
-		gcmSender,
-		apnSender,		
-		mock(PushLatencyManager.class));
+    clientPresenceManager = mock(ClientPresenceManager.class);
+    messagesManager = mock(MessagesManager.class);
+    gcmSender = mock(GCMSender.class);
+    apnSender = mock(APNSender.class);
+    messageSender = new MessageSender(mock(ApnFallbackManager.class),
+        clientPresenceManager,
+        messagesManager,
+        gcmSender,
+        apnSender,
+        mock(PushLatencyManager.class));
 
-	when(account.getUuid()).thenReturn(ACCOUNT_UUID);
-	when(device.getId()).thenReturn(DEVICE_ID);
-    }
+    when(account.getUuid()).thenReturn(ACCOUNT_UUID);
+    when(device.getId()).thenReturn(DEVICE_ID);
+  }
 
-    @Test
-    public void testSendOnlineMessageClientPresent() throws Exception {
-	when(clientPresenceManager.isPresent(ACCOUNT_UUID, DEVICE_ID)).thenReturn(true);
-	when(device.getGcmId()).thenReturn("gcm-id");
+  @Test
+  void testSendOnlineMessageClientPresent() throws Exception {
+    when(clientPresenceManager.isPresent(ACCOUNT_UUID, DEVICE_ID)).thenReturn(true);
+    when(device.getGcmId()).thenReturn("gcm-id");
 
-	messageSender.sendMessage(account, device, message, true);
+    messageSender.sendMessage(account, device, message, true);
 
-	verify(messagesManager).insertEphemeral(ACCOUNT_UUID, DEVICE_ID, message);
-	verify(messagesManager, never()).insert(any(), anyLong(), any());
-	verifyZeroInteractions(gcmSender);
-	verifyZeroInteractions(apnSender);
-    }
+    ArgumentCaptor<MessageProtos.Envelope> envelopeArgumentCaptor = ArgumentCaptor.forClass(
+        MessageProtos.Envelope.class);
 
-    @Test
-    public void testSendOnlineMessageClientNotPresent() throws Exception {
-	when(clientPresenceManager.isPresent(ACCOUNT_UUID, DEVICE_ID)).thenReturn(false);
-	when(device.getGcmId()).thenReturn("gcm-id");
+    verify(messagesManager).insert(any(), anyLong(), envelopeArgumentCaptor.capture());
 
-	messageSender.sendMessage(account, device, message, true);
+    assertTrue(envelopeArgumentCaptor.getValue().getEphemeral());
 
-	verify(messagesManager, never()).insertEphemeral(any(), anyLong(), any());
-	verify(messagesManager, never()).insert(any(), anyLong(), any());
-	verifyZeroInteractions(gcmSender);
-	verifyZeroInteractions(apnSender);
-    }
+    verifyNoInteractions(gcmSender);
+    verifyNoInteractions(apnSender);
+  }
 
-    @Test
-    public void testSendMessageClientPresent() throws Exception {
-	when(clientPresenceManager.isPresent(ACCOUNT_UUID, DEVICE_ID)).thenReturn(true);
-	when(device.getGcmId()).thenReturn("gcm-id");
+  @Test
+  void testSendOnlineMessageClientNotPresent() throws Exception {
+    when(clientPresenceManager.isPresent(ACCOUNT_UUID, DEVICE_ID)).thenReturn(false);
+    when(device.getGcmId()).thenReturn("gcm-id");
 
-	messageSender.sendMessage(account, device, message, false);
+    messageSender.sendMessage(account, device, message, true);
 
-	verify(messagesManager, never()).insertEphemeral(any(), anyLong(), any());
-	verify(messagesManager).insert(ACCOUNT_UUID, DEVICE_ID, message);
-	verifyZeroInteractions(gcmSender);
-	verifyZeroInteractions(apnSender);
-    }
+    verify(messagesManager, never()).insert(any(), anyLong(), any());
+    verifyNoInteractions(gcmSender);
+    verifyNoInteractions(apnSender);
+  }
 
-    @Test
-    public void testSendMessageGcmClientNotPresent() throws Exception {
-	when(clientPresenceManager.isPresent(ACCOUNT_UUID, DEVICE_ID)).thenReturn(false);
-	when(device.getGcmId()).thenReturn("gcm-id");
+  @Test
+  void testSendMessageClientPresent() throws Exception {
+    when(clientPresenceManager.isPresent(ACCOUNT_UUID, DEVICE_ID)).thenReturn(true);
+    when(device.getGcmId()).thenReturn("gcm-id");
 
-	messageSender.sendMessage(account, device, message, false);
+    messageSender.sendMessage(account, device, message, false);
 
-	verify(messagesManager, never()).insertEphemeral(any(), anyLong(), any());
-	verify(messagesManager).insert(ACCOUNT_UUID, DEVICE_ID, message);
-	verify(gcmSender).sendMessage(any());
-	verifyZeroInteractions(apnSender);
-    }
+    final ArgumentCaptor<MessageProtos.Envelope> envelopeArgumentCaptor = ArgumentCaptor.forClass(
+        MessageProtos.Envelope.class);
 
-    @Test
-    public void testSendMessageApnClientNotPresent() throws Exception {
-	when(clientPresenceManager.isPresent(ACCOUNT_UUID, DEVICE_ID)).thenReturn(false);
-	when(device.getApnId()).thenReturn("apn-id");
+    verify(messagesManager).insert(eq(ACCOUNT_UUID), eq(DEVICE_ID), envelopeArgumentCaptor.capture());
 
-	messageSender.sendMessage(account, device, message, false);
+    assertFalse(envelopeArgumentCaptor.getValue().getEphemeral());
+    assertEquals(message, envelopeArgumentCaptor.getValue());
+    verifyNoInteractions(gcmSender);
+    verifyNoInteractions(apnSender);
+  }
 
-	verify(messagesManager, never()).insertEphemeral(any(), anyLong(), any());
-	verify(messagesManager).insert(ACCOUNT_UUID, DEVICE_ID, message);
-	verifyZeroInteractions(gcmSender);
-	verify(apnSender).sendMessage(any());
-    }
+  @Test
+  void testSendMessageGcmClientNotPresent() throws Exception {
+    when(clientPresenceManager.isPresent(ACCOUNT_UUID, DEVICE_ID)).thenReturn(false);
+    when(device.getGcmId()).thenReturn("gcm-id");
 
-    @Test
-    public void testSendMessageFetchClientNotPresent() throws Exception {
-	when(clientPresenceManager.isPresent(ACCOUNT_UUID, DEVICE_ID)).thenReturn(false);
-	when(device.getFetchesMessages()).thenReturn(true);
+    messageSender.sendMessage(account, device, message, false);
 
-	messageSender.sendMessage(account, device, message, false);
+    verify(messagesManager).insert(ACCOUNT_UUID, DEVICE_ID, message);
+    verify(gcmSender).sendMessage(any());
+    verifyNoInteractions(apnSender);
+  }
 
-	verify(messagesManager, never()).insertEphemeral(any(), anyLong(), any());
-	verify(messagesManager).insert(ACCOUNT_UUID, DEVICE_ID, message);
-	verifyZeroInteractions(gcmSender);
-	verifyZeroInteractions(apnSender);
-    }
+  @Test
+  void testSendMessageApnClientNotPresent() throws Exception {
+    when(clientPresenceManager.isPresent(ACCOUNT_UUID, DEVICE_ID)).thenReturn(false);
+    when(device.getApnId()).thenReturn("apn-id");
 
-    private MessageProtos.Envelope generateRandomMessage() {
-	return MessageProtos.Envelope.newBuilder()
-		.setTimestamp(System.currentTimeMillis())
-		.setServerTimestamp(System.currentTimeMillis())
-		.setContent(ByteString.copyFromUtf8(RandomStringUtils.randomAlphanumeric(256)))
-		.setType(MessageProtos.Envelope.Type.CIPHERTEXT)
-		.setServerGuid(UUID.randomUUID().toString())
-		.build();
-    }
+    messageSender.sendMessage(account, device, message, false);
+
+    verify(messagesManager).insert(ACCOUNT_UUID, DEVICE_ID, message);
+    verifyNoInteractions(gcmSender);
+    verify(apnSender).sendMessage(any());
+  }
+
+  @Test
+  void testSendMessageFetchClientNotPresent() throws Exception {
+    when(clientPresenceManager.isPresent(ACCOUNT_UUID, DEVICE_ID)).thenReturn(false);
+    when(device.getFetchesMessages()).thenReturn(true);
+
+    messageSender.sendMessage(account, device, message, false);
+
+    verify(messagesManager).insert(ACCOUNT_UUID, DEVICE_ID, message);
+    verifyNoInteractions(gcmSender);
+    verifyNoInteractions(apnSender);
+  }
+
+  private MessageProtos.Envelope generateRandomMessage() {
+    return MessageProtos.Envelope.newBuilder()
+        .setTimestamp(System.currentTimeMillis())
+        .setServerTimestamp(System.currentTimeMillis())
+        .setContent(ByteString.copyFromUtf8(RandomStringUtils.randomAlphanumeric(256)))
+        .setType(MessageProtos.Envelope.Type.CIPHERTEXT)
+        .setServerGuid(UUID.randomUUID().toString())
+        .build();
+  }
 }

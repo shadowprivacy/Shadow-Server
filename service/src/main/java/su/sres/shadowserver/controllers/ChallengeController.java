@@ -16,6 +16,8 @@ import javax.ws.rs.Path;
 import javax.ws.rs.Produces;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
+
+import su.sres.shadowserver.auth.AuthenticatedAccount;
 import su.sres.shadowserver.entities.AnswerChallengeRequest;
 import su.sres.shadowserver.entities.AnswerPushChallengeRequest;
 import su.sres.shadowserver.entities.AnswerRecaptchaChallengeRequest;
@@ -37,7 +39,7 @@ public class ChallengeController {
   @PUT
   @Produces(MediaType.APPLICATION_JSON)
   @Consumes(MediaType.APPLICATION_JSON)
-  public Response handleChallengeResponse(@Auth final Account account,
+  public Response handleChallengeResponse(@Auth final AuthenticatedAccount auth,
       @Valid final AnswerChallengeRequest answerRequest,
       @HeaderParam("X-Forwarded-For") String forwardedFor) throws RetryLaterException {
 
@@ -45,14 +47,14 @@ public class ChallengeController {
       if (answerRequest instanceof AnswerPushChallengeRequest) {
         final AnswerPushChallengeRequest pushChallengeRequest = (AnswerPushChallengeRequest) answerRequest;
 
-        rateLimitChallengeManager.answerPushChallenge(account, pushChallengeRequest.getChallenge());
+        rateLimitChallengeManager.answerPushChallenge(auth.getAccount(), pushChallengeRequest.getChallenge());
       } else if (answerRequest instanceof AnswerRecaptchaChallengeRequest) {
         try {
 
           final AnswerRecaptchaChallengeRequest recaptchaChallengeRequest = (AnswerRecaptchaChallengeRequest) answerRequest;
           final String mostRecentProxy = ForwardedIpUtil.getMostRecentProxy(forwardedFor).orElseThrow();
 
-          rateLimitChallengeManager.answerRecaptchaChallenge(account, recaptchaChallengeRequest.getCaptcha(), mostRecentProxy);
+          rateLimitChallengeManager.answerRecaptchaChallenge(auth.getAccount(), recaptchaChallengeRequest.getCaptcha(), mostRecentProxy);
 
         } catch (final NoSuchElementException e) {
           return Response.status(400).build();
@@ -68,9 +70,9 @@ public class ChallengeController {
   @Timed
   @POST
   @Path("/push")
-  public Response requestPushChallenge(@Auth final Account account) {
+  public Response requestPushChallenge(@Auth final AuthenticatedAccount auth) {
     try {
-      rateLimitChallengeManager.sendPushChallenge(account);
+      rateLimitChallengeManager.sendPushChallenge(auth.getAccount());
       return Response.status(200).build();
     } catch (final NotPushRegisteredException e) {
       return Response.status(404).build();

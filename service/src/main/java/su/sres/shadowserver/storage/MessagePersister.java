@@ -1,6 +1,6 @@
 /*
- * Original software: Copyright 2013-2020 Signal Messenger, LLC
- * Modified software: Copyright 2019-2022 Anton Alipov, sole trader
+ * Original software: Copyright 2013-2021 Signal Messenger, LLC
+ * Modified software: Copyright 2019-2023 Anton Alipov, sole trader
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 package su.sres.shadowserver.storage;
@@ -43,8 +43,7 @@ public class MessagePersister implements Managed {
 
   private final MetricRegistry metricRegistry = SharedMetricRegistries.getOrCreate(Constants.METRICS_NAME);
   private final Timer getQueuesTimer = metricRegistry.timer(name(MessagePersister.class, "getQueues"));
-  private final Timer persistQueueTimer = metricRegistry.timer(name(MessagePersister.class, "persistQueue"));
-  private final Meter persistMessageMeter = metricRegistry.meter(name(MessagePersister.class, "persistMessage"));
+  private final Timer persistQueueTimer = metricRegistry.timer(name(MessagePersister.class, "persistQueue"));  
   private final Meter persistQueueExceptionMeter = metricRegistry.meter(name(MessagePersister.class, "persistQueueException"));
   private final Histogram queueCountHistogram = metricRegistry.histogram(name(MessagePersister.class, "queueCount"));
   private final Histogram queueSizeHistogram = metricRegistry.histogram(name(MessagePersister.class, "queueSize"));
@@ -145,11 +144,7 @@ public class MessagePersister implements Managed {
 
     final Optional<Account> maybeAccount = accountsManager.get(accountUuid);
 
-    final String accountNumber;
-
-    if (maybeAccount.isPresent()) {
-      accountNumber = maybeAccount.get().getUserLogin();
-    } else {
+    if (maybeAccount.isEmpty()) {
       logger.error("No account record found for account {}", accountUuid);
       return;
     }
@@ -167,7 +162,6 @@ public class MessagePersister implements Managed {
           messagesManager.persistMessages(accountUuid, deviceId, messages);
           messageCount += messages.size();
 
-          persistMessageMeter.mark(messages.size());
         } while (!messages.isEmpty());
 
         queueSizeHistogram.update(messageCount);

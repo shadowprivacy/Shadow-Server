@@ -1,6 +1,6 @@
 /*
- * Original software: Copyright 2013-2020 Signal Messenger, LLC
- * Modified software: Copyright 2019-2022 Anton Alipov, sole trader
+ * Original software: Copyright 2013-2021 Signal Messenger, LLC
+ * Modified software: Copyright 2019-2023 Anton Alipov, sole trader
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 package su.sres.shadowserver.controllers;
@@ -19,58 +19,58 @@ import static com.codahale.metrics.MetricRegistry.name;
 
 import io.dropwizard.auth.Auth;
 import io.micrometer.core.instrument.Metrics;
+import su.sres.shadowserver.auth.AuthenticatedAccount;
 import su.sres.shadowserver.push.ClientPresenceManager;
-import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.util.ua.UnrecognizedUserAgentException;
 import su.sres.shadowserver.util.ua.UserAgentUtil;
 
 @Path("/v1/keepalive")
 public class KeepAliveController {
 
-    private final Logger logger = LoggerFactory.getLogger(KeepAliveController.class);
+  private final Logger logger = LoggerFactory.getLogger(KeepAliveController.class);
 
-    private final ClientPresenceManager clientPresenceManager;
+  private final ClientPresenceManager clientPresenceManager;
 
-    private static final String NO_LOCAL_SUBSCRIPTION_COUNTER_NAME = name(KeepAliveController.class, "noLocalSubscription");
-    private static final String NO_LOCAL_SUBSCRIPTION_PLATFORM_TAG_NAME = "platform";
+  private static final String NO_LOCAL_SUBSCRIPTION_COUNTER_NAME = name(KeepAliveController.class, "noLocalSubscription");
+  private static final String NO_LOCAL_SUBSCRIPTION_PLATFORM_TAG_NAME = "platform";
 
-    public KeepAliveController(final ClientPresenceManager clientPresenceManager) {
-	this.clientPresenceManager = clientPresenceManager;
+  public KeepAliveController(final ClientPresenceManager clientPresenceManager) {
+    this.clientPresenceManager = clientPresenceManager;
+  }
+
+  @Timed
+  @GET
+  public Response getKeepAlive(@Auth AuthenticatedAccount auth,
+      @WebSocketSession WebSocketSessionContext context) {
+    if (auth != null) {
+      if (!clientPresenceManager.isLocallyPresent(auth.getAccount().getUuid(), auth.getAuthenticatedDevice().getId())) {
+        logger.warn("***** No local subscription found for {}::{}; age = {}ms, User-Agent = {}",
+            auth.getAccount().getUuid(), auth.getAuthenticatedDevice().getId(),
+            System.currentTimeMillis() - context.getClient().getCreatedTimestamp(),
+            context.getClient().getUserAgent());
+
+        context.getClient().close(1000, "OK");
+
+        String platform;
+
+        try {
+          platform = UserAgentUtil.parseUserAgentString(context.getClient().getUserAgent()).getPlatform().name().toLowerCase();
+        } catch (UnrecognizedUserAgentException e) {
+          platform = "unknown";
+        }
+
+        Metrics.counter(NO_LOCAL_SUBSCRIPTION_COUNTER_NAME, NO_LOCAL_SUBSCRIPTION_PLATFORM_TAG_NAME, platform).increment();
+      }
     }
 
-    @Timed
-    @GET
-    public Response getKeepAlive(@Auth Account account,
-	    @WebSocketSession WebSocketSessionContext context) {
-	if (account != null) {
-	    if (!clientPresenceManager.isLocallyPresent(account.getUuid(), account.getAuthenticatedDevice().get().getId())) {
-		logger.warn("***** No local subscription found for {}::{}; age = {}ms, User-Agent = {}",
-			account.getUuid(), account.getAuthenticatedDevice().get().getId(),
-			System.currentTimeMillis() - context.getClient().getCreatedTimestamp(),
-			context.getClient().getUserAgent());
+    return Response.ok().build();
+  }
 
-		context.getClient().close(1000, "OK");
-
-		String platform;
-
-		try {
-		    platform = UserAgentUtil.parseUserAgentString(context.getClient().getUserAgent()).getPlatform().name().toLowerCase();
-		} catch (UnrecognizedUserAgentException e) {
-		    platform = "unknown";
-		}
-
-		Metrics.counter(NO_LOCAL_SUBSCRIPTION_COUNTER_NAME, NO_LOCAL_SUBSCRIPTION_PLATFORM_TAG_NAME, platform).increment();
-	    }
-	}
-
-	return Response.ok().build();
-    }
-
-    @Timed
-    @GET
-    @Path("/provisioning")
-    public Response getProvisioningKeepAlive() {
-	return Response.ok().build();
-    }
+  @Timed
+  @GET
+  @Path("/provisioning")
+  public Response getProvisioningKeepAlive() {
+    return Response.ok().build();
+  }
 
 }
