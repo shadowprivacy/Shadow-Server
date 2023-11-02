@@ -6,7 +6,10 @@
 package su.sres.shadowserver.badges;
 
 import com.google.common.annotations.VisibleForTesting;
+
+import java.net.URL;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -20,6 +23,7 @@ import java.util.stream.Collectors;
 import su.sres.shadowserver.configuration.BadgeConfiguration;
 import su.sres.shadowserver.configuration.BadgesConfiguration;
 import su.sres.shadowserver.entities.Badge;
+import su.sres.shadowserver.entities.SelfBadge;
 import su.sres.shadowserver.storage.AccountBadge;
 
 public class ConfiguredProfileBadgeConverter implements ProfileBadgeConverter {
@@ -54,7 +58,8 @@ public class ConfiguredProfileBadgeConverter implements ProfileBadgeConverter {
   @Override
   public List<Badge> convert(
       final List<Locale> acceptableLanguages,
-      final List<AccountBadge> accountBadges) {
+      final List<AccountBadge> accountBadges,
+      final boolean isSelf) {
     if (accountBadges.isEmpty() && badgeIdsEnabledForAll.isEmpty()) {
       return List.of();
     }
@@ -90,28 +95,50 @@ public class ConfiguredProfileBadgeConverter implements ProfileBadgeConverter {
 
     final ResourceBundle resourceBundle = resourceBundleFactory.createBundle(BASE_NAME, desiredLocale, control);
     List<Badge> badges = accountBadges.stream()
-        .filter(accountBadge -> accountBadge.isVisible()
+        .filter(accountBadge -> (isSelf || accountBadge.isVisible())
             && now.isBefore(accountBadge.getExpiration())
             && knownBadges.containsKey(accountBadge.getId()))
         .map(accountBadge -> {
           BadgeConfiguration configuration = knownBadges.get(accountBadge.getId());
-          return new Badge(
+          return newBadge(
+              isSelf,
               accountBadge.getId(),
               configuration.getCategory(),
               configuration.getImageUrl(),
               resourceBundle.getString(accountBadge.getId() + "_name"),
-              resourceBundle.getString(accountBadge.getId() + "_description"));
+              resourceBundle.getString(accountBadge.getId() + "_description"),
+              accountBadge.getExpiration(),
+              accountBadge.isVisible());
         })
         .collect(Collectors.toCollection(ArrayList::new));
     badges.addAll(badgeIdsEnabledForAll.stream().filter(knownBadges::containsKey).map(id -> {
       BadgeConfiguration configuration = knownBadges.get(id);
-      return new Badge(
+      return newBadge(
+          isSelf,
           id,
           configuration.getCategory(),
           configuration.getImageUrl(),
           resourceBundle.getString(id + "_name"),
-          resourceBundle.getString(id + "_description"));
+          resourceBundle.getString(id + "_description"),
+          now.plus(Duration.ofDays(1)),
+          true);
     }).collect(Collectors.toList()));
     return badges;
+  }
+  
+  private Badge newBadge(
+      final boolean isSelf,
+      final String id,
+      final String category,
+      final URL imageUrl,
+      final String name,
+      final String description,
+      final Instant expiration,
+      final boolean visible) {
+    if (isSelf) {
+      return new SelfBadge(id, category, imageUrl, name, description, expiration, visible);
+    } else {
+      return new Badge(id, category, imageUrl, name, description);
+    }
   }
 }

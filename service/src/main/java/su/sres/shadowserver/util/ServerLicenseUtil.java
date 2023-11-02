@@ -21,17 +21,16 @@ import java.util.Map;
 
 import javax.annotation.Nullable;
 
-import org.jdbi.v3.core.Jdbi;
-
 import io.dropwizard.jetty.HttpsConnectorFactory;
 import io.dropwizard.server.DefaultServerFactory;
 import javax0.license3j.Feature;
 import javax0.license3j.License;
 import javax0.license3j.io.LicenseReader;
+import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
+import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
 import su.sres.shadowserver.WhisperServerConfiguration;
-import su.sres.shadowserver.configuration.CircuitBreakerConfiguration;
-import su.sres.shadowserver.storage.FaultTolerantDatabase;
-import su.sres.shadowserver.storage.mappers.AccountRowMapper;
+import su.sres.shadowserver.configuration.AccountsScyllaDbConfiguration;
+import su.sres.shadowserver.configuration.ScyllaDbConfiguration;
 
 public class ServerLicenseUtil {
   
@@ -77,24 +76,15 @@ public class ServerLicenseUtil {
       (byte) 0x01
   };
 
-  public static Pair<LicenseStatus, Pair<Integer, Integer>> validate(WhisperServerConfiguration config, Jdbi accountJdbi) throws NumberFormatException, KeyStoreException, CertificateException {
+  public static Pair<LicenseStatus, Pair<Integer, Integer>> validate(WhisperServerConfiguration config) throws NumberFormatException, KeyStoreException, CertificateException {
 
     DefaultServerFactory sf = (DefaultServerFactory) config.getServerFactory();
     HttpsConnectorFactory cf = (HttpsConnectorFactory) sf.getApplicationConnectors().get(0);
     String keystore = cf.getKeyStorePath();
     String password = cf.getKeyStorePassword();
-
+    
     String filepath = config.getLocalParametersConfiguration().getLicensePath();
-    CircuitBreakerConfiguration accountsCB = config.getAccountsDatabaseConfiguration().getCircuitBreakerConfiguration();
-
-    return checkValidity(filepath, keystore, password, accountJdbi, accountsCB);
-  }
-
-  // this should be skipped if the number of users is less than or equal to the
-  // free limit
-  public static Pair<LicenseStatus, Pair<Integer, Integer>> checkValidity(String filepath, String keystore, String password, Jdbi accountJdbi, CircuitBreakerConfiguration config) throws NumberFormatException, KeyStoreException, CertificateException {
-
-    int actualUsers = actualUsers(accountJdbi, config);
+    int actualUsers = actualUsers(config);
 
     try (LicenseReader reader = new LicenseReader(filepath + "/" + Constants.serverLicenseFilename)) {
       License license = reader.read();
@@ -133,33 +123,28 @@ public class ServerLicenseUtil {
         return new Pair<LicenseStatus, Pair<Integer, Integer>>(LicenseStatus.OK, new Pair<Integer, Integer>(3, actualUsers));
       } else
         return new Pair<LicenseStatus, Pair<Integer, Integer>>(LicenseStatus.ABSENT, new Pair<Integer, Integer>(-1, actualUsers));
-    }
-
+    }    
   }  
 
-  private static int actualUsers(Jdbi accountJdbi, CircuitBreakerConfiguration config) {
-
-    final FaultTolerantDatabase database = new FaultTolerantDatabase("accounts_database_calc_users", accountJdbi, config);
-    database.getDatabase().registerRowMapper(new AccountRowMapper());
-
-    int activeUsers = database.with(jdbi -> jdbi.withHandle(handle -> {
-
-      return handle.createQuery("SELECT COUNT(id) FROM accounts")
-          .mapTo(Integer.class)
-          .first();
-
-    }));
-
-    int pendingUsers = database.with(jdbi -> jdbi.withHandle(handle -> {
-
-      return handle.createQuery("SELECT COUNT(id) FROM pending_accounts")
-          .mapTo(Integer.class)
-          .first();
-
-    }));
+  private static int actualUsers(WhisperServerConfiguration config) {
+    
+    AccountsScyllaDbConfiguration scyllaAccountsConfig = config.getAccountsScyllaDbConfiguration();
+    ScyllaDbConfiguration scyllaPendingAccountsConfig = config.getPendingAccountsScyllaDbConfiguration();
+    DynamoDbClient accountsScyllaDbClient = ScyllaDbFromConfig.client(scyllaAccountsConfig);
+    DynamoDbClient pendingAccountsScyllaDbClient = ScyllaDbFromConfig.client(scyllaPendingAccountsConfig);
+    String accountsTableName = config.getAccountsScyllaDbConfiguration().getTableName();
+    String pendingAccountsTableName = config.getPendingAccountsScyllaDbConfiguration().getTableName();
+        
+    final ScanRequest.Builder accountsScanRequestBuilder = ScanRequest.builder();
+    final ScanRequest.Builder pendingAccountsScanRequestBuilder = ScanRequest.builder();
+    
+    accountsScanRequestBuilder.tableName(accountsTableName);
+    pendingAccountsScanRequestBuilder.tableName(pendingAccountsTableName);  
+    
+    int activeUsers = (int) accountsScyllaDbClient.scanPaginator(accountsScanRequestBuilder.build()).items().stream().count();    
+    int pendingUsers = (int) pendingAccountsScyllaDbClient.scanPaginator(pendingAccountsScanRequestBuilder.build()).items().stream().count();    
 
     return (activeUsers + pendingUsers);
-
   }
 
   public static boolean featuresOK(License license) {

@@ -26,6 +26,7 @@ import software.amazon.awssdk.services.dynamodb.model.DeleteItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.GetItemResponse;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
 
 import static com.codahale.metrics.MetricRegistry.name;
 
@@ -66,7 +67,8 @@ public class VerificationCodeStore {
                 ATTR_TTL, AttributeValues.fromLong(getExpirationTimestamp(verificationCode, lifetime))))
             .build());
       } catch (final JsonProcessingException e) {
-        // This should never happen when writing directly to a string except in cases of serious misconfiguration, which
+        // This should never happen when writing directly to a string except in cases of
+        // serious misconfiguration, which
         // would be caught by tests.
         throw new AssertionError(e);
       }

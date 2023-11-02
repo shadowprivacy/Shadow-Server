@@ -16,6 +16,8 @@ import javax.validation.constraints.NotEmpty;
 import javax.validation.constraints.NotNull;
 
 public class BadgeConfiguration {
+  public static final String CATEGORY_TESTING = "testing";
+  
   private final String id;
   private final URL imageUrl;
   private final String category;
@@ -44,5 +46,9 @@ public class BadgeConfiguration {
   @NotEmpty
   public String getCategory() {
     return category;
+  }
+  
+  public boolean isTestBadge() {
+    return CATEGORY_TESTING.equals(category);
   }
 }

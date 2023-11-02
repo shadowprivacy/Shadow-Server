@@ -72,7 +72,15 @@ public class AbstractScyllaDbStore {
         .limit(max)
         .collect(Collectors.toList());
   }
+  
+  protected List<Map<String, AttributeValue>> scan(ScanRequest scanRequest) {
 
+    return db().scanPaginator(scanRequest)
+        .items()
+        .stream()        
+        .collect(Collectors.toList());
+  }
+  
   static <T> void writeInBatches(final Iterable<T> items, final Consumer<List<T>> action) {
     final List<T> batch = new ArrayList<>(DYNAMO_DB_MAX_BATCH_SIZE);
 

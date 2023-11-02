@@ -1,249 +1,347 @@
 /*
- * Original software: Copyright 2013-2020 Signal Messenger, LLC
- * Modified software: Copyright 2019-2022 Anton Alipov, sole trader
+ * Copyright 2013-2021 Signal Messenger, LLC
  * SPDX-License-Identifier: AGPL-3.0-only
  */
+
 package su.sres.shadowserver.storage;
 
-import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.SharedMetricRegistries;
-import com.codahale.metrics.Timer;
-import com.codahale.metrics.Timer.Context;
+import static com.codahale.metrics.MetricRegistry.name;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.annotations.VisibleForTesting;
 
-import su.sres.shadowserver.util.SystemMapper;
-import su.sres.shadowserver.storage.mappers.AccountRowMapper;
-import su.sres.shadowserver.util.Constants;
+import io.micrometer.core.instrument.Metrics;
+import io.micrometer.core.instrument.Timer;
+import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
+import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
+import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
+import software.amazon.awssdk.services.dynamodb.model.DeleteItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.GetItemResponse;
+import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.ReturnValue;
+import software.amazon.awssdk.services.dynamodb.model.ReturnValuesOnConditionCheckFailure;
+import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
+import software.amazon.awssdk.services.dynamodb.model.TransactionConflictException;
+import software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.UpdateItemResponse;
 
-import org.jdbi.v3.core.transaction.TransactionIsolationLevel;
-
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import su.sres.shadowserver.util.AttributeValues;
+import su.sres.shadowserver.util.SystemMapper;
+import su.sres.shadowserver.util.UUIDUtil;
 
-import static com.codahale.metrics.MetricRegistry.name;
+public class Accounts extends AbstractScyllaDbStore {
 
-public class Accounts implements AccountStore {
+  // uuid, primary key
+  static final String KEY_ACCOUNT_UUID = "U";
+  // user login
+  static final String ATTR_ACCOUNT_USER_LOGIN = "P";
+  // account, serialized to JSON
+  static final String ATTR_ACCOUNT_DATA = "D";
 
-  private final Logger logger = LoggerFactory.getLogger(Accounts.class);
+  // internal version for optimistic locking
+  static final String ATTR_VERSION = "V";
+  static final String ATTR_ACCOUNT_VD = "VD";
 
-  public static final String ID = "id";
-  public static final String UID = "uuid";
-  public static final String USER_LOGIN = "number";
-  public static final String DATA = "data";
-  public static final String VERSION = "version";
-  public static final String DIR_VER = "directory_version";
-  public static final String PAR = "parameter";
-  public static final String PAR_VAL = "parameter_value";
+  static final String KEY_PARAMETER_NAME = "PN";
+  static final String ATTR_PARAMETER_VALUE = "PV";
+  static final String DIRECTORY_VERSION_PARAMETER_NAME = "directory_version";
 
-  private static final ObjectMapper mapper = SystemMapper.getMapper();
+  private final DynamoDbClient client;
+  
+  // this table stores userLogin to UUID pairs
+  private final String userLoginsTableName;
+  private final String accountsTableName;
+  private final String miscTableName;
+  
+  private final int scanPageSize;
+  
+  private static final Timer CREATE_TIMER = Metrics.timer(name(Accounts.class, "create"));
+  private static final Timer UPDATE_TIMER = Metrics.timer(name(Accounts.class, "update"));
+  private static final Timer GET_BY_USER_LOGIN_TIMER = Metrics.timer(name(Accounts.class, "getByUserLogin"));
+  private static final Timer GET_BY_UUID_TIMER = Metrics.timer(name(Accounts.class, "getByUuid"));
+  private static final Timer GET_ALL_FROM_START_TIMER = Metrics.timer(name(Accounts.class, "getAllFrom"));
+  private static final Timer GET_ALL_FROM_OFFSET_TIMER = Metrics.timer(name(Accounts.class, "getAllFromOffset"));
+  private static final Timer DELETE_TIMER = Metrics.timer(name(Accounts.class, "delete"));
+    
+  public Accounts(DynamoDbClient client, String accountsTableName, String userLoginsTableName, String miscTableName, final int scanPageSize) {
+    super(client);
 
-  private final MetricRegistry metricRegistry = SharedMetricRegistries.getOrCreate(Constants.METRICS_NAME);
-  private final Timer createTimer = metricRegistry.timer(name(Accounts.class, "create"));
-  private final Timer updateTimer = metricRegistry.timer(name(Accounts.class, "update"));
-  private final Timer getByUserLoginTimer = metricRegistry.timer(name(Accounts.class, "getByUserLogin"));
-  private final Timer getByUuidTimer = metricRegistry.timer(name(Accounts.class, "getByUuid"));
-  private final Timer getAllFromTimer = metricRegistry.timer(name(Accounts.class, "getAllFrom"));
-  private final Timer getAllFromOffsetTimer = metricRegistry.timer(name(Accounts.class, "getAllFromOffset"));
-  private final Timer deleteTimer = metricRegistry.timer(name(Accounts.class, "delete"));
-  private final Timer vacuumTimer = metricRegistry.timer(name(Accounts.class, "vacuum"));
-
-  // for DirectoryUpdater and directory restore
-  private final Timer getAllTimer = metricRegistry.timer(name(Accounts.class, "getAll"));
-
-  private final FaultTolerantDatabase database;
-
-  public Accounts(FaultTolerantDatabase database) {
-    this.database = database;
-    this.database.getDatabase().registerRowMapper(new AccountRowMapper());
+    this.client = client;
+    this.accountsTableName = accountsTableName;
+    this.userLoginsTableName = userLoginsTableName;
+    this.miscTableName = miscTableName;    
+    this.scanPageSize = scanPageSize;
   }
-
-  @Override
+  
   public boolean create(Account account, long directoryVersion) {
-    return database.with(jdbi -> jdbi.inTransaction(TransactionIsolationLevel.SERIALIZABLE, handle -> {
-      try (Timer.Context ignored = createTimer.time()) {
 
-        // insert the account into the database and return the uuid; if the number
-        // already exists, just update data; ultimately if the "old" uuid differs means
-        // that the account is not new, and the new random uuid is reset to the old one
+    return CREATE_TIMER.record(() -> {
 
-        // TODO: if directory holds more than just usernames in future we shall need to
-        // update the directory version as well.
-        final Map<String, Object> resultMap = handle.createQuery("INSERT INTO accounts (" + USER_LOGIN + ", " + UID + ", " + DATA + ", " + DIR_VER + ") VALUES (:number, :uuid, CAST(:data AS json), :directory_version) ON CONFLICT(number) DO UPDATE SET data = EXCLUDED.data, " + VERSION + " = accounts.version + 1 RETURNING uuid, version")
-            .bind("number", account.getUserLogin())
-            .bind("uuid", account.getUuid())
-            .bind("data", mapper.writeValueAsString(account))
-            .bind("directory_version", (directoryVersion))
-            .mapToMap()
-            .findOnly();
+      try {
+        PutItemRequest userLoginConstraintPut = buildPutWriteItemForUserLoginConstraint(account, account.getUuid());
 
-        handle.createUpdate("UPDATE miscellaneous SET " + PAR_VAL + " = :directory_version WHERE " + PAR + " = '" + DIR_VER + "'")
-            .bind("directory_version", directoryVersion)
-            .execute();
+        PutItemRequest accountPut = buildPutWriteItemForAccount(account, account.getUuid(), PutItemRequest.builder()
+            .conditionExpression("attribute_not_exists(#number) OR #number = :number")
+            .expressionAttributeNames(Map.of("#number", ATTR_ACCOUNT_USER_LOGIN))
+            .expressionAttributeValues(Map.of(":number", AttributeValues.fromString(account.getUserLogin()))));
 
-        final UUID uuid = (UUID) resultMap.get(UID);
-        final int version = (int) resultMap.get(VERSION);
+        PutItemRequest miscPut = buildPutWriteItemForMisc(directoryVersion);
 
-        boolean isNew;
-        isNew = uuid.equals(account.getUuid());
+        try {
+          client.putItem(accountPut);
+        } catch (ConditionalCheckFailedException e) {
+          throw new IllegalArgumentException("uuid present with different user login");
+        }
 
-        account.setUuid(uuid);
-        account.setVersion(version);
-        return isNew;
+        try {
+          client.putItem(userLoginConstraintPut);
+        } catch (ConditionalCheckFailedException e) {
 
-      } catch (JsonProcessingException e) {
-        throw new IllegalArgumentException(e);
-      }
-    }));
-  }
+          // if the user login is found with an uuid that differs that means that the
+          // account is not new, and the new uuid is reset to the old one
 
-  @Override
-  public void update(Account account) throws ContestedOptimisticLockException {
-    database.use(jdbi -> jdbi.useHandle(handle -> {
-      try (Timer.Context ignored = updateTimer.time()) {
-        final int newVersion = account.getVersion() + 1;
-        int rowsModified = handle.createUpdate("UPDATE accounts SET " + DATA + " = CAST(:data AS json), " + VERSION + " = :newVersion WHERE " + UID + " = :uuid AND " + VERSION + " = :version")
-            .bind("uuid", account.getUuid())
-            .bind("data", mapper.writeValueAsString(account))
-            .bind("version", account.getVersion())
-            .bind("newVersion", newVersion)
-            .execute();
+          // TODO: if directory holds more than just usernames in future we shall need to
+          // update the directory version as well.
+          // Meanwhile the account is updated without incrementing the directory version
 
-        if (rowsModified == 0) {
+          Optional<Account> exAcc = get(account.getUserLogin());
+          UUID uuid = exAcc.get().getUuid();
+          account.setUuid(uuid);
+
+          final int version = exAcc.get().getVersion();
+          account.setVersion(version);
+
+          update(account);
+
+          return false;
+
+        } catch (TransactionConflictException e) {
+       // this should only happen if two clients manage to make concurrent create() calls
           throw new ContestedOptimisticLockException();
         }
 
-        account.setVersion(newVersion);
+        client.putItem(miscPut);
 
       } catch (JsonProcessingException e) {
         throw new IllegalArgumentException(e);
       }
-    }));
+
+      return true;
+    });
   }
 
-  /*
-   * public void update(Account account, boolean isRemoval, long directoryVersion)
-   * { database.use(jdbi -> jdbi.useHandle(handle -> { try (Timer.Context ignored
-   * = updateTimer.time()) { handle.createUpdate("UPDATE accounts SET " + DATA +
-   * " = CAST(:data AS json) WHERE " + UID + " = :uuid") .bind("uuid",
-   * account.getUuid()) .bind("data", mapper.writeValueAsString(account))
-   * .execute();
-   * 
-   * // TODO: currently we increment directory version only on removal; if
-   * directory // holds more than just usernames in future, will need to increment
-   * on any // update
-   * 
-   * // always false in the current setup, can be removed // if (isRemoval) { //
-   * handle.createUpdate("UPDATE accounts SET " + DIR_VER +
-   * " = :directory_version WHERE " + UID + " = :uuid") //
-   * .bind("directory_version", directoryVersion) // .bind("uuid",
-   * account.getUuid()) // .execute(); // }
-   * 
-   * } catch (JsonProcessingException e) { throw new IllegalArgumentException(e);
-   * } })); }
-   */
+  private PutItemRequest buildPutWriteItemForAccount(Account account, UUID uuid, PutItemRequest.Builder putBuilder) throws JsonProcessingException {
+    return putBuilder
+        .tableName(accountsTableName)
+        .item(Map.of(
+            KEY_ACCOUNT_UUID, AttributeValues.fromUUID(uuid),
+            ATTR_ACCOUNT_USER_LOGIN, AttributeValues.fromString(account.getUserLogin()),
+            ATTR_ACCOUNT_VD, AttributeValues.fromString("default"),
+            ATTR_ACCOUNT_DATA, AttributeValues.fromByteArray(SystemMapper.getMapper().writeValueAsBytes(account)),
+            ATTR_VERSION, AttributeValues.fromInt(account.getVersion())))
+        .build();
+  }
 
-  @Override
+  private PutItemRequest buildPutWriteItemForUserLoginConstraint(Account account, UUID uuid) {
+    return PutItemRequest.builder()
+        .tableName(userLoginsTableName)
+        .item(Map.of(
+            ATTR_ACCOUNT_USER_LOGIN, AttributeValues.fromString(account.getUserLogin()),
+            KEY_ACCOUNT_UUID, AttributeValues.fromUUID(uuid)))
+        .conditionExpression(
+            "attribute_not_exists(#number) OR (attribute_exists(#number) AND #uuid = :uuid)")
+        .expressionAttributeNames(
+            Map.of("#uuid", KEY_ACCOUNT_UUID,
+                "#number", ATTR_ACCOUNT_USER_LOGIN))
+        .expressionAttributeValues(
+            Map.of(":uuid", AttributeValues.fromUUID(uuid)))
+        .returnValuesOnConditionCheckFailure(ReturnValuesOnConditionCheckFailure.ALL_OLD)
+        .build();
+  }
+
+  private PutItemRequest buildPutWriteItemForMisc(long directoryVersion) {
+    return PutItemRequest.builder()
+        .tableName(miscTableName)
+        .item(Map.of(
+            KEY_PARAMETER_NAME, AttributeValues.fromString(DIRECTORY_VERSION_PARAMETER_NAME),
+            ATTR_PARAMETER_VALUE, AttributeValues.fromString(String.valueOf(directoryVersion))))
+        .build();
+  }
+
+  // TODO: VD change  
+  public void update(Account account) throws ContestedOptimisticLockException {
+    UPDATE_TIMER.record(() -> {
+      UpdateItemRequest updateItemRequest;
+      try {
+        updateItemRequest = UpdateItemRequest.builder()
+            .tableName(accountsTableName)
+            .key(Map.of(KEY_ACCOUNT_UUID, AttributeValues.fromUUID(account.getUuid())))
+            .updateExpression("SET #data = :data ADD #version :version_increment")
+            .conditionExpression("attribute_exists(#number) AND #version = :version")
+            .expressionAttributeNames(Map.of("#number", ATTR_ACCOUNT_USER_LOGIN,
+                "#data", ATTR_ACCOUNT_DATA,
+                "#version", ATTR_VERSION))
+            .expressionAttributeValues(Map.of(
+                ":data", AttributeValues.fromByteArray(SystemMapper.getMapper().writeValueAsBytes(account)),
+                ":version", AttributeValues.fromInt(account.getVersion()),
+                ":version_increment", AttributeValues.fromInt(1)))
+            .returnValues(ReturnValue.UPDATED_NEW)
+            .build();
+
+      } catch (JsonProcessingException e) {
+        throw new IllegalArgumentException(e);
+      }
+
+      try {
+        UpdateItemResponse response = client.updateItem(updateItemRequest);
+
+        account.setVersion(AttributeValues.getInt(response.attributes(), "V", account.getVersion() + 1));
+      } catch (final TransactionConflictException e) {
+
+        throw new ContestedOptimisticLockException();
+
+      } catch (final ConditionalCheckFailedException e) {
+
+        // the exception doesn’t give details about which condition failed,
+        // but we can infer it was an optimistic locking failure if the UUID is known
+        throw get(account.getUuid()).isPresent() ? new ContestedOptimisticLockException() : e;
+      }
+    });
+  }
+  
   public Optional<Account> get(String userLogin) {
-    return database.with(jdbi -> jdbi.withHandle(handle -> {
-      try (Timer.Context ignored = getByUserLoginTimer.time()) {
-        return handle.createQuery("SELECT * FROM accounts WHERE " + USER_LOGIN + " = :number")
-            .bind("number", userLogin)
-            .mapTo(Account.class)
-            .findFirst();
-      }
-    }));
+
+    return GET_BY_USER_LOGIN_TIMER.record(() -> {
+
+      final GetItemResponse response = client.getItem(GetItemRequest.builder()
+          .tableName(userLoginsTableName)
+          .key(Map.of(ATTR_ACCOUNT_USER_LOGIN, AttributeValues.fromString(userLogin)))
+          .build());
+
+      return Optional.ofNullable(response.item())
+          .map(item -> item.get(KEY_ACCOUNT_UUID))
+          .map(uuid -> accountByUuid(uuid))
+          .map(Accounts::fromItem);
+    });
   }
 
-  @Override
+  private Map<String, AttributeValue> accountByUuid(AttributeValue uuid) {
+    GetItemResponse r = client.getItem(GetItemRequest.builder()
+        .tableName(accountsTableName)
+        .key(Map.of(KEY_ACCOUNT_UUID, uuid))
+        .consistentRead(true)
+        .build());
+    return r.item().isEmpty() ? null : r.item();
+  }
+  
   public Optional<Account> get(UUID uuid) {
-    return database.with(jdbi -> jdbi.withHandle(handle -> {
-      try (Timer.Context ignored = getByUuidTimer.time()) {
-        return handle.createQuery("SELECT * FROM accounts WHERE " + UID + " = :uuid")
-            .bind("uuid", uuid)
-            .mapTo(Account.class)
-            .findFirst();
-      }
-    }));
+    return GET_BY_UUID_TIMER.record(() -> Optional.ofNullable(accountByUuid(AttributeValues.fromUUID(uuid)))
+        .map(Accounts::fromItem));
+  }
+ 
+  public AccountCrawlChunk getAllFrom(final UUID from, final int maxCount) {
+    final ScanRequest.Builder scanRequestBuilder = ScanRequest.builder()
+        .limit(scanPageSize)
+        .exclusiveStartKey(Map.of(KEY_ACCOUNT_UUID, AttributeValues.fromUUID(from)));
+
+    return scanForChunk(scanRequestBuilder, maxCount, GET_ALL_FROM_OFFSET_TIMER);
   }
 
-  public AccountCrawlChunk getAllFrom(UUID from, int length) {
-    final List<Account> accounts = database.with(jdbi -> jdbi.withHandle(handle -> {
-      try (Context ignored = getAllFromOffsetTimer.time()) {
-        return handle.createQuery("SELECT * FROM accounts WHERE " + UID + " > :from ORDER BY " + UID + " LIMIT :limit")
-            .bind("from", from)
-            .bind("limit", length)
-            .mapTo(Account.class)
-            .list();
-      }
-    }));
-    return buildChunkForAccounts(accounts);
+  public AccountCrawlChunk getAllFromStart(final int maxCount) {
+    final ScanRequest.Builder scanRequestBuilder = ScanRequest.builder()
+        .limit(scanPageSize);
+
+    return scanForChunk(scanRequestBuilder, maxCount, GET_ALL_FROM_START_TIMER);
   }
 
-  public AccountCrawlChunk getAllFrom(int length) {
-    final List<Account> accounts = database.with(jdbi -> jdbi.withHandle(handle -> {
-      try (Timer.Context ignored = getAllFromTimer.time()) {
-        return handle.createQuery("SELECT * FROM accounts ORDER BY " + UID + " LIMIT :limit")
-            .bind("limit", length)
-            .mapTo(Account.class)
-            .list();
-      }
-    }));
+  private AccountCrawlChunk scanForChunk(final ScanRequest.Builder scanRequestBuilder, final int maxCount, final Timer timer) {
 
-    return buildChunkForAccounts(accounts);
+    scanRequestBuilder.tableName(accountsTableName);
+
+    final List<Account> accounts = timer.record(() -> scan(scanRequestBuilder.build(), maxCount)
+        .stream()
+        .map(Accounts::fromItem)
+        .collect(Collectors.toList()));
+
+    return new AccountCrawlChunk(accounts, accounts.size() > 0 ? accounts.get(accounts.size() - 1).getUuid() : null);
   }
+  
+  public void delete(UUID uuid, long directoryVersion) {
+    DELETE_TIMER.record(() -> {
+      Optional<Account> maybeAccount = get(uuid);
 
-  // this is used by directory restore and DirectoryUpdater
-  public List<Account> getAll(int offset, int length) {
-    return database.with(jdbi -> jdbi.withHandle(handle -> {
-      try (Timer.Context ignored = getAllTimer.time()) {
+      maybeAccount.ifPresent(account -> {
 
-        return handle.createQuery("SELECT * FROM accounts OFFSET :offset LIMIT :limit").bind("offset", offset)
-            .bind("limit", length)
-            .mapTo(Account.class)
-            .list();
-      }
-    }));
+        DeleteItemRequest userLoginDelete = DeleteItemRequest.builder()
+            .tableName(userLoginsTableName)
+            .key(Map.of(ATTR_ACCOUNT_USER_LOGIN, AttributeValues.fromString(account.getUserLogin())))
+            .build();
+
+        DeleteItemRequest accountDelete = DeleteItemRequest.builder()
+            .tableName(accountsTableName)
+            .key(Map.of(KEY_ACCOUNT_UUID, AttributeValues.fromUUID(uuid)))
+            .build();
+
+        client.deleteItem(userLoginDelete);
+        client.deleteItem(accountDelete);
+        
+          PutItemRequest miscPut = buildPutWriteItemForMisc(directoryVersion);
+          client.putItem(miscPut);
+        
+      });
+    });
+  }  
+
+  // TODO: extract VD
+  @VisibleForTesting
+  static Account fromItem(Map<String, AttributeValue> item) {
+    if (!item.containsKey(ATTR_ACCOUNT_DATA) ||
+        !item.containsKey(ATTR_ACCOUNT_USER_LOGIN) ||
+        !item.containsKey(ATTR_ACCOUNT_VD) ||
+        !item.containsKey(KEY_ACCOUNT_UUID)) {
+      throw new RuntimeException("item missing values");
+    }
+    try {
+      Account account = SystemMapper.getMapper().readValue(item.get(ATTR_ACCOUNT_DATA).b().asByteArray(), Account.class);
+      account.setUserLogin(item.get(ATTR_ACCOUNT_USER_LOGIN).s());
+      // account.setVD(item.get(ATTR_ACCOUNT_VD).s());
+      account.setUuid(UUIDUtil.fromByteBuffer(item.get(KEY_ACCOUNT_UUID).b().asByteBuffer()));
+      account.setVersion(Integer.parseInt(item.get(ATTR_VERSION).n()));
+
+      return account;
+
+    } catch (IOException e) {
+      throw new RuntimeException("Could not read stored account data", e);
+    }
   }
+  
+  // for simplicity, this one gets all accounts in one pass for directories of practical size
+  protected List<Account> getAll(final ScanRequest.Builder scanRequestBuilder) {
 
-  private AccountCrawlChunk buildChunkForAccounts(final List<Account> accounts) {
-    return new AccountCrawlChunk(accounts, accounts.isEmpty() ? null : accounts.get(accounts.size() - 1).getUuid());
+    scanRequestBuilder.tableName(accountsTableName);
+
+    return scan(scanRequestBuilder.build())
+        .stream()
+        .map(Accounts::fromItem)
+        .collect(Collectors.toList());    
   }
+  
+  public Long restoreDirectoryVersion() {    
 
-  @Override
-  public void delete(final UUID uuid, long directoryVersion) {
-    database.use(jdbi -> jdbi.useHandle(handle -> {
-      try (Timer.Context ignored = deleteTimer.time()) {
-        handle.createUpdate("DELETE FROM accounts WHERE " + UID + " = :uuid")
-            .bind("uuid", uuid)
-            .execute();
+      final GetItemResponse response = client.getItem(GetItemRequest.builder()
+          .tableName(miscTableName)
+          .key(Map.of(KEY_PARAMETER_NAME, AttributeValues.fromString(DIRECTORY_VERSION_PARAMETER_NAME)))
+          .build());
 
-        handle.createUpdate("UPDATE miscellaneous SET " + PAR_VAL + " = :directory_version WHERE " + PAR + " = '" + DIR_VER + "'")
-            .bind("directory_version", directoryVersion)
-            .execute();
-      }
-    }));
-  }
-
-  public void vacuum() {
-    database.use(jdbi -> jdbi.useHandle(handle -> {
-      try (Timer.Context ignored = vacuumTimer.time()) {
-        handle.execute("VACUUM accounts");
-      }
-    }));
-  }
-
-  // TODO: migrate to Scylla via AccountsScyllaDb
-  public Long restoreDirectoryVersion() {
-    return database.with(jdbi -> jdbi.withHandle(handle -> {
-      return handle.createQuery("SELECT " + PAR_VAL + " FROM miscellaneous WHERE " + PAR + " = '" + DIR_VER + "'")
-          .mapTo(Long.class)
-          .findOnly();
-    }));
+      return AttributeValues.getLong(response.item(), KEY_PARAMETER_NAME, 0);
+    
   }
 }

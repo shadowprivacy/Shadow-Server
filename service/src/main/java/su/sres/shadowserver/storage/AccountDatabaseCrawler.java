@@ -12,14 +12,12 @@ import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import su.sres.shadowserver.configuration.dynamic.DynamicAccountsScyllaDbMigrationConfiguration;
 import su.sres.shadowserver.util.Constants;
 import su.sres.shadowserver.util.Util;
 
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.codahale.metrics.MetricRegistry.name;
@@ -43,29 +41,21 @@ public class AccountDatabaseCrawler implements Managed, Runnable {
   private final String workerId;
   private final AccountDatabaseCrawlerCache cache;
   private final List<AccountDatabaseCrawlerListener> listeners;
-  private final ExecutorService chunkPreReadExecutorService;
-
+ 
   private AtomicBoolean running = new AtomicBoolean(false);
-  private boolean finished;
-  
-  // temporary to control behavior during the Postgres → Dynamo transition
-  private boolean dedicatedDynamoMigrationCrawler;
-
-  private DynamicAccountsScyllaDbMigrationConfiguration dynConfig = new DynamicAccountsScyllaDbMigrationConfiguration();
+  private boolean finished;  
 
   public AccountDatabaseCrawler(AccountsManager accounts,
       AccountDatabaseCrawlerCache cache,
       List<AccountDatabaseCrawlerListener> listeners,
       int chunkSize,
-      long chunkIntervalMs,
-      ExecutorService chunkPreReadExecutorService) {
+      long chunkIntervalMs) {
     this.accounts = accounts;
     this.chunkSize = chunkSize;
     this.chunkIntervalMs = chunkIntervalMs;
     this.workerId = UUID.randomUUID().toString();
     this.cache = cache;
-    this.listeners = listeners;
-    this.chunkPreReadExecutorService = chunkPreReadExecutorService;
+    this.listeners = listeners;    
   }
 
   @Override
@@ -115,7 +105,7 @@ public class AccountDatabaseCrawler implements Managed, Runnable {
         final long endTimeMs = System.currentTimeMillis();
         final long sleepIntervalMs = chunkIntervalMs - (endTimeMs - startTimeMs);
         if (sleepIntervalMs > 0) {
-          logger.info("Sleeping {}ms", sleepIntervalMs);
+          logger.debug("Sleeping {}ms", sleepIntervalMs);
           sleepWhileRunning(sleepIntervalMs);
         }
       } finally {
@@ -127,89 +117,57 @@ public class AccountDatabaseCrawler implements Managed, Runnable {
 
   private void processChunk() {
     try (Timer.Context timer = processChunkTimer.time()) {
-
-      final boolean useScylla = !dedicatedDynamoMigrationCrawler && dynConfig.isScyllaCrawlerEnabled();
-
-      final Optional<UUID> fromUuid = getLastUuid(useScylla);
+      
+      final Optional<UUID> fromUuid = getLastUuid();
 
       if (fromUuid.isEmpty()) {
         logger.info("Started crawl");
         listeners.forEach(AccountDatabaseCrawlerListener::onCrawlStart);
       }
 
-      final AccountCrawlChunk chunkAccounts = readChunk(fromUuid, chunkSize, useScylla);
-      primeDatabaseForNextChunkAsync(chunkAccounts.getLastUuid(), chunkSize, useScylla);
-
+      final AccountCrawlChunk chunkAccounts = readChunk(fromUuid, chunkSize);
+      
       if (chunkAccounts.getAccounts().isEmpty()) {
         logger.info("Finished crawl");
         listeners.forEach(listener -> listener.onCrawlEnd(fromUuid));
-        cacheLastUuid(Optional.empty(), useScylla);
+        cacheLastUuid(Optional.empty());
         cache.setAccelerated(false);
       } else {
-        logger.info("Processing chunk");
+        logger.debug("Processing chunk");
         try {
           for (AccountDatabaseCrawlerListener listener : listeners) {
             listener.timeAndProcessCrawlChunk(fromUuid, chunkAccounts.getAccounts());
           }
-          cacheLastUuid(chunkAccounts.getLastUuid(), useScylla);
+          cacheLastUuid(chunkAccounts.getLastUuid());
         } catch (AccountDatabaseCrawlerRestartException e) {
-          cacheLastUuid(Optional.empty(), useScylla);
+          cacheLastUuid(Optional.empty());
           cache.setAccelerated(false);
         }
       }
     }
   }
   
-  /**
-   * This is an optimization based on the observation that cold reads of chunks are slow, but subsequent reads of the
-   * same chunk (within a few minutes) are fast. We can’t easily store the actual result data, since the next chunk
-   * might be processed elsewhere, but the time savings are still substantial.
-   */
-  private void primeDatabaseForNextChunkAsync(Optional<UUID> fromUuid, int chunkSize, boolean useScylla) {
-    if (dynConfig.isCrawlerPreReadNextChunkEnabled()) {
-      if (!useScylla && fromUuid.isPresent()) {
-        chunkPreReadExecutorService.submit(() -> readChunk(fromUuid, chunkSize, false, preReadChunkTimer));
-      }
-    }
+  private AccountCrawlChunk readChunk(Optional<UUID> fromUuid, int chunkSize) {
+    return readChunk(fromUuid, chunkSize, readChunkTimer);
   }
 
-  private AccountCrawlChunk readChunk(Optional<UUID> fromUuid, int chunkSize, boolean useScylla) {
-    return readChunk(fromUuid, chunkSize, useScylla, readChunkTimer);
-  }
-
-  private AccountCrawlChunk readChunk(Optional<UUID> fromUuid, int chunkSize, boolean useScylla, Timer readTimer) {
+  private AccountCrawlChunk readChunk(Optional<UUID> fromUuid, int chunkSize, Timer readTimer) {
     try (Timer.Context timer = readTimer.time()) {
 
       if (fromUuid.isPresent()) {
-        return useScylla
-            ? accounts.getAllFromScylla(fromUuid.get(), chunkSize)
-            : accounts.getAllFrom(fromUuid.get(), chunkSize);
+        return accounts.getAllFromScylla(fromUuid.get(), chunkSize);
       }
 
-      return useScylla
-          ? accounts.getAllFromScylla(chunkSize)
-          : accounts.getAllFrom(chunkSize);
+      return accounts.getAllFromScylla(chunkSize);
     }
   }
 
-  private Optional<UUID> getLastUuid(final boolean useScylla) {
-    if (useScylla) {
-      return cache.getLastUuidScylla();
-    } else {
-      return cache.getLastUuid();
-    }
-  }
-
-  private void cacheLastUuid(final Optional<UUID> lastUuid, final boolean useScylla) {
-    if (useScylla) {
-      cache.setLastUuidScylla(lastUuid);
-    } else {
-      cache.setLastUuid(lastUuid);
-    }
+  private Optional<UUID> getLastUuid() {
+    return cache.getLastUuidScylla();
   }
   
-  public void setDedicatedDynamoMigrationCrawler(final boolean dedicatedDynamoMigrationCrawler) {
-    this.dedicatedDynamoMigrationCrawler = dedicatedDynamoMigrationCrawler;
+  private void cacheLastUuid(final Optional<UUID> lastUuid) {
+    cache.setLastUuidScylla(lastUuid);
   }
 
   private synchronized void sleepWhileRunning(long delayMs) {

@@ -67,16 +67,11 @@ public class CreateAccountsDbCommand extends EnvironmentCommand<WhisperServerCon
     environment.getObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
     AccountsScyllaDbConfiguration scyllaAccountsConfig = config.getAccountsScyllaDbConfiguration();
-
-    ScyllaDbConfiguration scyllaMigrationDeletedAccountsConfig = config.getMigrationDeletedAccountsScyllaDbConfiguration();
-    ScyllaDbConfiguration scyllaMigrationRetryAccountsConfig = config.getMigrationRetryAccountsScyllaDbConfiguration();
-
+    
     String accTableName = scyllaAccountsConfig.getTableName();
     String userLoginTableName = scyllaAccountsConfig.getUserLoginTableName();
     String miscTableName = scyllaAccountsConfig.getMiscTableName();
-    String migDelTableName = scyllaMigrationDeletedAccountsConfig.getTableName();
-    String migRetrTableName = scyllaMigrationRetryAccountsConfig.getTableName();
-
+    
     DynamoDbClient accountsScyllaDb = ScyllaDbFromConfig.client(scyllaAccountsConfig);
 
     List<AttributeDefinition> attributeDefinitionsAccount = new ArrayList<AttributeDefinition>();
@@ -125,21 +120,7 @@ public class CreateAccountsDbCommand extends EnvironmentCommand<WhisperServerCon
         .keySchema(keySchemaMisc)
         .attributeDefinitions(attributeDefinitionsMisc)
         .billingMode("PAY_PER_REQUEST")
-        .build();
-
-    CreateTableRequest requestMigrationDeleted = CreateTableRequest.builder()
-        .tableName(migDelTableName)
-        .keySchema(keySchemaAccount)
-        .attributeDefinitions(attributeDefinitionsMigration)
-        .billingMode("PAY_PER_REQUEST")
-        .build();
-
-    CreateTableRequest requestMigrationRetry = CreateTableRequest.builder()
-        .tableName(migRetrTableName)
-        .keySchema(keySchemaAccount)
-        .attributeDefinitions(attributeDefinitionsMigration)
-        .billingMode("PAY_PER_REQUEST")
-        .build();
+        .build();   
 
     DynamoDbWaiter waiter = accountsScyllaDb.waiter();
 
@@ -182,21 +163,7 @@ public class CreateAccountsDbCommand extends EnvironmentCommand<WhisperServerCon
     
     accountsScyllaDb.putItem(req);    
 
-    logger.info("...Done");
-
-    logger.info("Creating the migration deleted table...");
-    accountsScyllaDb.createTable(requestMigrationDeleted);
-
-    waiterResponse = waiter.waitUntilTableExists(r -> r.tableName(migDelTableName));
-
-    log(waiterResponse);
-
-    logger.info("Creating the migration deleted table...");
-    accountsScyllaDb.createTable(requestMigrationRetry);
-
-    waiterResponse = waiter.waitUntilTableExists(r -> r.tableName(migRetrTableName));
-
-    log(waiterResponse);
+    logger.info("...Done");    
 
   }
 

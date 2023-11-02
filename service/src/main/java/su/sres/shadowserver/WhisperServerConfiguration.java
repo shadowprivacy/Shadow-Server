@@ -67,11 +67,6 @@ public class WhisperServerConfiguration extends Configuration {
   @NotNull
   @Valid
   @JsonProperty
-  private AccountDatabaseCrawlerConfiguration scyllaDbMigrationCrawler;
-
-  @NotNull
-  @Valid
-  @JsonProperty
   private RedisClusterConfiguration pushSchedulerCluster;
   
   @NotNull
@@ -103,22 +98,7 @@ public class WhisperServerConfiguration extends Configuration {
   @NotNull
   @JsonProperty
   private AccountsScyllaDbConfiguration accountsScyllaDb;
-  
-  @Valid
-  @NotNull
-  @JsonProperty
-  private ScyllaDbConfiguration migrationDeletedAccountsScyllaDb;
-  
-  @Valid
-  @NotNull
-  @JsonProperty
-  private ScyllaDbConfiguration migrationMismatchedAccountsScyllaDb;
-
-  @Valid
-  @NotNull
-  @JsonProperty
-  private ScyllaDbConfiguration migrationRetryAccountsScyllaDb;
-  
+      
   @Valid
   @NotNull
   @JsonProperty
@@ -301,11 +281,7 @@ public class WhisperServerConfiguration extends Configuration {
 
   public AccountDatabaseCrawlerConfiguration getAccountDatabaseCrawlerConfiguration() {
     return accountDatabaseCrawler;
-  }
-  
-  public AccountDatabaseCrawlerConfiguration getScyllaDbMigrationCrawlerConfiguration() {
-    return scyllaDbMigrationCrawler;
-  }
+  }  
 
   public MessageCacheConfiguration getMessageCacheConfiguration() {
     return messageCache;
@@ -341,19 +317,7 @@ public class WhisperServerConfiguration extends Configuration {
   
   public AccountsScyllaDbConfiguration getAccountsScyllaDbConfiguration() {
     return accountsScyllaDb;
-  }
-
-  public ScyllaDbConfiguration getMigrationDeletedAccountsScyllaDbConfiguration() {
-    return migrationDeletedAccountsScyllaDb;
-  }
-  
-  public ScyllaDbConfiguration getMigrationMismatchedAccountsScyllaDbConfiguration() {
-    return migrationMismatchedAccountsScyllaDb;
-  }
-
-  public ScyllaDbConfiguration getMigrationRetryAccountsScyllaDbConfiguration() {
-    return migrationRetryAccountsScyllaDb;
-  }
+  }  
   
   public ScyllaDbConfiguration getDeletedAccountsScyllaDbConfiguration() {
     return deletedAccountsScyllaDb;

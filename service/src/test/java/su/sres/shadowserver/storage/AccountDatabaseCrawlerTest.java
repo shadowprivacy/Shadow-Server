@@ -7,10 +7,7 @@
 package su.sres.shadowserver.storage;
 
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
-
-import su.sres.shadowserver.configuration.dynamic.DynamicAccountsScyllaDbMigrationConfiguration;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -41,18 +38,13 @@ class AccountDatabaseCrawlerTest {
   private final AccountDatabaseCrawlerCache cache = mock(AccountDatabaseCrawlerCache.class);
   private final ExecutorService chunkPreReadExecutorService = mock(ExecutorService.class);
 
-  private final AccountDatabaseCrawler crawler = new AccountDatabaseCrawler(accounts, cache, Arrays.asList(listener), CHUNK_SIZE, CHUNK_INTERVAL_MS, chunkPreReadExecutorService);
-  private DynamicAccountsScyllaDbMigrationConfiguration dynamicAccountsDynamoDbMigrationConfiguration = new DynamicAccountsScyllaDbMigrationConfiguration();
-
+  private final AccountDatabaseCrawler crawler = new AccountDatabaseCrawler(accounts, cache, Arrays.asList(listener), CHUNK_SIZE, CHUNK_INTERVAL_MS);
+ 
   @BeforeEach
   void setup() {
     when(account1.getUuid()).thenReturn(ACCOUNT1);
     when(account2.getUuid()).thenReturn(ACCOUNT2);
-
-    when(accounts.getAllFrom(anyInt())).thenReturn(new AccountCrawlChunk(Arrays.asList(account1, account2), ACCOUNT2));
-    when(accounts.getAllFrom(eq(ACCOUNT1), anyInt())).thenReturn(new AccountCrawlChunk(Arrays.asList(account2), ACCOUNT2));
-    when(accounts.getAllFrom(eq(ACCOUNT2), anyInt())).thenReturn(new AccountCrawlChunk(Collections.emptyList(), null));
-
+  
     when(accounts.getAllFromScylla(anyInt())).thenReturn(new AccountCrawlChunk(Arrays.asList(account1, account2), ACCOUNT2));
     when(accounts.getAllFromScylla(eq(ACCOUNT1), anyInt())).thenReturn(new AccountCrawlChunk(Arrays.asList(account2), ACCOUNT2));
     when(accounts.getAllFromScylla(eq(ACCOUNT2), anyInt())).thenReturn(new AccountCrawlChunk(Collections.emptyList(), null));
@@ -61,9 +53,8 @@ class AccountDatabaseCrawlerTest {
     when(cache.isAccelerated()).thenReturn(false);
   }
 
-  @ParameterizedTest
-  @ValueSource(booleans = { true })
-  void testCrawlStart(final boolean useScylla) throws AccountDatabaseCrawlerRestartException {
+  @Test
+  void testCrawlStart() throws AccountDatabaseCrawlerRestartException {
     when(cache.getLastUuid()).thenReturn(Optional.empty());
     when(cache.getLastUuidScylla()).thenReturn(Optional.empty());
 
@@ -71,23 +62,16 @@ class AccountDatabaseCrawlerTest {
     assertThat(accelerated).isFalse();
 
     verify(cache, times(1)).claimActiveWork(any(String.class), anyLong());
-    verify(cache, times(useScylla ? 0 : 1)).getLastUuid();
-    verify(cache, times(useScylla ? 1 : 0)).getLastUuidScylla();
-    verify(listener, times(1)).onCrawlStart();
-    verify(accounts, times(1)).getAllFrom(eq(CHUNK_SIZE));
-    verify(accounts, times(0)).getAllFrom(any(UUID.class), eq(CHUNK_SIZE));
-    if (useScylla) {
-      verify(accounts, times(1)).getAllFromScylla(eq(CHUNK_SIZE));
-      verify(accounts, times(0)).getAllFromScylla(any(UUID.class), eq(CHUNK_SIZE));
-    } else {
-      verify(accounts, times(1)).getAllFrom(eq(CHUNK_SIZE));
-      verify(accounts, times(0)).getAllFrom(any(UUID.class), eq(CHUNK_SIZE));
-    }
+    verify(cache, times(0)).getLastUuid();
+    verify(cache, times(1)).getLastUuidScylla();
+    verify(listener, times(1)).onCrawlStart();    
+    verify(accounts, times(1)).getAllFromScylla(eq(CHUNK_SIZE));
+    verify(accounts, times(0)).getAllFromScylla(any(UUID.class), eq(CHUNK_SIZE));
     verify(account1, times(0)).getUuid();
 
     verify(listener, times(1)).timeAndProcessCrawlChunk(eq(Optional.empty()), eq(Arrays.asList(account1, account2)));
-    verify(cache, times(useScylla ? 0 : 1)).setLastUuid(eq(Optional.of(ACCOUNT2)));
-    verify(cache, times(useScylla ? 1 : 0)).setLastUuidScylla(eq(Optional.of(ACCOUNT2)));
+    verify(cache, times(0)).setLastUuid(eq(Optional.of(ACCOUNT2)));
+    verify(cache, times(1)).setLastUuidScylla(eq(Optional.of(ACCOUNT2)));
     verify(cache, times(1)).isAccelerated();
     verify(cache, times(1)).releaseActiveWork(any(String.class));
 
@@ -98,10 +82,8 @@ class AccountDatabaseCrawlerTest {
     verifyNoMoreInteractions(cache);
   }
 
-  @ParameterizedTest
-  @ValueSource(booleans = { true })
-  void testCrawlChunk(final boolean useScylla) throws AccountDatabaseCrawlerRestartException {
-
+  @Test
+  void testCrawlChunk() throws AccountDatabaseCrawlerRestartException {
     when(cache.getLastUuid()).thenReturn(Optional.of(ACCOUNT1));
     when(cache.getLastUuidScylla()).thenReturn(Optional.of(ACCOUNT1));
 
@@ -109,18 +91,13 @@ class AccountDatabaseCrawlerTest {
     assertThat(accelerated).isFalse();
 
     verify(cache, times(1)).claimActiveWork(any(String.class), anyLong());
-    verify(cache, times(useScylla ? 0 : 1)).getLastUuid();
-    verify(cache, times(useScylla ? 1 : 0)).getLastUuidScylla();
-    if (useScylla) {
-      verify(accounts, times(0)).getAllFromScylla(eq(CHUNK_SIZE));
-      verify(accounts, times(1)).getAllFromScylla(eq(ACCOUNT1), eq(CHUNK_SIZE));
-    } else {
-      verify(accounts, times(0)).getAllFrom(eq(CHUNK_SIZE));
-      verify(accounts, times(1)).getAllFrom(eq(ACCOUNT1), eq(CHUNK_SIZE));
-    }
+    verify(cache, times(0)).getLastUuid();
+    verify(cache, times(1)).getLastUuidScylla();
+    verify(accounts, times(0)).getAllFromScylla(eq(CHUNK_SIZE));
+    verify(accounts, times(1)).getAllFromScylla(eq(ACCOUNT1), eq(CHUNK_SIZE));
     verify(listener, times(1)).timeAndProcessCrawlChunk(eq(Optional.of(ACCOUNT1)), eq(Arrays.asList(account2)));
-    verify(cache, times(useScylla ? 0 : 1)).setLastUuid(eq(Optional.of(ACCOUNT2)));
-    verify(cache, times(useScylla ? 1 : 0)).setLastUuidScylla(eq(Optional.of(ACCOUNT2)));
+    verify(cache, times(0)).setLastUuid(eq(Optional.of(ACCOUNT2)));
+    verify(cache, times(1)).setLastUuidScylla(eq(Optional.of(ACCOUNT2)));
     verify(cache, times(1)).isAccelerated();
     verify(cache, times(1)).releaseActiveWork(any(String.class));
 
@@ -132,45 +109,8 @@ class AccountDatabaseCrawlerTest {
     verifyNoMoreInteractions(cache);
   }
 
-  @ParameterizedTest
-  @ValueSource(booleans = {true, false})
-  void testCrawlChunk_useDynamoDedicatedMigrationCrawler(final boolean dedicatedMigrationCrawler) throws Exception {
-    crawler.setDedicatedDynamoMigrationCrawler(dedicatedMigrationCrawler);
-
-    when(dynamicAccountsDynamoDbMigrationConfiguration.isScyllaCrawlerEnabled()).thenReturn(true);
-    when(cache.getLastUuid()).thenReturn(Optional.of(ACCOUNT1));
-    when(cache.getLastUuidScylla()).thenReturn(Optional.of(ACCOUNT1));
-
-    boolean accelerated = crawler.doPeriodicWork();
-    assertThat(accelerated).isFalse();
-
-    verify(cache, times(1)).claimActiveWork(any(String.class), anyLong());
-    verify(cache, times(dedicatedMigrationCrawler ? 1 : 0)).getLastUuid();
-    verify(cache, times(dedicatedMigrationCrawler ? 0 : 1)).getLastUuidScylla();
-    if (dedicatedMigrationCrawler) {
-      verify(accounts, times(0)).getAllFrom(eq(CHUNK_SIZE));
-      verify(accounts, times(1)).getAllFrom(eq(ACCOUNT1), eq(CHUNK_SIZE));
-    } else {
-      verify(accounts, times(0)).getAllFromScylla(eq(CHUNK_SIZE));
-      verify(accounts, times(1)).getAllFromScylla(eq(ACCOUNT1), eq(CHUNK_SIZE));
-    }
-    verify(listener, times(1)).timeAndProcessCrawlChunk(eq(Optional.of(ACCOUNT1)), eq(Arrays.asList(account2)));
-    verify(cache, times(dedicatedMigrationCrawler ? 1 : 0)).setLastUuid(eq(Optional.of(ACCOUNT2)));
-    verify(cache, times(dedicatedMigrationCrawler ? 0 : 1)).setLastUuidScylla(eq(Optional.of(ACCOUNT2)));
-    verify(cache, times(1)).isAccelerated();
-    verify(cache, times(1)).releaseActiveWork(any(String.class));
-
-    verifyNoInteractions(account1);
-
-    verifyNoMoreInteractions(account2);
-    verifyNoMoreInteractions(accounts);
-    verifyNoMoreInteractions(listener);
-    verifyNoMoreInteractions(cache);
-  }
-
-  @ParameterizedTest
-  @ValueSource(booleans = { true })
-  void testCrawlChunkAccelerated(final boolean useScylla) throws AccountDatabaseCrawlerRestartException {
+  @Test
+  void testCrawlChunkAccelerated() throws AccountDatabaseCrawlerRestartException {
 
     when(cache.isAccelerated()).thenReturn(true);
     when(cache.getLastUuid()).thenReturn(Optional.of(ACCOUNT1));
@@ -180,22 +120,17 @@ class AccountDatabaseCrawlerTest {
     assertThat(accelerated).isTrue();
 
     verify(cache, times(1)).claimActiveWork(any(String.class), anyLong());
-    verify(cache, times(useScylla ? 0 : 1)).getLastUuid();
-    verify(cache, times(useScylla ? 1 : 0)).getLastUuidScylla();
-    if (useScylla) {
-      verify(accounts, times(0)).getAllFromScylla(eq(CHUNK_SIZE));
-      verify(accounts, times(1)).getAllFromScylla(eq(ACCOUNT1), eq(CHUNK_SIZE));
-    } else {
-      verify(accounts, times(0)).getAllFrom(eq(CHUNK_SIZE));
-      verify(accounts, times(1)).getAllFrom(eq(ACCOUNT1), eq(CHUNK_SIZE));
-    }
+    verify(cache, times(0)).getLastUuid();
+    verify(cache, times(1)).getLastUuidScylla();
+    verify(accounts, times(0)).getAllFromScylla(eq(CHUNK_SIZE));
+    verify(accounts, times(1)).getAllFromScylla(eq(ACCOUNT1), eq(CHUNK_SIZE));
     verify(listener, times(1)).timeAndProcessCrawlChunk(eq(Optional.of(ACCOUNT1)), eq(Arrays.asList(account2)));
-    verify(cache, times(useScylla ? 0 : 1)).setLastUuid(eq(Optional.of(ACCOUNT2)));
-    verify(cache, times(useScylla ? 1 : 0)).setLastUuidScylla(eq(Optional.of(ACCOUNT2)));
+    verify(cache, times(0)).setLastUuid(eq(Optional.of(ACCOUNT2)));
+    verify(cache, times(1)).setLastUuidScylla(eq(Optional.of(ACCOUNT2)));
     verify(cache, times(1)).isAccelerated();
     verify(cache, times(1)).releaseActiveWork(any(String.class));
 
-    verifyZeroInteractions(account1);
+    verifyNoInteractions(account1);
 
     verifyNoMoreInteractions(account2);
     verifyNoMoreInteractions(accounts);
@@ -203,9 +138,8 @@ class AccountDatabaseCrawlerTest {
     verifyNoMoreInteractions(cache);
   }
 
-  @ParameterizedTest
-  @ValueSource(booleans = { true })
-  void testCrawlChunkRestart(final boolean useScylla) throws AccountDatabaseCrawlerRestartException {
+  @Test
+  void testCrawlChunkRestart() throws AccountDatabaseCrawlerRestartException {
 
     when(cache.getLastUuid()).thenReturn(Optional.of(ACCOUNT1));
     when(cache.getLastUuidScylla()).thenReturn(Optional.of(ACCOUNT1));
@@ -215,24 +149,19 @@ class AccountDatabaseCrawlerTest {
     assertThat(accelerated).isFalse();
 
     verify(cache, times(1)).claimActiveWork(any(String.class), anyLong());
-    verify(cache, times(useScylla ? 0 : 1)).getLastUuid();
-    verify(cache, times(useScylla ? 1 : 0)).getLastUuidScylla();
-    if (useScylla) {
-      verify(accounts, times(0)).getAllFromScylla(eq(CHUNK_SIZE));
-      verify(accounts, times(1)).getAllFromScylla(eq(ACCOUNT1), eq(CHUNK_SIZE));
-    } else {
-      verify(accounts, times(0)).getAllFrom(eq(CHUNK_SIZE));
-      verify(accounts, times(1)).getAllFrom(eq(ACCOUNT1), eq(CHUNK_SIZE));
-    }
+    verify(cache, times(0)).getLastUuid();
+    verify(cache, times(1)).getLastUuidScylla();
+    verify(accounts, times(0)).getAllFromScylla(eq(CHUNK_SIZE));
+    verify(accounts, times(1)).getAllFromScylla(eq(ACCOUNT1), eq(CHUNK_SIZE));
     verify(account2, times(0)).getUserLogin();
     verify(listener, times(1)).timeAndProcessCrawlChunk(eq(Optional.of(ACCOUNT1)), eq(Arrays.asList(account2)));
-    verify(cache, times(useScylla ? 0 : 1)).setLastUuid(eq(Optional.empty()));
-    verify(cache, times(useScylla ? 1 : 0)).setLastUuidScylla(eq(Optional.empty()));
+    verify(cache, times(0)).setLastUuid(eq(Optional.empty()));
+    verify(cache, times(1)).setLastUuidScylla(eq(Optional.empty()));
     verify(cache, times(1)).setAccelerated(false);
     verify(cache, times(1)).isAccelerated();
     verify(cache, times(1)).releaseActiveWork(any(String.class));
 
-    verifyZeroInteractions(account1);
+    verifyNoInteractions(account1);
 
     verifyNoMoreInteractions(account2);
     verifyNoMoreInteractions(accounts);
@@ -240,9 +169,8 @@ class AccountDatabaseCrawlerTest {
     verifyNoMoreInteractions(cache);
   }
 
-  @ParameterizedTest
-  @ValueSource(booleans = { true, false })
-  void testCrawlEnd(final boolean useScylla) {
+  @Test
+  void testCrawlEnd() {
 
     when(cache.getLastUuid()).thenReturn(Optional.of(ACCOUNT2));
     when(cache.getLastUuidScylla()).thenReturn(Optional.of(ACCOUNT2));
@@ -251,26 +179,21 @@ class AccountDatabaseCrawlerTest {
     assertThat(accelerated).isFalse();
 
     verify(cache, times(1)).claimActiveWork(any(String.class), anyLong());
-    verify(cache, times(useScylla ? 0 : 1)).getLastUuid();
-    verify(cache, times(useScylla ? 1 : 0)).getLastUuidScylla();
-    if (useScylla) {
-      verify(accounts, times(0)).getAllFromScylla(eq(CHUNK_SIZE));
-      verify(accounts, times(1)).getAllFromScylla(eq(ACCOUNT2), eq(CHUNK_SIZE));
-    } else {
-      verify(accounts, times(0)).getAllFrom(eq(CHUNK_SIZE));
-      verify(accounts, times(1)).getAllFrom(eq(ACCOUNT2), eq(CHUNK_SIZE));
-    }
+    verify(cache, times(0)).getLastUuid();
+    verify(cache, times(1)).getLastUuidScylla();
+    verify(accounts, times(0)).getAllFromScylla(eq(CHUNK_SIZE));
+    verify(accounts, times(1)).getAllFromScylla(eq(ACCOUNT2), eq(CHUNK_SIZE));
     verify(account1, times(0)).getUserLogin();
     verify(account2, times(0)).getUserLogin();
     verify(listener, times(1)).onCrawlEnd(eq(Optional.of(ACCOUNT2)));
-    verify(cache, times(useScylla ? 0 : 1)).setLastUuid(eq(Optional.empty()));
-    verify(cache, times(useScylla ? 1 : 0)).setLastUuidScylla(eq(Optional.empty()));
+    verify(cache, times(0)).setLastUuid(eq(Optional.empty()));
+    verify(cache, times(1)).setLastUuidScylla(eq(Optional.empty()));
     verify(cache, times(1)).setAccelerated(false);
     verify(cache, times(1)).isAccelerated();
     verify(cache, times(1)).releaseActiveWork(any(String.class));
 
-    verifyZeroInteractions(account1);
-    verifyZeroInteractions(account2);
+    verifyNoInteractions(account1);
+    verifyNoInteractions(account2);
 
     verifyNoMoreInteractions(accounts);
     verifyNoMoreInteractions(listener);

@@ -18,86 +18,78 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import redis.clients.jedis.Jedis;
+import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Set;
 
-// TODO: Migrate to Scylla
 public class PlainDirectoryUpdater {
 
   private static final int CHUNK_SIZE = 1000;
 
   private final Logger logger = LoggerFactory.getLogger(PlainDirectoryUpdater.class);
 
-  private final AccountsManager  accountsManager;
+  private final AccountsManager accountsManager;
   private final DirectoryManager directory;
-  private final ObjectMapper     objectMapper;
+  private final ObjectMapper objectMapper;
 
-  public PlainDirectoryUpdater(AccountsManager accountsManager)
-  {
+  public PlainDirectoryUpdater(AccountsManager accountsManager) {
     this.accountsManager = accountsManager;
-    this.directory       = accountsManager.getDirectoryManager();
-    this.objectMapper    = accountsManager.getMapper();
+    this.directory = accountsManager.getDirectoryManager();
+    this.objectMapper = accountsManager.getMapper();
   }
 
   public void updateFromLocalDatabase() {
-	
-	accountsManager.setDirectoryRestoreLock();  
-	  
-    int                  contactsAdded   = 0;
-    int                  contactsRemoved = 0;     
-       
-    BatchOperationHandle batchOperation  = directory.startBatchOperation();
-    
-    
+
+    accountsManager.setDirectoryRestoreLock();
+
+    int contactsAdded = 0;
+    int contactsRemoved = 0;
+
+    BatchOperationHandle batchOperation = directory.startBatchOperation();
+
     // removing all entries from Redis which are not found among existing accounts
     logger.info("Cleaning up inexisting accounts.");
     HashMap<String, String> accountsInDirectory = directory.retrievePlainDirectory();
-    if(!accountsInDirectory.isEmpty()) {
-	Set<String> usernamesInDirectory = accountsInDirectory.keySet();
-	for (String entry : usernamesInDirectory) {
-	    if (!accountsManager.get(entry).isPresent()) {
-		directory.redisRemoveFromPlainDirectory(batchOperation, entry);
-	            contactsRemoved++;
-	    }
-	}
+    if (!accountsInDirectory.isEmpty()) {
+      Set<String> usernamesInDirectory = accountsInDirectory.keySet();
+      for (String entry : usernamesInDirectory) {
+        if (!accountsManager.get(entry).isPresent()) {
+          directory.redisRemoveFromPlainDirectory(batchOperation, entry);
+          contactsRemoved++;
+        }
+      }
     }
 
     try {
       logger.info("Updating from local DB.");
-      int offset = 0;
+      final ScanRequest.Builder accountsScanRequestBuilder = ScanRequest.builder();
 
-      for (;;) {
-        List<Account> accounts = accountsManager.getAll(offset, CHUNK_SIZE);
+      List<Account> accounts = accountsManager.getAll(accountsScanRequestBuilder);
 
-        if (accounts == null || accounts.isEmpty()) break;
-        else offset += accounts.size();
+      for (Account account : accounts) {
 
-        for (Account account : accounts) {     
-                                
-            directory.redisUpdatePlainDirectory(batchOperation, account.getUserLogin(), objectMapper.writeValueAsString(new PlainDirectoryEntryValue(account.getUuid())));
-            contactsAdded++;           
-        }
-
-        logger.info("Processed the chunk of local accounts...");
+        directory.redisUpdatePlainDirectory(batchOperation, account.getUserLogin(), objectMapper.writeValueAsString(new PlainDirectoryEntryValue(account.getUuid())));
+        contactsAdded++;
       }
+
     } catch (JsonProcessingException e) {
-    	logger.error("There were errors while updating the local directory from PostgreSQL!", e);    	
+      logger.error("There were errors while updating the local directory from Scylla!", e);
     } finally {
       directory.stopBatchOperation(batchOperation);
-    }    
+    }
 
     logger.info(String.format("Local directory is updated (%d added or confirmed, %d removed).", contactsAdded, contactsRemoved));
-        
-	int backoff = directory.calculateBackoff(accountsManager.getDirectoryVersion());	
 
-	try (Jedis jedis = directory.accessDirectoryCache().getWriteResource()) {
-		directory.flushIncrementalUpdates(backoff, jedis);
-	}
-	
-	logger.info(String.format("All incremental updates flushed."));
-    
+    int backoff = directory.calculateBackoff(accountsManager.getDirectoryVersion());
+
+    try (Jedis jedis = directory.accessDirectoryCache().getWriteResource()) {
+      directory.flushIncrementalUpdates(backoff, jedis);
+    }
+
+    logger.info(String.format("All incremental updates flushed."));
+
     accountsManager.releaseDirectoryRestoreLock();
   }
 }

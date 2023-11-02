@@ -5,21 +5,13 @@
  */
 package su.sres.shadowserver.workers;
 
-import com.amazonaws.ClientConfiguration;
-import com.amazonaws.auth.AWSStaticCredentialsProvider;
-import com.amazonaws.auth.BasicAWSCredentials;
-import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import net.sourceforge.argparse4j.inf.Namespace;
-import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 
 import static com.codahale.metrics.MetricRegistry.name;
 
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.LinkedBlockingDeque;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 
 import org.jdbi.v3.core.Jdbi;
 import org.slf4j.Logger;
@@ -39,9 +31,8 @@ import su.sres.shadowserver.metrics.PushLatencyManager;
 import su.sres.shadowserver.providers.RedisClientFactory;
 import su.sres.shadowserver.redis.FaultTolerantRedisCluster;
 import su.sres.shadowserver.redis.ReplicatedJedisPool;
-import su.sres.shadowserver.storage.Accounts;
 import su.sres.shadowserver.storage.AccountsManager;
-import su.sres.shadowserver.storage.AccountsScyllaDb;
+import su.sres.shadowserver.storage.Accounts;
 import su.sres.shadowserver.storage.DeletedAccounts;
 import su.sres.shadowserver.storage.DirectoryManager;
 import su.sres.shadowserver.storage.FaultTolerantDatabase;
@@ -49,9 +40,6 @@ import su.sres.shadowserver.storage.KeysScyllaDb;
 import su.sres.shadowserver.storage.MessagesCache;
 import su.sres.shadowserver.storage.MessagesManager;
 import su.sres.shadowserver.storage.MessagesScyllaDb;
-import su.sres.shadowserver.storage.MigrationDeletedAccounts;
-import su.sres.shadowserver.storage.MigrationMismatchedAccounts;
-import su.sres.shadowserver.storage.MigrationRetryAccounts;
 import su.sres.shadowserver.storage.Profiles;
 import su.sres.shadowserver.storage.ProfilesManager;
 import su.sres.shadowserver.storage.ReportMessageManager;
@@ -92,34 +80,19 @@ public class DirectoryCommand extends EnvironmentCommand<WhisperServerConfigurat
       MessageScyllaDbConfiguration scyllaMessageConfig = configuration.getMessageScyllaDbConfiguration();
       ScyllaDbConfiguration scyllaKeysConfig = configuration.getKeysScyllaDbConfiguration();
       AccountsScyllaDbConfiguration scyllaAccountsConfig = configuration.getAccountsScyllaDbConfiguration();
-      ScyllaDbConfiguration scyllaDeletedAccountsConfig = configuration.getDeletedAccountsScyllaDbConfiguration();
-      ScyllaDbConfiguration scyllaMismatchedAccountsConfig = configuration.getMigrationMismatchedAccountsScyllaDbConfiguration();
-      ScyllaDbConfiguration scyllaPendingAccountsConfig = configuration.getPendingAccountsScyllaDbConfiguration();
-      
-      ScyllaDbConfiguration scyllaMigrationDeletedAccountsConfig = configuration.getMigrationDeletedAccountsScyllaDbConfiguration();
-      ScyllaDbConfiguration scyllaMigrationRetryAccountsConfig = configuration.getMigrationRetryAccountsScyllaDbConfiguration(); 
+      ScyllaDbConfiguration scyllaDeletedAccountsConfig = configuration.getDeletedAccountsScyllaDbConfiguration();      
+      ScyllaDbConfiguration scyllaPendingAccountsConfig = configuration.getPendingAccountsScyllaDbConfiguration();          
       
       ScyllaDbConfiguration scyllaReportMessageConfig = configuration.getReportMessageScyllaDbConfiguration(); 
-    
-      ThreadPoolExecutor accountsScyllaDbMigrationThreadPool = new ThreadPoolExecutor(1, 1, 0, TimeUnit.SECONDS,
-          new LinkedBlockingDeque<>());
-
+          
       DynamoDbClient reportMessagesScyllaDb = ScyllaDbFromConfig.client(scyllaReportMessageConfig);
       DynamoDbClient messageScyllaDb = ScyllaDbFromConfig.client(scyllaMessageConfig);
       DynamoDbClient preKeysScyllaDb = ScyllaDbFromConfig.client(scyllaKeysConfig);
-      DynamoDbClient accountsScyllaDbClient = ScyllaDbFromConfig.client(scyllaAccountsConfig);
-      DynamoDbClient deletedAccountsScyllaDbClient = ScyllaDbFromConfig.client(scyllaDeletedAccountsConfig);
-      DynamoDbClient mismatchedAccountsScyllaDbClient = ScyllaDbFromConfig.client(scyllaMismatchedAccountsConfig);
-      DynamoDbAsyncClient accountsScyllaDbAsyncClient = ScyllaDbFromConfig.asyncClient(scyllaAccountsConfig, accountsScyllaDbMigrationThreadPool);
-            
-      DynamoDbClient migrationDeletedAccountsScyllaDb = ScyllaDbFromConfig.client(scyllaMigrationDeletedAccountsConfig);
-      DynamoDbClient migrationRetryAccountsScyllaDb = ScyllaDbFromConfig.client(scyllaMigrationRetryAccountsConfig);
+      DynamoDbClient accountsClient = ScyllaDbFromConfig.client(scyllaAccountsConfig);
+      DynamoDbClient deletedAccountsScyllaDbClient = ScyllaDbFromConfig.client(scyllaDeletedAccountsConfig);     
       DynamoDbClient pendingAccountsScyllaDbClient = ScyllaDbFromConfig.client(scyllaPendingAccountsConfig);
       
-      DeletedAccounts deletedAccounts = new DeletedAccounts(deletedAccountsScyllaDbClient, scyllaDeletedAccountsConfig.getTableName());
-      MigrationMismatchedAccounts mismatchedAccounts = new MigrationMismatchedAccounts(mismatchedAccountsScyllaDbClient, scyllaMismatchedAccountsConfig.getTableName());
-      MigrationDeletedAccounts migrationDeletedAccounts = new MigrationDeletedAccounts(migrationDeletedAccountsScyllaDb, scyllaMigrationDeletedAccountsConfig.getTableName());
-      MigrationRetryAccounts migrationRetryAccounts = new MigrationRetryAccounts(migrationRetryAccountsScyllaDb, scyllaMigrationRetryAccountsConfig.getTableName());
+      DeletedAccounts deletedAccounts = new DeletedAccounts(deletedAccountsScyllaDbClient, scyllaDeletedAccountsConfig.getTableName());      
       VerificationCodeStore pendingAccounts = new VerificationCodeStore(pendingAccountsScyllaDbClient, scyllaPendingAccountsConfig.getTableName());
   
       FaultTolerantRedisCluster cacheCluster = new FaultTolerantRedisCluster("main_cache_cluster", configuration.getCacheClusterConfiguration(), redisClusterClientResources);
@@ -129,8 +102,7 @@ public class DirectoryCommand extends EnvironmentCommand<WhisperServerConfigurat
 
       ExecutorService keyspaceNotificationDispatchExecutor = environment.lifecycle().executorService(name(getClass(), "keyspaceNotification-%d")).maxThreads(4).build();    
           
-      Accounts accounts = new Accounts(accountDatabase);
-      AccountsScyllaDb accountsScyllaDb = new AccountsScyllaDb(accountsScyllaDbClient, accountsScyllaDbAsyncClient, accountsScyllaDbMigrationThreadPool, scyllaAccountsConfig.getTableName(), scyllaAccountsConfig.getUserLoginTableName(), scyllaAccountsConfig.getMiscTableName(), migrationDeletedAccounts, migrationRetryAccounts);
+      Accounts accounts = new Accounts(accountsClient, scyllaAccountsConfig.getTableName(), scyllaAccountsConfig.getUserLoginTableName(), scyllaAccountsConfig.getMiscTableName(), scyllaAccountsConfig.getScanPageSize());
       Usernames usernames = new Usernames(accountDatabase);
       Profiles profiles = new Profiles(accountDatabase);
       ReservedUsernames reservedUsernames = new ReservedUsernames(accountDatabase);
@@ -156,7 +128,7 @@ public class DirectoryCommand extends EnvironmentCommand<WhisperServerConfigurat
 
       final int lifetime = configuration.getLocalParametersConfiguration().getAccountLifetime();
       StoredVerificationCodeManager pendingAccountsManager = new StoredVerificationCodeManager(pendingAccounts, lifetime);
-      AccountsManager accountsManager = new AccountsManager(accounts, accountsScyllaDb, directory, cacheCluster, deletedAccounts, keysScyllaDb, messagesManager, mismatchedAccounts, usernamesManager, profilesManager, pendingAccountsManager);
+      AccountsManager accountsManager = new AccountsManager(accounts, directory, cacheCluster, deletedAccounts, keysScyllaDb, messagesManager, usernamesManager, profilesManager, pendingAccountsManager);
 
       PlainDirectoryUpdater updater = new PlainDirectoryUpdater(accountsManager);
 

@@ -13,6 +13,9 @@ import org.apache.commons.lang3.StringUtils;
 import org.signal.zkgroup.profiles.ProfileKeyCommitment;
 import su.sres.shadowserver.util.ExactlySize;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import javax.validation.constraints.NotEmpty;
 import javax.validation.constraints.NotNull;
 
@@ -40,6 +43,10 @@ public class CreateProfileRequest {
   @JsonProperty
   @ExactlySize({ 0, 776 })
   private String paymentAddress;
+  
+  @JsonProperty
+  @NotNull
+  private List<String> badgeIds = new ArrayList<>();
 
   @JsonProperty
   @NotNull
@@ -52,7 +59,7 @@ public class CreateProfileRequest {
 
   public CreateProfileRequest(
       ProfileKeyCommitment commitment, String version, String name, String aboutEmoji, String about,
-      String paymentAddress, boolean wantsAvatar) {
+      String paymentAddress, boolean wantsAvatar, List<String> badgeIds) {
     this.commitment = commitment;
     this.version = version;
     this.name = name;
@@ -60,6 +67,7 @@ public class CreateProfileRequest {
     this.about = about;
     this.paymentAddress = paymentAddress;
     this.avatar = wantsAvatar;
+    this.badgeIds = badgeIds;
   }
 
   public ProfileKeyCommitment getCommitment() {
@@ -88,5 +96,9 @@ public class CreateProfileRequest {
 
   public String getPaymentAddress() {
     return StringUtils.stripToNull(paymentAddress);
+  }
+  
+  public List<String> getBadges() {
+    return badgeIds;
   }
 }

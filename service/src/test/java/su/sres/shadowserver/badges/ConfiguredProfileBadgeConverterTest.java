@@ -23,7 +23,6 @@ import java.util.ListResourceBundle;
 import java.util.Locale;
 import java.util.ResourceBundle;
 import java.util.ResourceBundle.Control;
-import java.util.Set;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -34,6 +33,7 @@ import org.mockito.ArgumentCaptor;
 import su.sres.shadowserver.configuration.BadgeConfiguration;
 import su.sres.shadowserver.configuration.BadgesConfiguration;
 import su.sres.shadowserver.entities.Badge;
+import su.sres.shadowserver.entities.SelfBadge;
 import su.sres.shadowserver.storage.AccountBadge;
 
 public class ConfiguredProfileBadgeConverterTest {
@@ -81,8 +81,8 @@ public class ConfiguredProfileBadgeConverterTest {
     Object[][] objects = new Object[count * 2][2];
     for (int i = 0; i < count; i++) {
       badges.add(newBadge(i));
-      objects[(i * 2)] = new Object[]{idFor(i) + "_name", nameFor(i)};
-      objects[(i * 2) + 1] = new Object[]{idFor(i) + "_description", desriptionFor(i)};
+      objects[(i * 2)] = new Object[] { idFor(i) + "_name", nameFor(i) };
+      objects[(i * 2) + 1] = new Object[] { idFor(i) + "_description", desriptionFor(i) };
     }
     resourceBundle = new ListResourceBundle() {
       @Override
@@ -100,8 +100,7 @@ public class ConfiguredProfileBadgeConverterTest {
   }
 
   private ArgumentCaptor<ResourceBundle.Control> setupResourceBundle(Locale expectedLocale) {
-    ArgumentCaptor<ResourceBundle.Control> controlArgumentCaptor =
-        ArgumentCaptor.forClass(ResourceBundle.Control.class);
+    ArgumentCaptor<ResourceBundle.Control> controlArgumentCaptor = ArgumentCaptor.forClass(ResourceBundle.Control.class);
     doReturn(resourceBundle).when(resourceBundleFactory).createBundle(
         eq(ConfiguredProfileBadgeConverter.BASE_NAME), eq(expectedLocale), controlArgumentCaptor.capture());
     return controlArgumentCaptor;
@@ -112,23 +111,24 @@ public class ConfiguredProfileBadgeConverterTest {
     BadgesConfiguration badgesConfiguration = createBadges(1);
     ConfiguredProfileBadgeConverter badgeConverter = new ConfiguredProfileBadgeConverter(clock, badgesConfiguration,
         resourceBundleFactory);
-    assertThat(badgeConverter.convert(List.of(Locale.getDefault()), List.of())).isNotNull().isEmpty();
+    assertThat(badgeConverter.convert(List.of(Locale.getDefault()), List.of(), false)).isNotNull().isEmpty();
   }
 
   @ParameterizedTest
   @MethodSource
-  void testNoLocales(String name, Instant expiration, boolean visible, Badge expectedBadge) {
+  void testNoLocales(String name, Instant expiration, boolean visible, boolean isSelf, Badge expectedBadge) {
     BadgesConfiguration badgesConfiguration = createBadges(1);
-    ConfiguredProfileBadgeConverter badgeConverter =
-        new ConfiguredProfileBadgeConverter(clock, badgesConfiguration, resourceBundleFactory);
+    ConfiguredProfileBadgeConverter badgeConverter = new ConfiguredProfileBadgeConverter(clock, badgesConfiguration, resourceBundleFactory);
     setupResourceBundle(Locale.getDefault());
 
     if (expectedBadge != null) {
-      assertThat(badgeConverter.convert(List.of(), List.of(new AccountBadge(name, expiration, visible)))).isNotNull()
+      assertThat(badgeConverter.convert(List.of(), List.of(new AccountBadge(name, expiration, visible)), isSelf))
+          .isNotNull()
           .hasSize(1)
           .containsOnly(expectedBadge);
     } else {
-      assertThat(badgeConverter.convert(List.of(), List.of(new AccountBadge(name, expiration, visible)))).isNotNull()
+      assertThat(badgeConverter.convert(List.of(), List.of(new AccountBadge(name, expiration, visible)), isSelf))
+          .isNotNull()
           .isEmpty();
     }
   }
@@ -138,22 +138,28 @@ public class ConfiguredProfileBadgeConverterTest {
     Instant expired = Instant.ofEpochSecond(41);
     Instant notExpired = Instant.ofEpochSecond(43);
     return Stream.of(
-        arguments(idFor(0), expired, false, null),
-        arguments(idFor(0), notExpired, false, null),
-        arguments(idFor(0), expired, true, null),
-        arguments(idFor(0), notExpired, true, new Badge(idFor(0), "other", imageUrlFor(0), nameFor(0), desriptionFor(0))),
-        arguments(idFor(1), expired, false, null),
-        arguments(idFor(1), notExpired, false, null),
-        arguments(idFor(1), expired, true, null),
-        arguments(idFor(1), notExpired, true, null)
-    );
+        arguments(idFor(0), expired, false, false, null),
+        arguments(idFor(0), notExpired, false, false, null),
+        arguments(idFor(0), expired, true, false, null),
+        arguments(idFor(0), notExpired, true, false, new Badge(idFor(0), "other", imageUrlFor(0), nameFor(0), desriptionFor(0))),
+        arguments(idFor(1), expired, false, false, null),
+        arguments(idFor(1), notExpired, false, false, null),
+        arguments(idFor(1), expired, true, false, null),
+        arguments(idFor(1), notExpired, true, false, null),
+        arguments(idFor(0), expired, false, true, null),
+        arguments(idFor(0), notExpired, false, true, new SelfBadge(idFor(0), "other", imageUrlFor(0), nameFor(0), desriptionFor(0), notExpired, false)),
+        arguments(idFor(0), expired, true, true, null),
+        arguments(idFor(0), notExpired, true, true, new SelfBadge(idFor(0), "other", imageUrlFor(0), nameFor(0), desriptionFor(0), notExpired, true)),
+        arguments(idFor(1), expired, false, true, null),
+        arguments(idFor(1), notExpired, false, true, null),
+        arguments(idFor(1), expired, true, true, null),
+        arguments(idFor(1), notExpired, true, true, null));
   }
 
   @Test
   void testCustomControl() {
     BadgesConfiguration badgesConfiguration = createBadges(1);
-    ConfiguredProfileBadgeConverter badgeConverter =
-        new ConfiguredProfileBadgeConverter(clock, badgesConfiguration, resourceBundleFactory);
+    ConfiguredProfileBadgeConverter badgeConverter = new ConfiguredProfileBadgeConverter(clock, badgesConfiguration, resourceBundleFactory);
 
     Locale defaultLocale = Locale.getDefault();
     Locale enGb = new Locale("en", "GB");
@@ -162,7 +168,7 @@ public class ConfiguredProfileBadgeConverterTest {
 
     ArgumentCaptor<Control> controlArgumentCaptor = setupResourceBundle(enGb);
     badgeConverter.convert(List.of(enGb, en, esUs),
-        List.of(new AccountBadge(idFor(0), Instant.ofEpochSecond(43), true)));
+        List.of(new AccountBadge(idFor(0), Instant.ofEpochSecond(43), true)), false);
     Control control = controlArgumentCaptor.getValue();
 
     assertThatNullPointerException().isThrownBy(() -> control.getFormats(null));
@@ -174,7 +180,8 @@ public class ConfiguredProfileBadgeConverterTest {
         Control.FORMAT_PROPERTIES.toArray(new String[0]));
 
     try {
-      // temporarily override for purpose of ensuring this test doesn't change based on system default locale
+      // temporarily override for purpose of ensuring this test doesn't change based
+      // on system default locale
       Locale.setDefault(new Locale("xx", "XX"));
 
       assertThat(control.getFallbackLocale(ConfiguredProfileBadgeConverter.BASE_NAME, enGb)).isEqualTo(en);
@@ -184,10 +191,11 @@ public class ConfiguredProfileBadgeConverterTest {
       assertThat(control.getFallbackLocale(ConfiguredProfileBadgeConverter.BASE_NAME, Locale.getDefault())).isNull();
 
       // now test what happens if the system default locale is in the list
-      // this should always terminate at the system default locale since the development defined bundle should get
+      // this should always terminate at the system default locale since the
+      // development defined bundle should get
       // returned at that point anyhow
       badgeConverter.convert(List.of(enGb, Locale.getDefault(), en, esUs),
-          List.of(new AccountBadge(idFor(0), Instant.ofEpochSecond(43), true)));
+          List.of(new AccountBadge(idFor(0), Instant.ofEpochSecond(43), true)), false);
       Control control2 = controlArgumentCaptor.getValue();
 
       assertThat(control2.getFallbackLocale(ConfiguredProfileBadgeConverter.BASE_NAME, enGb)).isEqualTo(

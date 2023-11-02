@@ -14,9 +14,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.opentable.db.postgres.embedded.LiquibasePreparer;
-import com.opentable.db.postgres.junit5.EmbeddedPostgresExtension;
-import com.opentable.db.postgres.junit5.PreparedDbExtension;
 import io.lettuce.core.cluster.api.sync.RedisAdvancedClusterCommands;
 import redis.clients.jedis.Jedis;
 
@@ -33,15 +30,11 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
-import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.mockito.ArgumentCaptor;
 import su.sres.shadowserver.auth.AuthenticationCredentials;
-import su.sres.shadowserver.configuration.CircuitBreakerConfiguration;
-import su.sres.shadowserver.configuration.dynamic.DynamicAccountsScyllaDbMigrationConfiguration;
-import su.sres.shadowserver.configuration.dynamic.DynamicConfiguration;
 import su.sres.shadowserver.entities.AccountAttributes;
 import su.sres.shadowserver.entities.SignedPreKey;
 import su.sres.shadowserver.redis.ReplicatedJedisPool;
@@ -56,35 +49,32 @@ import software.amazon.awssdk.services.dynamodb.model.ScalarAttributeType;
 
 class AccountsManagerConcurrentModificationIntegrationTest {
 
-  @RegisterExtension
-  static PreparedDbExtension db = EmbeddedPostgresExtension.preparedDatabase(LiquibasePreparer.forClasspathLocation("accountsdb.xml"));
-
   private static final String ACCOUNTS_TABLE_NAME = "accounts_test";
   private static final String NUMBERS_TABLE_NAME = "numbers_test";
   private static final String MISC_TABLE_NAME = "misc_test";
   static final String KEY_PARAMETER_NAME = "PN";
   static final String ATTR_PARAMETER_VALUE = "PV";
 
+  private static final int SCAN_PAGE_SIZE = 1;
+
   @RegisterExtension
   static DynamoDbExtension dynamoDbExtension = DynamoDbExtension.builder()
       .tableName(ACCOUNTS_TABLE_NAME)
-      .hashKey(AccountsScyllaDb.KEY_ACCOUNT_UUID)
+      .hashKey(Accounts.KEY_ACCOUNT_UUID)
       .attributeDefinition(AttributeDefinition.builder()
-          .attributeName(AccountsScyllaDb.KEY_ACCOUNT_UUID)
+          .attributeName(Accounts.KEY_ACCOUNT_UUID)
           .attributeType(ScalarAttributeType.B)
           .build())
       .build();
 
   private Accounts accounts;
 
-  private AccountsScyllaDb accountsDynamoDb;
-
   private AccountsManager accountsManager;
 
   private RedisAdvancedClusterCommands<String, String> commands;
 
   private Executor mutationExecutor = new ThreadPoolExecutor(20, 20, 5, TimeUnit.SECONDS, new LinkedBlockingDeque<>(20));
-  
+
   private DirectoryManager directoryManager = new DirectoryManager(mock(ReplicatedJedisPool.class));
 
   @BeforeEach
@@ -94,24 +84,24 @@ class AccountsManagerConcurrentModificationIntegrationTest {
       CreateTableRequest createNumbersTableRequest = CreateTableRequest.builder()
           .tableName(NUMBERS_TABLE_NAME)
           .keySchema(KeySchemaElement.builder()
-              .attributeName(AccountsScyllaDb.ATTR_ACCOUNT_USER_LOGIN)
+              .attributeName(Accounts.ATTR_ACCOUNT_USER_LOGIN)
               .keyType(KeyType.HASH)
               .build())
           .attributeDefinitions(AttributeDefinition.builder()
-              .attributeName(AccountsScyllaDb.ATTR_ACCOUNT_USER_LOGIN)
+              .attributeName(Accounts.ATTR_ACCOUNT_USER_LOGIN)
               .attributeType(ScalarAttributeType.S)
               .build())
           .provisionedThroughput(DynamoDbExtension.DEFAULT_PROVISIONED_THROUGHPUT)
           .build();
 
       dynamoDbExtension.getDynamoDbClient().createTable(createNumbersTableRequest);
-      
+
       List<KeySchemaElement> keySchemaMisc = new ArrayList<KeySchemaElement>();
       keySchemaMisc.add(KeySchemaElement.builder().attributeName(KEY_PARAMETER_NAME).keyType(KeyType.HASH).build());
-      
+
       List<AttributeDefinition> attributeDefinitionsMisc = new ArrayList<AttributeDefinition>();
       attributeDefinitionsMisc.add(AttributeDefinition.builder().attributeName(KEY_PARAMETER_NAME).attributeType("S").build());
-            
+
       CreateTableRequest requestMisc = CreateTableRequest.builder()
           .tableName(MISC_TABLE_NAME)
           .keySchema(keySchemaMisc)
@@ -122,49 +112,25 @@ class AccountsManagerConcurrentModificationIntegrationTest {
       dynamoDbExtension.getDynamoDbClient().createTable(requestMisc);
     }
 
-    accountsDynamoDb = new AccountsScyllaDb(
+    accounts = new Accounts(
         dynamoDbExtension.getDynamoDbClient(),
-        dynamoDbExtension.getDynamoDbAsyncClient(),
-        new ThreadPoolExecutor(1, 1, 0, TimeUnit.SECONDS, new LinkedBlockingDeque<>()),
         dynamoDbExtension.getTableName(),
         NUMBERS_TABLE_NAME,
         MISC_TABLE_NAME,
-        mock(MigrationDeletedAccounts.class),
-        mock(MigrationRetryAccounts.class));
+        SCAN_PAGE_SIZE);
 
     {
-      final CircuitBreakerConfiguration circuitBreakerConfiguration = new CircuitBreakerConfiguration();
-      circuitBreakerConfiguration.setIgnoredExceptions(List.of("su.sres.shadowserver.storage.ContestedOptimisticLockException"));
-      FaultTolerantDatabase faultTolerantDatabase = new FaultTolerantDatabase("accountsTest",
-          Jdbi.create(db.getTestDatabase()),
-          circuitBreakerConfiguration);
-
-      accounts = new Accounts(faultTolerantDatabase);
-    }
-
-    {
-      
-      DynamicConfiguration dynamicConfiguration = new DynamicConfiguration();
-            
-      final DynamicAccountsScyllaDbMigrationConfiguration config = dynamicConfiguration
-          .getAccountsScyllaDbMigrationConfiguration();
-
-      config.setDeleteEnabled(true);
-      config.setReadEnabled(true);
-      config.setWriteEnabled(true);    
-            
-      commands = mock(RedisAdvancedClusterCommands.class);      
+      // noinspection unchecked
+      commands = mock(RedisAdvancedClusterCommands.class);
       MessagesManager messagesManager = mock(MessagesManager.class);
-      
+
       accountsManager = new AccountsManager(
           accounts,
-          accountsDynamoDb,
           directoryManager,
           RedisClusterHelper.buildMockRedisCluster(commands),
-          mock(DeletedAccounts.class),          
+          mock(DeletedAccounts.class),
           mock(KeysScyllaDb.class),
           messagesManager,
-          mock(MigrationMismatchedAccounts.class),
           mock(UsernamesManager.class),
           mock(ProfilesManager.class),
           mock(StoredVerificationCodeManager.class));
@@ -173,8 +139,8 @@ class AccountsManagerConcurrentModificationIntegrationTest {
 
   @Test
   void testConcurrentUpdate() throws IOException {
-   
-    Jedis jedis = mock(Jedis.class);    
+
+    Jedis jedis = mock(Jedis.class);
     when(directoryManager.accessDirectoryCache().getWriteResource()).thenReturn(jedis);
 
     final UUID uuid;
@@ -207,7 +173,7 @@ class AccountsManagerConcurrentModificationIntegrationTest {
     final boolean discoverableByPhoneNumber = false;
     final String currentProfileVersion = "cpv";
     final String identityKey = "ikey";
-    final byte[] unidentifiedAccessKey = new byte[]{1};
+    final byte[] unidentifiedAccessKey = new byte[] { 1 };
     final String pin = "1234";
     final String registrationLock = "reglock";
     final AuthenticationCredentials credentials = new AuthenticationCredentials(registrationLock);
@@ -220,28 +186,23 @@ class AccountsManagerConcurrentModificationIntegrationTest {
         modifyAccount(uuid, account -> account.setDiscoverableByUserLogin(discoverableByPhoneNumber)),
         modifyAccount(uuid, account -> account.setCurrentProfileVersion(currentProfileVersion)),
         modifyAccount(uuid, account -> account.setIdentityKey(identityKey)),
-        modifyAccount(uuid, account -> account.setUnidentifiedAccessKey(unidentifiedAccessKey)),       
+        modifyAccount(uuid, account -> account.setUnidentifiedAccessKey(unidentifiedAccessKey)),
         modifyAccount(uuid, account -> account.setUnrestrictedUnidentifiedAccess(unrestrictedUnidentifiedAccess)),
-        modifyDevice(uuid, Device.MASTER_ID, device-> device.setLastSeen(lastSeen)),
-        modifyDevice(uuid, Device.MASTER_ID, device-> device.setName("deviceName"))
-    ).join();
+        modifyDevice(uuid, Device.MASTER_ID, device -> device.setLastSeen(lastSeen)),
+        modifyDevice(uuid, Device.MASTER_ID, device -> device.setName("deviceName"))).join();
 
-    final Account managerAccount = accountsManager.get(uuid).get();
-    final Account dbAccount = accounts.get(uuid).get();
-    final Account dynamoAccount = accountsDynamoDb.get(uuid).get();
+    final Account managerAccount = accountsManager.get(uuid).orElseThrow();
+    final Account dynamoAccount = accounts.get(uuid).orElseThrow();
 
     final Account redisAccount = getLastAccountFromRedisMock(commands);
 
     Stream.of(
         new Pair<>("manager", managerAccount),
-        new Pair<>("db", dbAccount),
         new Pair<>("dynamo", dynamoAccount),
-        new Pair<>("redis", redisAccount)
-    ).forEach(pair ->
-          verifyAccount(pair.first(), pair.second(), profileName, avatar, discoverableByPhoneNumber,
-              currentProfileVersion, identityKey, unidentifiedAccessKey, pin, registrationLock,
-              unrestrictedUnidentifiedAccess, lastSeen)
-        );
+        new Pair<>("redis", redisAccount)).forEach(
+            pair -> verifyAccount(pair.first(), pair.second(), profileName, avatar, discoverableByPhoneNumber,
+                currentProfileVersion, identityKey, unidentifiedAccessKey, pin, registrationLock,
+                unrestrictedUnidentifiedAccess, lastSeen));
   }
 
   private Account getLastAccountFromRedisMock(RedisAdvancedClusterCommands<String, String> commands) throws IOException {
@@ -258,17 +219,16 @@ class AccountsManagerConcurrentModificationIntegrationTest {
         () -> assertEquals(profileName, account.getProfileName()),
         () -> assertEquals(avatar, account.getAvatar()),
         () -> assertEquals(discoverableByPhoneNumber, account.isDiscoverableByUserLogin()),
-        () -> assertEquals(currentProfileVersion, account.getCurrentProfileVersion().get()),
+        () -> assertEquals(currentProfileVersion, account.getCurrentProfileVersion().orElseThrow()),
         () -> assertEquals(identityKey, account.getIdentityKey()),
-        () -> assertArrayEquals(unidentifiedAccessKey, account.getUnidentifiedAccessKey().get()),        
-        () -> assertEquals(unrestrictedUnidentifiedAcces, account.isUnrestrictedUnidentifiedAccess())
-    );
+        () -> assertArrayEquals(unidentifiedAccessKey, account.getUnidentifiedAccessKey().orElseThrow()),
+        () -> assertEquals(unrestrictedUnidentifiedAcces, account.isUnrestrictedUnidentifiedAccess()));
   }
 
   private CompletableFuture<?> modifyAccount(final UUID uuid, final Consumer<Account> accountMutation) {
 
     return CompletableFuture.runAsync(() -> {
-      final Account account = accountsManager.get(uuid).get();
+      final Account account = accountsManager.get(uuid).orElseThrow();
       accountsManager.update(account, accountMutation);
     }, mutationExecutor);
   }
@@ -276,7 +236,7 @@ class AccountsManagerConcurrentModificationIntegrationTest {
   private CompletableFuture<?> modifyDevice(final UUID uuid, final long deviceId, final Consumer<Device> deviceMutation) {
 
     return CompletableFuture.runAsync(() -> {
-      final Account account = accountsManager.get(uuid).get();
+      final Account account = accountsManager.get(uuid).orElseThrow();
       accountsManager.updateDevice(account, deviceId, deviceMutation);
     }, mutationExecutor);
   }

@@ -55,7 +55,6 @@ import io.lettuce.core.resource.ClientResources;
 import io.micrometer.core.instrument.Metrics;
 import io.micrometer.core.instrument.distribution.DistributionStatisticConfig;
 import io.minio.MinioClient;
-import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import su.sres.dispatch.DispatchManager;
 import su.sres.shadowserver.auth.AccountAuthenticator;
@@ -154,7 +153,6 @@ import su.sres.shadowserver.workers.CreateGroupDbCommand;
 import su.sres.shadowserver.workers.CreateGroupLogsDbCommand;
 import su.sres.shadowserver.workers.CreateKeysDbCommand;
 import su.sres.shadowserver.workers.CreateMessageDbCommand;
-import su.sres.shadowserver.workers.CreateMismatchedAccountsDbCommand;
 import su.sres.shadowserver.workers.CreatePendingAccountCommand;
 import su.sres.shadowserver.workers.CreatePushChallengeDbCommand;
 import su.sres.shadowserver.workers.CreateReportMessageDbCommand;
@@ -171,13 +169,10 @@ import su.sres.shadowserver.workers.VacuumCommand;
 import su.sres.shadowserver.workers.ZkParamsCommand;
 
 import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 import io.dropwizard.auth.AuthFilter;
@@ -199,8 +194,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     bootstrap.addCommand(new CreateGroupDbCommand());
     bootstrap.addCommand(new CreateGroupLogsDbCommand());
     bootstrap.addCommand(new CreateKeysDbCommand());
-    bootstrap.addCommand(new CreateMessageDbCommand());
-    bootstrap.addCommand(new CreateMismatchedAccountsDbCommand());
+    bootstrap.addCommand(new CreateMessageDbCommand());    
     bootstrap.addCommand(new CreatePendingAccountCommand());
     bootstrap.addCommand(new CreatePendingsDbCommand());
     bootstrap.addCommand(new CreatePushChallengeDbCommand());
@@ -238,6 +232,8 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 
   @Override
   public void run(WhisperServerConfiguration config, Environment environment) throws Exception {
+    
+    final Clock clock = Clock.systemUTC();
 
     UncaughtExceptionHandler.register();
 
@@ -285,7 +281,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 
     // start validation
 
-    Pair<LicenseStatus, Pair<Integer, Integer>> validationResult = ServerLicenseUtil.validate(config, accountJdbi);
+    Pair<LicenseStatus, Pair<Integer, Integer>> validationResult = ServerLicenseUtil.validate(config);
 
     LicenseStatus status = validationResult.first();
     Integer volume = validationResult.second().first();
@@ -346,12 +342,9 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     LocalParametersConfiguration localParams = config.getLocalParametersConfiguration();
     MessageScyllaDbConfiguration scyllaMessageConfig = config.getMessageScyllaDbConfiguration();
     ScyllaDbConfiguration scyllaKeysConfig = config.getKeysScyllaDbConfiguration();
-    AccountsScyllaDbConfiguration scyllaAccountsConfig = config.getAccountsScyllaDbConfiguration();
-    ScyllaDbConfiguration scyllaMigrationDeletedAccountsConfig = config.getMigrationDeletedAccountsScyllaDbConfiguration();
-    ScyllaDbConfiguration scyllaMigrationRetryAccountsConfig = config.getMigrationRetryAccountsScyllaDbConfiguration();
+    AccountsScyllaDbConfiguration scyllaAccountsConfig = config.getAccountsScyllaDbConfiguration();    
     ScyllaDbConfiguration scyllaPushChallengeConfig = config.getPushChallengeScyllaDbConfiguration();
-    ScyllaDbConfiguration scyllaReportMessageConfig = config.getReportMessageScyllaDbConfiguration();
-    ScyllaDbConfiguration scyllaMigrationMismatchedAccountsConfig = config.getMigrationMismatchedAccountsScyllaDbConfiguration();
+    ScyllaDbConfiguration scyllaReportMessageConfig = config.getReportMessageScyllaDbConfiguration();    
     ScyllaDbConfiguration scyllaPendingAccountsConfig = config.getPendingAccountsScyllaDbConfiguration();
     ScyllaDbConfiguration scyllaPendingDevicesConfig = config.getPendingDevicesScyllaDbConfiguration();
     ScyllaDbConfiguration scyllaDeletedAccountsConfig = config.getDeletedAccountsScyllaDbConfiguration();
@@ -363,7 +356,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 
     DynamoDbClient preKeyScyllaDb = ScyllaDbFromConfig.client(scyllaKeysConfig);
 
-    DynamoDbClient accountsScyllaDbClient = ScyllaDbFromConfig.client(scyllaAccountsConfig);
+    DynamoDbClient accountsClient = ScyllaDbFromConfig.client(scyllaAccountsConfig);
 
     AmazonDynamoDBClientBuilder groupsScyllaDbClientBuilder = AmazonDynamoDBClientBuilder
         .standard()
@@ -378,24 +371,13 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
         .withClientConfiguration(new ClientConfiguration().withClientExecutionTimeout(((int) scyllaGroupLogsConfig.getClientExecutionTimeout().toMillis()))
             .withRequestTimeout((int) scyllaGroupLogsConfig.getClientRequestTimeout().toMillis()))
         .withCredentials(new AWSStaticCredentialsProvider(new BasicAWSCredentials(scyllaGroupLogsConfig.getAccessKey(), scyllaGroupLogsConfig.getAccessSecret())));
-
-    // The thread pool core & max sizes are set via dynamic configuration within
-    // AccountsDynamoDb
-    ThreadPoolExecutor accountsScyllaDbMigrationThreadPool = new ThreadPoolExecutor(1, 1, 0, TimeUnit.SECONDS,
-        new LinkedBlockingDeque<>());
-
-    DynamoDbAsyncClient accountsScyllaDbAsyncClient = ScyllaDbFromConfig.asyncClient(scyllaAccountsConfig, accountsScyllaDbMigrationThreadPool);
-
+    
     DynamoDbClient deletedAccountsScyllaDbClient = ScyllaDbFromConfig.client(scyllaDeletedAccountsConfig);
-    DynamoDbClient mismatchedAccountsScyllaDbClient = ScyllaDbFromConfig.client(scyllaMigrationMismatchedAccountsConfig);
-    DynamoDbClient recentlyDeletedAccountsScyllaDb = ScyllaDbFromConfig.client(scyllaMigrationDeletedAccountsConfig);
-
+    
     DynamoDbClient pushChallengeScyllaDbClient = ScyllaDbFromConfig.client(scyllaPushChallengeConfig);
 
     DynamoDbClient reportMessageScyllaDbClient = ScyllaDbFromConfig.client(scyllaReportMessageConfig);
-
-    DynamoDbClient migrationRetryAccountsScyllaDb = ScyllaDbFromConfig.client(scyllaMigrationRetryAccountsConfig);
-
+    
     DynamoDbClient pendingAccountsScyllaDbClient = ScyllaDbFromConfig.client(scyllaPendingAccountsConfig);
 
     DynamoDbClient pendingDevicesScyllaDbClient = ScyllaDbFromConfig.client(scyllaPendingDevicesConfig);
@@ -404,13 +386,9 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     DynamoDB groupLogsDynamoDb = new DynamoDB(groupLogsScyllaDbClientBuilder.build());
 
     DeletedAccounts deletedAccounts = new DeletedAccounts(deletedAccountsScyllaDbClient, scyllaDeletedAccountsConfig.getTableName());
-    MigrationMismatchedAccounts mismatchedAccounts = new MigrationMismatchedAccounts(mismatchedAccountsScyllaDbClient, scyllaMigrationMismatchedAccountsConfig.getTableName());
-    MigrationDeletedAccounts migrationDeletedAccounts = new MigrationDeletedAccounts(recentlyDeletedAccountsScyllaDb, scyllaMigrationDeletedAccountsConfig.getTableName());
-    MigrationRetryAccounts migrationRetryAccounts = new MigrationRetryAccounts(migrationRetryAccountsScyllaDb, scyllaMigrationRetryAccountsConfig.getTableName());
-
-    AccountsScyllaDb accountsScyllaDb = new AccountsScyllaDb(accountsScyllaDbClient, accountsScyllaDbAsyncClient, accountsScyllaDbMigrationThreadPool, config.getAccountsScyllaDbConfiguration().getTableName(), config.getAccountsScyllaDbConfiguration().getUserLoginTableName(), config.getAccountsScyllaDbConfiguration().getMiscTableName(), migrationDeletedAccounts, migrationRetryAccounts);
-
-    Accounts accounts = new Accounts(accountDatabase);
+    
+    Accounts accounts = new Accounts(accountsClient, scyllaAccountsConfig.getTableName(), scyllaAccountsConfig.getUserLoginTableName(), scyllaAccountsConfig.getMiscTableName(), scyllaAccountsConfig.getScanPageSize());
+    
     Usernames usernames = new Usernames(accountDatabase);
     ReservedUsernames reservedUsernames = new ReservedUsernames(accountDatabase);
     Profiles profiles = new Profiles(accountDatabase);
@@ -468,8 +446,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     // "apnSender-%d")).maxThreads(1).minThreads(1).build();
     ExecutorService gcmSenderExecutor = environment.lifecycle().executorService(name(getClass(), "gcmSender-%d")).maxThreads(1).minThreads(1).build();
     ExecutorService multiRecipientMessageExecutor = environment.lifecycle().executorService(name(getClass(), "multiRecipientMessage-%d")).minThreads(64).maxThreads(64).build();
-    ExecutorService accountsCrawlerChunkPreReadExecutor = environment.lifecycle().executorService(name(getClass(), "accountsCrawler-%d")).maxThreads(2).minThreads(2).build();
-
+    
     ClientPresenceManager clientPresenceManager = new ClientPresenceManager(clientPresenceCluster, recurringJobExecutor, keyspaceNotificationDispatchExecutor);
 
     DynamicConfiguration dynamicConfig = new DynamicConfiguration();
@@ -483,7 +460,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     PushLatencyManager pushLatencyManager = new PushLatencyManager(metricsCluster);
     ReportMessageManager reportMessageManager = new ReportMessageManager(reportMessageScyllaDb, Metrics.globalRegistry);
     MessagesManager messagesManager = new MessagesManager(messagesScyllaDb, messagesCache, pushLatencyManager, reportMessageManager);
-    AccountsManager accountsManager = new AccountsManager(accounts, accountsScyllaDb, directory, cacheCluster, deletedAccounts, keysScyllaDb, messagesManager, mismatchedAccounts, usernamesManager, profilesManager, pendingAccountsManager);
+    AccountsManager accountsManager = new AccountsManager(accounts, directory, cacheCluster, deletedAccounts, keysScyllaDb, messagesManager, usernamesManager, profilesManager, pendingAccountsManager);
     RemoteConfigsManager remoteConfigsManager = new RemoteConfigsManager(remoteConfigs);
     DeadLetterHandler deadLetterHandler = new DeadLetterHandler(accountsManager, messagesManager);
     DispatchManager dispatchManager = new DispatchManager(pubSubClientFactory, Optional.of(deadLetterHandler));
@@ -545,31 +522,14 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     CurrencyConversionManager currencyManager = new CurrencyConversionManager(fixerClient, ftxClient, config.getPaymentsServiceConfiguration().getPaymentCurrencies());
 
     AccountDatabaseCrawlerCache accountDatabaseCrawlerCache = new AccountDatabaseCrawlerCache(cacheCluster);
-    AccountDatabaseCrawler accountDatabaseCrawler = new AccountDatabaseCrawler(accountsManager, accountDatabaseCrawlerCache, accountDatabaseCrawlerListeners, config.getAccountDatabaseCrawlerConfiguration().getChunkSize(), config.getAccountDatabaseCrawlerConfiguration().getChunkIntervalMs(), accountsCrawlerChunkPreReadExecutor);
-
-    AccountDatabaseCrawlerCache scyllaDbMigrationCrawlerCache = new AccountDatabaseCrawlerCache(cacheCluster);
-    scyllaDbMigrationCrawlerCache.setPrefix("ScyllaMigration");
-    AccountDatabaseCrawler accountScyllaDbMigrationCrawler = new AccountDatabaseCrawler(accountsManager,
-        scyllaDbMigrationCrawlerCache,
-        List.of(new AccountsScyllaDbMigrator(accountsScyllaDb)),
-        config.getScyllaDbMigrationCrawlerConfiguration().getChunkSize(),
-        config.getScyllaDbMigrationCrawlerConfiguration().getChunkIntervalMs(),
-        accountsCrawlerChunkPreReadExecutor);
-    
-    accountScyllaDbMigrationCrawler.setDedicatedDynamoMigrationCrawler(true);
-
-    MigrationRetryAccountsTableCrawler migrationRetryAccountsTableCrawler = new MigrationRetryAccountsTableCrawler(migrationRetryAccounts, accountsManager, accountsScyllaDb, cacheCluster, recurringJobExecutor);
-    MigrationMismatchedAccountsTableCrawler migrationMismatchedAccountsTableCrawler = new MigrationMismatchedAccountsTableCrawler(mismatchedAccounts, accountsManager, accounts, accountsScyllaDb, cacheCluster, recurringJobExecutor);
-
+    AccountDatabaseCrawler accountDatabaseCrawler = new AccountDatabaseCrawler(accountsManager, accountDatabaseCrawlerCache, accountDatabaseCrawlerListeners, config.getAccountDatabaseCrawlerConfiguration().getChunkSize(), config.getAccountDatabaseCrawlerConfiguration().getChunkIntervalMs());
+       
     // apnSender.setApnFallbackManager(apnFallbackManager);
     environment.lifecycle().manage(new ApplicationShutdownMonitor());
     // environment.lifecycle().manage(apnFallbackManager);
     environment.lifecycle().manage(pubSubManager);
     environment.lifecycle().manage(messageSender);
-    environment.lifecycle().manage(accountDatabaseCrawler);
-    environment.lifecycle().manage(accountScyllaDbMigrationCrawler);
-    environment.lifecycle().manage(migrationRetryAccountsTableCrawler);
-    environment.lifecycle().manage(migrationMismatchedAccountsTableCrawler);
+    environment.lifecycle().manage(accountDatabaseCrawler);    
     environment.lifecycle().manage(remoteConfigsManager);
     environment.lifecycle().manage(messagesCache);
     environment.lifecycle().manage(messagePersister);
@@ -646,7 +606,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
         new PlainDirectoryController(rateLimiters, accountsManager),
         new MessageController(rateLimiters, messageSender, receiptSender, accountsManager, messagesManager, unsealedSenderRateLimiter, null, dynamicConfig, rateLimitChallengeManager, reportMessageManager, metricsCluster, declinedMessageReceiptExecutor, multiRecipientMessageExecutor),
         new PaymentsController(currencyManager, paymentsCredentialsGenerator),
-        new ProfileController(rateLimiters, accountsManager, profilesManager, usernamesManager, profileBadgeConverter, minioClient, profileCdnPolicyGenerator, profileCdnPolicySigner, minioConfig.getProfileBucket(), zkProfileOperations, isZkEnabled),
+        new ProfileController(clock, rateLimiters, accountsManager, profilesManager, usernamesManager, profileBadgeConverter, config.getBadges(), minioClient, profileCdnPolicyGenerator, profileCdnPolicySigner, minioConfig.getProfileBucket(), zkProfileOperations),
         new ProvisioningController(rateLimiters, provisioningManager),
         // new RemoteConfigController(remoteConfigsManager,
         // config.getRemoteConfigConfiguration().getAuthorizedTokens(),

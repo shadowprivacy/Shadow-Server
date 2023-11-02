@@ -6,6 +6,7 @@
 package su.sres.shadowserver.controllers;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.refEq;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.eq;
@@ -39,6 +40,8 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
+import java.time.Clock;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -57,6 +60,8 @@ import io.minio.errors.ServerException;
 import io.minio.errors.XmlParserException;
 import su.sres.shadowserver.auth.AuthenticatedAccount;
 import su.sres.shadowserver.auth.DisabledPermittedAuthenticatedAccount;
+import su.sres.shadowserver.configuration.BadgeConfiguration;
+import su.sres.shadowserver.configuration.BadgesConfiguration;
 import su.sres.shadowserver.entities.Badge;
 import su.sres.shadowserver.entities.CreateProfileRequest;
 import su.sres.shadowserver.entities.Profile;
@@ -66,6 +71,7 @@ import su.sres.shadowserver.limits.RateLimiters;
 import su.sres.shadowserver.s3.PolicySigner;
 import su.sres.shadowserver.s3.PostPolicyGenerator;
 import su.sres.shadowserver.storage.Account;
+import su.sres.shadowserver.storage.AccountBadge;
 import su.sres.shadowserver.storage.AccountsManager;
 import su.sres.shadowserver.storage.ProfilesManager;
 import su.sres.shadowserver.storage.UsernamesManager;
@@ -77,6 +83,7 @@ import su.sres.shadowserver.util.SystemMapper;
 @ExtendWith(DropwizardExtensionsSupport.class)
 class ProfileControllerTest {
 
+  private static Clock clock = mock(Clock.class);
   private static AccountsManager accountsManager = mock(AccountsManager.class);
   private static ProfilesManager profilesManager = mock(ProfilesManager.class);
   private static UsernamesManager usernamesManager = mock(UsernamesManager.class);
@@ -90,6 +97,14 @@ class ProfileControllerTest {
   private static ServerZkProfileOperations zkProfileOperations = mock(ServerZkProfileOperations.class);
 
   private Account profileAccount;
+  
+  private static URL makeURL(String url) {
+    try {
+      return new URL(url);
+    } catch (MalformedURLException e) {
+      throw new AssertionError(e);
+    }
+  }
 
   public static final ResourceExtension resources;
   
@@ -99,18 +114,17 @@ class ProfileControllerTest {
           .addProvider(new PolymorphicAuthValueFactoryProvider.Binder<>(
               ImmutableSet.of(AuthenticatedAccount.class, DisabledPermittedAuthenticatedAccount.class)))
           .setMapper(SystemMapper.getMapper()).setTestContainerFactory(new GrizzlyWebTestContainerFactory())
-          .addResource(new ProfileController(rateLimiters, accountsManager, profilesManager, usernamesManager,
-              (acceptableLanguages, accountBadges) -> {
-                try {
-                  return List.of(
-                      new Badge("TEST1", "other", new URL("https://example.com/badge/1"), "Test Badge", "This badge is in unit tests.")
-                  );
-                } catch (MalformedURLException e) {
-                  throw new AssertionError(e);
-                }
-              },
-              minioClient, postPolicyGenerator, policySigner, "profiles", zkProfileOperations,
-              true))
+          .addResource(new ProfileController(clock, rateLimiters, accountsManager, profilesManager, usernamesManager,
+              (acceptableLanguages, accountBadges, isSelf) -> List.of(
+                  new Badge("TEST", "other", makeURL("https://example.com/badge/test"), "Test Badge", "This badge is in unit tests.")
+              ),
+              new BadgesConfiguration(List.of(
+                  new BadgeConfiguration("TEST", makeURL("https://example.com/badge/test"), "other"),
+                  new BadgeConfiguration("TEST1", makeURL("https://example.com/badge/1"), "testing"),
+                  new BadgeConfiguration("TEST2", makeURL("https://example.com/badge/2"), "testing"),
+                  new BadgeConfiguration("TEST3", makeURL("https://example.com/badge/3"), "testing")
+              ), List.of("TEST1")),
+              minioClient, postPolicyGenerator, policySigner, "profiles", zkProfileOperations))
           .build();
     } catch (final Exception e) {
       throw new RuntimeException("Failed to create ResourceExtension instance in static block.", e);
@@ -121,6 +135,8 @@ class ProfileControllerTest {
   void setup() {
 
     reset(minioClient);
+    
+    when(clock.instant()).thenReturn(Instant.ofEpochSecond(42));
     
     AccountsHelper.setupMockUpdate(accountsManager);
 
@@ -321,7 +337,7 @@ class ProfileControllerTest {
     ProfileAvatarUploadAttributes uploadAttributes = resources.getJerseyTest().target("/v1/profile/").request()
         .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID, AuthHelper.VALID_PASSWORD))
         .put(Entity.entity(new CreateProfileRequest(commitment, "someversion", "123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678", null, null,
-            null, true), MediaType.APPLICATION_JSON_TYPE), ProfileAvatarUploadAttributes.class);
+            null, true, List.of()), MediaType.APPLICATION_JSON_TYPE), ProfileAvatarUploadAttributes.class);
 
     ArgumentCaptor<VersionedProfile> profileArgumentCaptor = ArgumentCaptor.forClass(VersionedProfile.class);
 
@@ -346,7 +362,7 @@ class ProfileControllerTest {
     Response response = resources.getJerseyTest().target("/v1/profile/").request()
         .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID, AuthHelper.VALID_PASSWORD))
         .put(Entity.entity(new CreateProfileRequest(commitment, "someversion", "1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890", null, null,
-            null, true), MediaType.APPLICATION_JSON_TYPE));
+            null, true, List.of()), MediaType.APPLICATION_JSON_TYPE));
 
     assertThat(response.getStatus()).isEqualTo(422);
   }
@@ -360,7 +376,7 @@ class ProfileControllerTest {
     Response response = resources.getJerseyTest().target("/v1/profile/").request()
         .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID_TWO, AuthHelper.VALID_PASSWORD_TWO))
         .put(Entity.entity(new CreateProfileRequest(commitment, "anotherversion", "123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678", null, null,
-            null, false), MediaType.APPLICATION_JSON_TYPE));
+            null, false, List.of()), MediaType.APPLICATION_JSON_TYPE));
 
     assertThat(response.getStatus()).isEqualTo(200);
     assertThat(response.hasEntity()).isFalse();
@@ -392,7 +408,7 @@ class ProfileControllerTest {
     ProfileAvatarUploadAttributes uploadAttributes = resources.getJerseyTest().target("/v1/profile/").request()
         .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID_TWO, AuthHelper.VALID_PASSWORD_TWO))
         .put(Entity.entity(new CreateProfileRequest(commitment, "validversion", "123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678", null, null,
-            null, true), MediaType.APPLICATION_JSON_TYPE), ProfileAvatarUploadAttributes.class);
+            null, true, List.of()), MediaType.APPLICATION_JSON_TYPE), ProfileAvatarUploadAttributes.class);
 
     ArgumentCaptor<VersionedProfile> profileArgumentCaptor = ArgumentCaptor.forClass(VersionedProfile.class);
     ArgumentCaptor<RemoveObjectArgs> argsCaptor = ArgumentCaptor.forClass(RemoveObjectArgs.class);
@@ -422,7 +438,7 @@ class ProfileControllerTest {
         .target("/v1/profile/")
         .request()
         .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID_TWO, AuthHelper.VALID_PASSWORD_TWO))
-        .put(Entity.entity(new CreateProfileRequest(commitment, "validversion", name, null, null, null, true), MediaType.APPLICATION_JSON_TYPE), ProfileAvatarUploadAttributes.class);
+        .put(Entity.entity(new CreateProfileRequest(commitment, "validversion", name, null, null, null, true, List.of()), MediaType.APPLICATION_JSON_TYPE), ProfileAvatarUploadAttributes.class);
 
     ArgumentCaptor<VersionedProfile> profileArgumentCaptor = ArgumentCaptor.forClass(VersionedProfile.class);
     ArgumentCaptor<RemoveObjectArgs> argsCaptor = ArgumentCaptor.forClass(RemoveObjectArgs.class);
@@ -454,7 +470,7 @@ class ProfileControllerTest {
         .target("/v1/profile/")
         .request()
         .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID_TWO, AuthHelper.VALID_PASSWORD_TWO))
-        .put(Entity.entity(new CreateProfileRequest(commitment, "anotherversion", name, emoji, text, null, false), MediaType.APPLICATION_JSON_TYPE));
+        .put(Entity.entity(new CreateProfileRequest(commitment, "anotherversion", name, emoji, text, null, false, List.of()), MediaType.APPLICATION_JSON_TYPE));
 
     assertThat(response.getStatus()).isEqualTo(200);
     assertThat(response.hasEntity()).isFalse();
@@ -492,7 +508,7 @@ class ProfileControllerTest {
         .target("/v1/profile")
         .request()
         .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID_TWO, AuthHelper.VALID_PASSWORD_TWO))
-        .put(Entity.entity(new CreateProfileRequest(commitment, "yetanotherversion", name, null, null, paymentAddress, false), MediaType.APPLICATION_JSON_TYPE));
+        .put(Entity.entity(new CreateProfileRequest(commitment, "yetanotherversion", name, null, null, paymentAddress, false, List.of()), MediaType.APPLICATION_JSON_TYPE));
 
     assertThat(response.getStatus()).isEqualTo(200);
     assertThat(response.hasEntity()).isFalse();
@@ -554,7 +570,7 @@ class ProfileControllerTest {
         .target("/v1/profile")
         .request()
         .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID_TWO, AuthHelper.VALID_PASSWORD_TWO))
-        .put(Entity.entity(new CreateProfileRequest(commitment, "someversion", name, null, null, paymentAddress, false), MediaType.APPLICATION_JSON_TYPE));
+        .put(Entity.entity(new CreateProfileRequest(commitment, "someversion", name, null, null, paymentAddress, false, List.of()), MediaType.APPLICATION_JSON_TYPE));
 
     assertThat(response.getStatus()).isEqualTo(200);
     assertThat(response.hasEntity()).isFalse();
@@ -590,6 +606,100 @@ class ProfileControllerTest {
     assertThat(profile.getPaymentAddress()).isNull();
     assertThat(profile.getBadges()).hasSize(1).element(0).has(new Condition<>(
         badge -> "Test Badge".equals(badge.getName()), "has badge with expected name"));
+  }
+  
+  @Test
+  void testSetProfileBadges() throws InvalidInputException {
+    ProfileKeyCommitment commitment = new ProfileKey(new byte[32]).getCommitment(AuthHelper.VALID_UUID);
 
+    clearInvocations(AuthHelper.VALID_ACCOUNT_TWO);
+
+    final String name = RandomStringUtils.randomAlphabetic(380);
+    final String emoji = RandomStringUtils.randomAlphanumeric(80);
+    final String text = RandomStringUtils.randomAlphanumeric(720);
+
+    Response response = resources.getJerseyTest()
+        .target("/v1/profile/")
+        .request()
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID_TWO, AuthHelper.VALID_PASSWORD_TWO))
+        .put(Entity.entity(new CreateProfileRequest(commitment, "anotherversion", name, emoji, text, null, false, List.of("TEST2")), MediaType.APPLICATION_JSON_TYPE));
+    assertThat(response.getStatus()).isEqualTo(200);
+    assertThat(response.hasEntity()).isFalse();
+
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<List<AccountBadge>> badgeCaptor = ArgumentCaptor.forClass(List.class);
+    verify(AuthHelper.VALID_ACCOUNT_TWO).setBadges(refEq(clock), badgeCaptor.capture());
+
+    List<AccountBadge> badges = badgeCaptor.getValue();
+    assertThat(badges).isNotNull().hasSize(1).containsOnly(new AccountBadge("TEST2", Instant.ofEpochSecond(42 + 86400), true));
+
+    clearInvocations(AuthHelper.VALID_ACCOUNT_TWO);
+    when(AuthHelper.VALID_ACCOUNT_TWO.getBadges()).thenReturn(List.of(
+        new AccountBadge("TEST2", Instant.ofEpochSecond(42 + 86400), true)
+    ));
+
+    response = resources.getJerseyTest()
+        .target("/v1/profile/")
+        .request()
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID_TWO, AuthHelper.VALID_PASSWORD_TWO))
+        .put(Entity.entity(new CreateProfileRequest(commitment, "anotherversion", name, emoji, text, null, false, List.of("TEST3", "TEST2")), MediaType.APPLICATION_JSON_TYPE));
+    assertThat(response.getStatus()).isEqualTo(200);
+    assertThat(response.hasEntity()).isFalse();
+
+    //noinspection unchecked
+    badgeCaptor = ArgumentCaptor.forClass(List.class);
+    verify(AuthHelper.VALID_ACCOUNT_TWO).setBadges(refEq(clock), badgeCaptor.capture());
+
+    badges = badgeCaptor.getValue();
+    assertThat(badges).isNotNull().hasSize(2).containsOnly(
+        new AccountBadge("TEST3", Instant.ofEpochSecond(42 + 86400), true),
+        new AccountBadge("TEST2", Instant.ofEpochSecond(42 + 86400), true));
+
+    clearInvocations(AuthHelper.VALID_ACCOUNT_TWO);
+    when(AuthHelper.VALID_ACCOUNT_TWO.getBadges()).thenReturn(List.of(
+        new AccountBadge("TEST3", Instant.ofEpochSecond(42 + 86400), true),
+        new AccountBadge("TEST2", Instant.ofEpochSecond(42 + 86400), true)
+    ));
+
+    response = resources.getJerseyTest()
+        .target("/v1/profile/")
+        .request()
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID_TWO, AuthHelper.VALID_PASSWORD_TWO))
+        .put(Entity.entity(new CreateProfileRequest(commitment, "anotherversion", name, emoji, text, null, false, List.of("TEST2", "TEST3")), MediaType.APPLICATION_JSON_TYPE));
+    assertThat(response.getStatus()).isEqualTo(200);
+    assertThat(response.hasEntity()).isFalse();
+
+    //noinspection unchecked
+    badgeCaptor = ArgumentCaptor.forClass(List.class);
+    verify(AuthHelper.VALID_ACCOUNT_TWO).setBadges(refEq(clock), badgeCaptor.capture());
+
+    badges = badgeCaptor.getValue();
+    assertThat(badges).isNotNull().hasSize(2).containsOnly(
+        new AccountBadge("TEST2", Instant.ofEpochSecond(42 + 86400), true),
+        new AccountBadge("TEST3", Instant.ofEpochSecond(42 + 86400), true));
+
+    clearInvocations(AuthHelper.VALID_ACCOUNT_TWO);
+    when(AuthHelper.VALID_ACCOUNT_TWO.getBadges()).thenReturn(List.of(
+        new AccountBadge("TEST2", Instant.ofEpochSecond(42 + 86400), true),
+        new AccountBadge("TEST3", Instant.ofEpochSecond(42 + 86400), true)
+    ));
+
+    response = resources.getJerseyTest()
+        .target("/v1/profile/")
+        .request()
+        .header("Authorization", AuthHelper.getAuthHeader(AuthHelper.VALID_UUID_TWO, AuthHelper.VALID_PASSWORD_TWO))
+        .put(Entity.entity(new CreateProfileRequest(commitment, "anotherversion", name, emoji, text, null, false, List.of("TEST1")), MediaType.APPLICATION_JSON_TYPE));
+    assertThat(response.getStatus()).isEqualTo(200);
+    assertThat(response.hasEntity()).isFalse();
+
+    //noinspection unchecked
+    badgeCaptor = ArgumentCaptor.forClass(List.class);
+    verify(AuthHelper.VALID_ACCOUNT_TWO).setBadges(refEq(clock), badgeCaptor.capture());
+
+    badges = badgeCaptor.getValue();
+    assertThat(badges).isNotNull().hasSize(3).containsOnly(
+        new AccountBadge("TEST1", Instant.ofEpochSecond(42 + 86400), true),
+        new AccountBadge("TEST2", Instant.ofEpochSecond(42 + 86400), false),
+        new AccountBadge("TEST3", Instant.ofEpochSecond(42 + 86400), false));
   }
 }

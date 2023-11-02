@@ -9,7 +9,6 @@ import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.SharedMetricRegistries;
 import com.codahale.metrics.Timer;
 import org.jdbi.v3.core.JdbiException;
-import su.sres.shadowserver.storage.mappers.AccountRowMapper;
 import su.sres.shadowserver.util.Constants;
 
 import java.sql.SQLException;
@@ -33,8 +32,7 @@ public class Usernames {
   private final FaultTolerantDatabase database;
 
   public Usernames(FaultTolerantDatabase database) {
-    this.database = database;
-    this.database.getDatabase().registerRowMapper(new AccountRowMapper());
+    this.database = database;    
   }
 
   public boolean put(UUID uuid, String username) {

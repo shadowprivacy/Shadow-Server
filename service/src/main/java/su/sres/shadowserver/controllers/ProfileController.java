@@ -23,6 +23,8 @@ import su.sres.shadowserver.auth.Anonymous;
 import su.sres.shadowserver.auth.AuthenticatedAccount;
 import su.sres.shadowserver.auth.UnidentifiedAccessChecksum;
 import su.sres.shadowserver.badges.ProfileBadgeConverter;
+import su.sres.shadowserver.configuration.BadgeConfiguration;
+import su.sres.shadowserver.configuration.BadgesConfiguration;
 
 import javax.validation.Valid;
 import javax.validation.valueextraction.Unwrapping;
@@ -45,13 +47,20 @@ import java.io.IOException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.time.Clock;
+import java.time.Duration;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import io.dropwizard.auth.Auth;
 
@@ -66,6 +75,7 @@ import su.sres.shadowserver.limits.RateLimiters;
 import su.sres.shadowserver.s3.PolicySigner;
 import su.sres.shadowserver.s3.PostPolicyGenerator;
 import su.sres.shadowserver.storage.Account;
+import su.sres.shadowserver.storage.AccountBadge;
 import su.sres.shadowserver.storage.AccountsManager;
 import su.sres.shadowserver.storage.ProfilesManager;
 import su.sres.shadowserver.storage.UsernamesManager;
@@ -79,37 +89,42 @@ public class ProfileController {
 
   private final Logger logger = LoggerFactory.getLogger(ProfileController.class);
 
+  private final Clock clock;
   private final RateLimiters rateLimiters;
   private final ProfilesManager profilesManager;
   private final AccountsManager accountsManager;
   private final UsernamesManager usernamesManager;
   private final ProfileBadgeConverter profileBadgeConverter;
+  private final Map<String, BadgeConfiguration> badgeConfigurationMap;
 
   private final PolicySigner policySigner;
   private final PostPolicyGenerator policyGenerator;
   private final ServerZkProfileOperations zkProfileOperations;
-  private final boolean isZkEnabled;
-
+  
   private final String bucket;
   private MinioClient minioClient = null;
 
-  public ProfileController(RateLimiters rateLimiters,
+  public ProfileController(Clock clock,
+      RateLimiters rateLimiters,
       AccountsManager accountsManager,
       ProfilesManager profilesManager,
       UsernamesManager usernamesManager,
       ProfileBadgeConverter profileBadgeConverter,
+      BadgesConfiguration badgesConfiguration,
       MinioClient minioClient,
       PostPolicyGenerator policyGenerator,
       PolicySigner policySigner,
       String bucket,
-      ServerZkProfileOperations zkProfileOperations,
-      boolean isZkEnabled) throws MinioException {
+      ServerZkProfileOperations zkProfileOperations) throws MinioException {
 
+    this.clock = clock;
     this.rateLimiters = rateLimiters;
     this.accountsManager = accountsManager;
     this.profilesManager = profilesManager;
     this.usernamesManager = usernamesManager;
     this.profileBadgeConverter = profileBadgeConverter;
+    this.badgeConfigurationMap = badgesConfiguration.getBadges().stream().collect(Collectors.toMap(
+        BadgeConfiguration::getId, Function.identity()));
     this.zkProfileOperations = zkProfileOperations;
 //		this.bucket = profilesConfiguration.getBucket();
     this.bucket = bucket;
@@ -117,8 +132,7 @@ public class ProfileController {
     this.minioClient = minioClient;
 
     this.policyGenerator = policyGenerator;
-    this.policySigner = policySigner;
-    this.isZkEnabled = isZkEnabled;
+    this.policySigner = policySigner;    
   }
 
   @Timed
@@ -126,10 +140,7 @@ public class ProfileController {
   @Produces(MediaType.APPLICATION_JSON)
   @Consumes(MediaType.APPLICATION_JSON)
   public Response setProfile(@Auth AuthenticatedAccount auth, @Valid CreateProfileRequest request) {
-
-    if (!isZkEnabled)
-      throw new WebApplicationException(Response.Status.NOT_FOUND);
-
+    
     Optional<VersionedProfile> currentProfile = profilesManager.get(auth.getAccount().getUuid(), request.getVersion());
     String avatar = request.isAvatar() ? generateAvatarObjectName() : null;
     Optional<ProfileAvatarUploadAttributes> response = Optional.empty();
@@ -171,9 +182,13 @@ public class ProfileController {
       response = Optional.of(generateAvatarUploadForm(avatar));
     }
 
+    List<AccountBadge> updatedBadges = mergeBadgeIdsWithExistingAccountBadges(
+        request.getBadges(), auth.getAccount().getBadges());
+
     accountsManager.update(auth.getAccount(), a -> {
       a.setProfileName(request.getName());
       a.setAvatar(avatar);
+      a.setBadges(clock, updatedBadges);
       a.setCurrentProfileVersion(request.getVersion());
     });
 
@@ -193,8 +208,7 @@ public class ProfileController {
       @PathParam("uuid") UUID uuid,
       @PathParam("version") String version)
       throws RateLimitExceededException {
-    if (!isZkEnabled)
-      throw new WebApplicationException(Response.Status.NOT_FOUND);
+    
     return getVersionedProfile(auth.map(AuthenticatedAccount::getAccount), accessKey,
         getAcceptableLanguagesForRequest(containerRequestContext), uuid,
         version, Optional.empty());
@@ -211,8 +225,7 @@ public class ProfileController {
       @PathParam("version") String version,
       @PathParam("credentialRequest") String credentialRequest)
       throws RateLimitExceededException {
-    if (!isZkEnabled)
-      throw new WebApplicationException(Response.Status.NOT_FOUND);
+    
     return getVersionedProfile(auth.map(AuthenticatedAccount::getAccount), accessKey,
         getAcceptableLanguagesForRequest(containerRequestContext), uuid,
         version, Optional.of(credentialRequest));
@@ -225,15 +238,17 @@ public class ProfileController {
       String version,
       Optional<String> credentialRequest)
       throws RateLimitExceededException {
-    if (!isZkEnabled)
-      throw new WebApplicationException(Response.Status.NOT_FOUND);
+    
     try {
       if (requestAccount.isEmpty() && accessKey.isEmpty()) {
         throw new WebApplicationException(Response.Status.UNAUTHORIZED);
       }
 
+      boolean isSelf = false;
       if (requestAccount.isPresent()) {
-        rateLimiters.getProfileLimiter().validate(requestAccount.get().getUuid());
+        UUID authedUuid = requestAccount.get().getUuid();
+        rateLimiters.getProfileLimiter().validate(authedUuid);
+        isSelf = uuid.equals(authedUuid);
       }
 
       Optional<Account> accountProfile = accountsManager.get(uuid);
@@ -271,7 +286,7 @@ public class ProfileController {
           UserCapabilities.createForAccount(accountProfile.get()),
           username.orElse(null),
           null,
-          profileBadgeConverter.convert(acceptableLanguages, accountProfile.get().getBadges()),
+          profileBadgeConverter.convert(acceptableLanguages, accountProfile.get().getBadges(), isSelf),
           credential.orElse(null)));
     } catch (InvalidInputException e) {
       logger.info("Bad profile request", e);
@@ -297,6 +312,8 @@ public class ProfileController {
     if (uuid.isEmpty()) {
       throw new WebApplicationException(Response.status(Response.Status.NOT_FOUND).build());
     }
+    
+    final boolean isSelf = auth.getAccount().getUuid().equals(uuid.get());
 
     Optional<Account> accountProfile = accountsManager.get(uuid.get());
 
@@ -315,7 +332,10 @@ public class ProfileController {
         UserCapabilities.createForAccount(accountProfile.get()),
         username,
         accountProfile.get().getUuid(),
-        profileBadgeConverter.convert(getAcceptableLanguagesForRequest(containerRequestContext), accountProfile.get().getBadges()),
+        profileBadgeConverter.convert(
+            getAcceptableLanguagesForRequest(containerRequestContext),
+            accountProfile.get().getBadges(),
+            isSelf),
         null);
   }
 
@@ -370,8 +390,11 @@ public class ProfileController {
       throw new WebApplicationException(Response.Status.UNAUTHORIZED);
     }
 
+    boolean isSelf = false;
     if (auth.isPresent()) {
-      rateLimiters.getProfileLimiter().validate(auth.get().getAccount().getUuid());
+      UUID authedUuid = auth.get().getAccount().getUuid();
+      rateLimiters.getProfileLimiter().validate(authedUuid);
+      isSelf = authedUuid.equals(identifier);
     }
 
     Optional<Account> accountProfile = accountsManager.get(identifier);
@@ -390,7 +413,10 @@ public class ProfileController {
         UserCapabilities.createForAccount(accountProfile.get()),
         username.orElse(null),
         null,
-        profileBadgeConverter.convert(getAcceptableLanguagesForRequest(containerRequestContext), accountProfile.get().getBadges()),
+        profileBadgeConverter.convert(
+            getAcceptableLanguagesForRequest(containerRequestContext),
+            accountProfile.get().getBadges(),
+            isSelf),
         null);
   }
 
@@ -451,5 +477,48 @@ public class ProfileController {
       logger.warn("Could not get acceptable languages", e);
       return List.of();
     }
+  }
+
+  private List<AccountBadge> mergeBadgeIdsWithExistingAccountBadges(
+      final List<String> badgeIds,
+      final List<AccountBadge> accountBadges) {
+    LinkedHashMap<String, AccountBadge> existingBadges = new LinkedHashMap<>(accountBadges.size());
+    for (final AccountBadge accountBadge : accountBadges) {
+      existingBadges.putIfAbsent(accountBadge.getId(), accountBadge);
+    }
+
+    LinkedHashMap<String, AccountBadge> result = new LinkedHashMap<>(accountBadges.size());
+    for (final String badgeId : badgeIds) {
+
+      // duplicate in the list, ignore it
+      if (result.containsKey(badgeId)) {
+        continue;
+      }
+
+      // This is for testing badges and allows them to be added to an account at any
+      // time with an expiration of 1 day
+      // in the future.
+      BadgeConfiguration badgeConfiguration = badgeConfigurationMap.get(badgeId);
+      if (badgeConfiguration != null && badgeConfiguration.isTestBadge()) {
+        result.put(badgeId, new AccountBadge(badgeId, clock.instant().plus(Duration.ofDays(1)), true));
+        continue;
+      }
+
+      // reordering or making visible existing badges
+      if (existingBadges.containsKey(badgeId)) {
+        AccountBadge accountBadge = existingBadges.get(badgeId).withVisibility(true);
+        result.put(badgeId, accountBadge);
+      }
+    }
+
+    // take any remaining account badges and make them invisible
+    for (final Entry<String, AccountBadge> entry : existingBadges.entrySet()) {
+      if (!result.containsKey(entry.getKey())) {
+        AccountBadge accountBadge = entry.getValue().withVisibility(false);
+        result.put(accountBadge.getId(), accountBadge);
+      }
+    }
+
+    return new ArrayList<>(result.values());
   }
 }

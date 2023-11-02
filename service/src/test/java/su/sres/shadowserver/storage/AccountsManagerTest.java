@@ -11,6 +11,7 @@ import redis.clients.jedis.Jedis;
 
 import org.junit.Test;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -53,9 +54,8 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 class AccountsManagerTest {
-  
+    
   private Accounts accounts;
-  private AccountsScyllaDb accountsScyllaDb;
   private DirectoryManager directory;
   
   private RedisAdvancedClusterCommands<String, String> commands;
@@ -74,9 +74,8 @@ class AccountsManagerTest {
   };
   
   @BeforeEach
-  void setup() {
+  void setup() {    
     accounts = mock(Accounts.class);
-    accountsScyllaDb = mock(AccountsScyllaDb.class);
     directory = new DirectoryManager(mock(ReplicatedJedisPool.class));
     jedis = mock(Jedis.class);
     keys = mock(KeysScyllaDb.class);
@@ -86,23 +85,20 @@ class AccountsManagerTest {
     //noinspection unchecked
     commands = mock(RedisAdvancedClusterCommands.class);
     
-    accountsManager = new AccountsManager(
+    accountsManager = new AccountsManager(        
         accounts,
-        accountsScyllaDb,
         directory,
         RedisClusterHelper.buildMockRedisCluster(commands),
         mock(DeletedAccounts.class),
         keys,
-        messagesManager,
-        mock(MigrationMismatchedAccounts.class),
+        messagesManager,        
         mock(UsernamesManager.class),
         profilesManager,
         mock(StoredVerificationCodeManager.class));
   }
 
-    @ParameterizedTest
-    @ValueSource(booleans = {true})
-    void testGetAccountByNumberInCache(final boolean dynamoEnabled) {
+  @Test
+  void testGetAccountByNumberInCache() {
     
     UUID uuid = UUID.randomUUID();
         
@@ -118,14 +114,12 @@ class AccountsManagerTest {
     verify(commands, times(1)).get(eq("AccountMap::johndoe"));
     verify(commands, times(1)).get(eq("Account3::" + uuid));
     verifyNoMoreInteractions(commands);
-    verifyNoMoreInteractions(accounts);
-    
-    verifyNoInteractions(accountsScyllaDb);
+        
+    verifyNoInteractions(accounts);
   }
    
-    @ParameterizedTest
-    @ValueSource(booleans = {true})
-    void testGetAccountByUuidInCache(boolean dynamoEnabled) {
+  @Test
+  void testGetAccountByUuidInCache() {
     
     UUID uuid = UUID.randomUUID();
 
@@ -139,15 +133,14 @@ class AccountsManagerTest {
     assertEquals(account.get().getProfileName(), "test");
 
     verify(commands, times(1)).get(eq("Account3::" + uuid));
-    verifyNoMoreInteractions(commands);
-    verifyNoMoreInteractions(accounts);
+    verifyNoMoreInteractions(commands);    
     
-    verifyNoInteractions(accountsScyllaDb);
+    verifyNoInteractions(accounts);
   }
 
-    @ParameterizedTest
-    @ValueSource(booleans = {true})
-    void testGetAccountByUserLoginNotInCache(boolean dynamoEnabled) {
+  @Test
+  void testGetAccountByUserLoginNotInCache() {
+    final boolean dynamoEnabled = true;
     
     UUID uuid = UUID.randomUUID();
     Account account = new Account("johndoe", uuid, new HashSet<>(), new byte[16]);
@@ -167,15 +160,11 @@ class AccountsManagerTest {
 
     verify(accounts, times(1)).get(eq("johndoe"));
     verifyNoMoreInteractions(accounts);
-    
-    verify(accountsScyllaDb, dynamoEnabled ? times(1) : never())
-    .get(eq("johndoe"));
-verifyNoMoreInteractions(accountsScyllaDb);
   }
 
-    @ParameterizedTest
-    @ValueSource(booleans = {true})
-    void testGetAccountByUuidNotInCache(boolean dynamoEnabled) {
+  @Test
+  void testGetAccountByUuidNotInCache() {
+    final boolean dynamoEnabled = true;
     
     UUID uuid = UUID.randomUUID();
     Account account = new Account("johndoe", uuid, new HashSet<>(), new byte[16]);
@@ -195,14 +184,10 @@ verifyNoMoreInteractions(accountsScyllaDb);
 
     verify(accounts, times(1)).get(eq(uuid));
     verifyNoMoreInteractions(accounts);
-    
-    verify(accountsScyllaDb, dynamoEnabled ? times(1) : never()).get(eq(uuid));
-    verifyNoMoreInteractions(accountsScyllaDb);
   }
 
-    @ParameterizedTest
-    @ValueSource(booleans = {true})
-    void testGetAccountByUserLoginBrokenCache(boolean dynamoEnabled) {
+  @Test
+  void testGetAccountByNumberBrokenCache() {
     
     UUID uuid = UUID.randomUUID();
     Account account = new Account("johndoe", uuid, new HashSet<>(), new byte[16]);
@@ -222,15 +207,11 @@ verifyNoMoreInteractions(accountsScyllaDb);
 
     verify(accounts, times(1)).get(eq("johndoe"));
     verifyNoMoreInteractions(accounts);
-    
-    verify(accountsScyllaDb, dynamoEnabled ? times(1) : never()).get(eq("johndoe"));
-    verifyNoMoreInteractions(accountsScyllaDb);
   }
 
-    @ParameterizedTest
-    @ValueSource(booleans = {true})
-    void testGetAccountByUuidBrokenCache(boolean dynamoEnabled) {
-   
+  @Test
+  void testGetAccountByUuidBrokenCache() {
+       
     UUID uuid = UUID.randomUUID();
     Account account = new Account("johndoe", uuid, new HashSet<>(), new byte[16]);
 
@@ -249,110 +230,33 @@ verifyNoMoreInteractions(accountsScyllaDb);
 
     verify(accounts, times(1)).get(eq(uuid));
     verifyNoMoreInteractions(accounts);
-    
-    verify(accountsScyllaDb, dynamoEnabled ? times(1) : never()).get(eq(uuid));
-    verifyNoMoreInteractions(accountsScyllaDb);
   }
-    
-    @ParameterizedTest
-    @ValueSource(booleans = {true})
-    void testUpdate_dynamoDbMigration(boolean scyllaEnabled) throws IOException {
-      
-      UUID uuid = UUID.randomUUID();
-      Account account = new Account("+14152222222", uuid, new HashSet<>(), new byte[16]);
-      
-      when(commands.get(eq("Account3::" + uuid))).thenReturn(null);
-      // database fetches should always return new instances
-      when(accounts.get(uuid)).thenReturn(Optional.of(new Account("+14152222222", uuid, new HashSet<>(), new byte[16])));
-      when(accountsScyllaDb.get(uuid)).thenReturn(Optional.of(new Account("+14152222222", uuid, new HashSet<>(), new byte[16])));
-      doAnswer(ACCOUNT_UPDATE_ANSWER).when(accounts).update(any(Account.class));
-      
-      Account updatedAccount = accountsManager.update(account, a -> a.setProfileName("name"));
-
-      assertThrows(AssertionError.class, account::getProfileName, "Account passed to update() should be stale");
-
-      assertNotSame(updatedAccount, account);
-
-      verify(accounts, times(1)).update(account);
-      verifyNoMoreInteractions(accounts);
-
-      if (scyllaEnabled) {
-        ArgumentCaptor<Account> argumentCaptor = ArgumentCaptor.forClass(Account.class);
-        verify(accountsScyllaDb, times(1)).update(argumentCaptor.capture());
-        assertEquals(uuid, argumentCaptor.getValue().getUuid());
-      } else {
-        verify(accountsScyllaDb, never()).update(any());
-      }
-      verify(accountsScyllaDb, scyllaEnabled ? times(1) : never()).get(uuid);
-      verifyNoMoreInteractions(accountsScyllaDb);
-
-      ArgumentCaptor<String> redisSetArgumentCapture = ArgumentCaptor.forClass(String.class);
-
-      verify(commands, times(2)).set(anyString(), redisSetArgumentCapture.capture());
-
-      Account accountCached = JsonHelpers.fromJson(redisSetArgumentCapture.getAllValues().get(1), Account.class);
-
-      // uuid is @JsonIgnore, so we need to set it for compareAccounts to work
-      accountCached.setUuid(uuid);
-
-      assertEquals(Optional.empty(), accountsManager.compareAccounts(Optional.of(updatedAccount), Optional.of(accountCached)));
-    }
-
-    @Test
-    void testUpdate_dynamoMissing() {
-        
-      UUID                                         uuid                = UUID.randomUUID();
-      Account                                      account             = new Account("+14152222222", uuid, new HashSet<>(), new byte[16]);
-      
-      when(commands.get(eq("Account3::" + uuid))).thenReturn(null);
-      when(accountsScyllaDb.get(uuid)).thenReturn(Optional.empty());
-      doAnswer(ACCOUNT_UPDATE_ANSWER).when(accounts).update(any());
-      doAnswer(ACCOUNT_UPDATE_ANSWER).when(accountsScyllaDb).update(any());    
-
-      Account updatedAccount = accountsManager.update(account,  a -> {});
-
-      verify(accounts, times(1)).update(account);
-      verifyNoMoreInteractions(accounts);
-
-      verify(accountsScyllaDb, never()).update(account);
-      verify(accountsScyllaDb, times(1)).get(uuid);
-      verifyNoMoreInteractions(accountsScyllaDb);
-      
-      assertEquals(1, updatedAccount.getVersion());
-    }
     
     @Test
     void testUpdate_optimisticLockingFailure() {
             
       UUID                                         uuid                = UUID.randomUUID();
       Account                                      account             = new Account("+14152222222", uuid, new HashSet<>(), new byte[16]);
-      
-      long directoryVersion = 10L;
-      
+                  
       when(commands.get(eq("Account3::" + uuid))).thenReturn(null);
       when(accounts.get(uuid)).thenReturn(Optional.of(new Account("+14152222222", uuid, new HashSet<>(), new byte[16])));
       doThrow(ContestedOptimisticLockException.class)
           .doAnswer(ACCOUNT_UPDATE_ANSWER)
           .when(accounts).update(any());
 
-      when(accountsScyllaDb.get(uuid)).thenReturn(Optional.of(new Account("+14152222222", uuid, new HashSet<>(), new byte[16])));
+      when(accounts.get(uuid)).thenReturn(Optional.of(new Account("+14152222222", uuid, new HashSet<>(), new byte[16])));
       doThrow(ContestedOptimisticLockException.class)
           .doAnswer(ACCOUNT_UPDATE_ANSWER)
-          .when(accountsScyllaDb).update(any());
+          .when(accounts).update(any());
       
       account = accountsManager.update(account, a -> a.setProfileName("name"));
 
       assertEquals(1, account.getVersion());
       assertEquals("name", account.getProfileName());
-
+      
       verify(accounts, times(1)).get(uuid);
       verify(accounts, times(2)).update(any());
       verifyNoMoreInteractions(accounts);
-
-      // dynamo has an extra get() because the account is fetched before every update
-      verify(accountsScyllaDb, times(2)).get(uuid);
-      verify(accountsScyllaDb, times(2)).update(any());
-      verifyNoMoreInteractions(accountsScyllaDb);
     }
 
     @Test
@@ -362,25 +266,20 @@ verifyNoMoreInteractions(accountsScyllaDb);
       Account                                      account             = new Account("+14152222222", uuid, new HashSet<>(), new byte[16]);
       
       when(commands.get(eq("Account3::" + uuid))).thenReturn(null);
-      when(accountsScyllaDb.get(uuid)).thenReturn(Optional.empty())
+      when(accounts.get(uuid)).thenReturn(Optional.empty())
                                       .thenReturn(Optional.of(account));
-      when(accountsScyllaDb.create(any(), anyLong())).thenThrow(ContestedOptimisticLockException.class);     
+      when(accounts.create(any(), anyLong())).thenThrow(ContestedOptimisticLockException.class);     
 
       accountsManager.update(account, a -> {});
 
       verify(accounts, times(1)).update(account);
-      verifyNoMoreInteractions(accounts);
-
-      verify(accountsScyllaDb, times(1)).get(uuid);
       
-      verifyNoMoreInteractions(accountsScyllaDb);
+      verifyNoMoreInteractions(accounts);
     }
     
     @Test
     void testUpdateDevice() {
-
-      assertEquals(Optional.empty(), accountsManager.compareAccounts(Optional.empty(), Optional.empty()));
-
+     
       final UUID uuid = UUID.randomUUID();
       Account account = new Account("+14152222222", uuid, new HashSet<>(), new byte[16]);
 
@@ -409,82 +308,7 @@ verifyNoMoreInteractions(accountsScyllaDb);
       accountsManager.updateDevice(account, account.getNextDeviceId(), unknownDeviceUpdater);
 
       verify(unknownDeviceUpdater, never()).accept(any(Device.class));
-    }
-
-
-    @Test
-    void testCompareAccounts() throws Exception {
-      
-      assertEquals(Optional.empty(), accountsManager.compareAccounts(Optional.empty(), Optional.empty()));
-
-      final UUID uuidA = UUID.randomUUID();
-      final Account a1 = new Account("+14152222222", uuidA, new HashSet<>(), new byte[16]);
-
-      assertEquals(Optional.of("primaryMissing"), accountsManager.compareAccounts(Optional.empty(), Optional.of(a1)));
-
-      final Account a2 = new Account("+14152222222", uuidA, new HashSet<>(), new byte[16]);
-
-      assertEquals(Optional.empty(), accountsManager.compareAccounts(Optional.of(a1), Optional.of(a2)));
-      
-      {
-        Device device1 = new Device();
-        device1.setId(1L);
-
-        a1.addDevice(device1);
-
-        assertEquals(Optional.of("devices"), accountsManager.compareAccounts(Optional.of(a1), Optional.of(a2)));
-
-        Device device2 = new Device();
-        device2.setId(1L);
-
-        a2.addDevice(device2);
-
-        assertEquals(Optional.empty(), accountsManager.compareAccounts(Optional.of(a1), Optional.of(a2)));
-
-        device1.setLastSeen(1L);
-
-        assertEquals(Optional.empty(), accountsManager.compareAccounts(Optional.of(a1), Optional.of(a2)));
-
-        device1.setName("name");
-
-        assertEquals(Optional.of("devices"), accountsManager.compareAccounts(Optional.of(a1), Optional.of(a2)));
-        
-        device1.setName(null);
-        
-        device1.setSignedPreKey(new SignedPreKey(1L, "123", "456"));
-        device2.setSignedPreKey(new SignedPreKey(2L, "123", "456"));
-
-        assertEquals(Optional.of("masterDeviceSignedPreKey"), accountsManager.compareAccounts(Optional.of(a1), Optional.of(a2)));
-
-        device1.setSignedPreKey(null);
-        device2.setSignedPreKey(null);
-
-        assertEquals(Optional.empty(), accountsManager.compareAccounts(Optional.of(a1), Optional.of(a2)));
-
-        device1.setApnId("123");
-        Thread.sleep(5);
-        device2.setApnId("123");
-
-        assertEquals(Optional.empty(), accountsManager.compareAccounts(Optional.of(a1), Optional.of(a2)));
-        
-        a1.removeDevice(1L);
-        a2.removeDevice(1L);
-
-        assertEquals(Optional.empty(), accountsManager.compareAccounts(Optional.of(a1), Optional.of(a2)));
-      }
-
-      assertEquals(Optional.empty(), accountsManager.compareAccounts(Optional.of(a1), Optional.of(a2)));
-
-      a1.setVersion(1);
-
-      assertEquals(Optional.of("version"), accountsManager.compareAccounts(Optional.of(a1), Optional.of(a2)));
-
-      a2.setVersion(1);
-
-      a2.setProfileName("name");
-
-      assertEquals(Optional.of("profileName"), accountsManager.compareAccounts(Optional.of(a1), Optional.of(a2)));
-    }
+    }    
     
     @Test
     void testCreateFreshAccount() throws InterruptedException {
