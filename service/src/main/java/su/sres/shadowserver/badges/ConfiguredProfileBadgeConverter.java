@@ -103,10 +103,17 @@ public class ConfiguredProfileBadgeConverter implements ProfileBadgeConverter {
           return newBadge(
               isSelf,
               accountBadge.getId(),
-              configuration.getCategory(),
-              configuration.getImageUrl(),
+              configuration.getCategory(),              
               resourceBundle.getString(accountBadge.getId() + "_name"),
               resourceBundle.getString(accountBadge.getId() + "_description"),
+              configuration.getLdpi(),
+              configuration.getMdpi(),
+              configuration.getHdpi(),
+              configuration.getXhdpi(),
+              configuration.getXxhdpi(),
+              configuration.getXxxhdpi(),
+              configuration.getLowDetailSvg(),
+              configuration.getHighDetailSvg(),
               accountBadge.getExpiration(),
               accountBadge.isVisible());
         })
@@ -116,10 +123,17 @@ public class ConfiguredProfileBadgeConverter implements ProfileBadgeConverter {
       return newBadge(
           isSelf,
           id,
-          configuration.getCategory(),
-          configuration.getImageUrl(),
+          configuration.getCategory(),          
           resourceBundle.getString(id + "_name"),
           resourceBundle.getString(id + "_description"),
+          configuration.getLdpi(),
+          configuration.getMdpi(),
+          configuration.getHdpi(),
+          configuration.getXhdpi(),
+          configuration.getXxhdpi(),
+          configuration.getXxxhdpi(),
+          configuration.getLowDetailSvg(),
+          configuration.getHighDetailSvg(),
           now.plus(Duration.ofDays(1)),
           true);
     }).collect(Collectors.toList()));
@@ -129,16 +143,23 @@ public class ConfiguredProfileBadgeConverter implements ProfileBadgeConverter {
   private Badge newBadge(
       final boolean isSelf,
       final String id,
-      final String category,
-      final URL imageUrl,
+      final String category,      
       final String name,
       final String description,
+      final String ldpi,
+      final String mdpi,
+      final String hdpi,
+      final String xhdpi,
+      final String xxhdpi,
+      final String xxxhdpi,
+      final String lsvg,
+      final String hsvg,
       final Instant expiration,
       final boolean visible) {
     if (isSelf) {
-      return new SelfBadge(id, category, imageUrl, name, description, expiration, visible);
+      return new SelfBadge(id, category, name, description, ldpi, mdpi, hdpi, xhdpi, xxhdpi, xxxhdpi, lsvg, hsvg, expiration, visible);
     } else {
-      return new Badge(id, category, imageUrl, name, description);
+      return new Badge(id, category, name, description, ldpi, mdpi, hdpi, xhdpi, xxhdpi, xxxhdpi, lsvg, hsvg);
     }
   }
 }

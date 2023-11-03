@@ -36,6 +36,7 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 import org.mockito.ArgumentCaptor;
 import su.sres.shadowserver.auth.AuthenticationCredentials;
 import su.sres.shadowserver.entities.AccountAttributes;
+import su.sres.shadowserver.push.ClientPresenceManager;
 import su.sres.shadowserver.entities.SignedPreKey;
 import su.sres.shadowserver.redis.ReplicatedJedisPool;
 import su.sres.shadowserver.util.JsonHelpers;
@@ -133,7 +134,8 @@ class AccountsManagerConcurrentModificationIntegrationTest {
           messagesManager,
           mock(UsernamesManager.class),
           mock(ProfilesManager.class),
-          mock(StoredVerificationCodeManager.class));
+          mock(StoredVerificationCodeManager.class),
+          mock(ClientPresenceManager.class));
     }
   }
 

@@ -29,7 +29,6 @@ import io.lettuce.core.cluster.SlotHash;
 import su.sres.shadowserver.push.ApnMessage.Type;
 import su.sres.shadowserver.redis.ClusterLuaScript;
 import su.sres.shadowserver.redis.FaultTolerantRedisCluster;
-import su.sres.shadowserver.redis.RedisException;
 import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.storage.AccountsManager;
 import su.sres.shadowserver.storage.Device;
@@ -136,27 +135,19 @@ public class ApnFallbackManager implements Managed {
     }
   }
 
-  public void schedule(Account account, Device device) throws RedisException {
+  public void schedule(Account account, Device device) {
     schedule(account, device, System.currentTimeMillis());
   }
 
   @VisibleForTesting
-  void schedule(Account account, Device device, long timestamp) throws RedisException {
-    try {
-      sent.mark();
-      insert(account, device, timestamp + (15 * 1000), (15 * 1000));
-    } catch (io.lettuce.core.RedisException e) {
-      throw new RedisException(e);
-    }
+  void schedule(Account account, Device device, long timestamp) {
+    sent.mark();
+    insert(account, device, timestamp + (15 * 1000), (15 * 1000));
   }
 
-  public void cancel(Account account, Device device) throws RedisException {
-    try {
-      if (remove(account, device)) {
-        delivered.mark();
-      }
-    } catch (io.lettuce.core.RedisException e) {
-      throw new RedisException(e);
+  public void cancel(Account account, Device device) {
+    if (remove(account, device)) {
+      delivered.mark();
     }
   }
 

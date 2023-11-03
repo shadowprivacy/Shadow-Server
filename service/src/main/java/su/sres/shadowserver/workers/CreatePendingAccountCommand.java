@@ -21,6 +21,7 @@ import static com.codahale.metrics.MetricRegistry.name;
 import java.security.SecureRandom;
 import java.util.Optional;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import io.dropwizard.Application;
 import io.dropwizard.cli.EnvironmentCommand;
@@ -35,6 +36,7 @@ import su.sres.shadowserver.configuration.MessageScyllaDbConfiguration;
 import su.sres.shadowserver.configuration.ScyllaDbConfiguration;
 import su.sres.shadowserver.metrics.PushLatencyManager;
 import su.sres.shadowserver.providers.RedisClientFactory;
+import su.sres.shadowserver.push.ClientPresenceManager;
 import su.sres.shadowserver.redis.FaultTolerantRedisCluster;
 import su.sres.shadowserver.redis.ReplicatedJedisPool;
 import su.sres.shadowserver.storage.Account;
@@ -202,6 +204,10 @@ public class CreatePendingAccountCommand extends EnvironmentCommand<WhisperServe
       StoredVerificationCodeManager pendingAccountsManager = new StoredVerificationCodeManager(pendingAccounts, lifetime);
 
       DirectoryManager directory = new DirectoryManager(redisClient);
+      FaultTolerantRedisCluster clientPresenceCluster    = new FaultTolerantRedisCluster("client_presence_cluster",
+          configuration.getClientPresenceClusterConfiguration(), redisClusterClientResources);
+      ClientPresenceManager clientPresenceManager = new ClientPresenceManager(clientPresenceCluster,
+          Executors.newSingleThreadScheduledExecutor(), keyspaceNotificationDispatchExecutor);
       MessagesCache messagesCache = new MessagesCache(messageInsertCacheCluster, messageReadDeleteCluster, keyspaceNotificationDispatchExecutor);
       PushLatencyManager pushLatencyManager = new PushLatencyManager(metricsCluster);
 
@@ -213,7 +219,7 @@ public class CreatePendingAccountCommand extends EnvironmentCommand<WhisperServe
       ReportMessageManager reportMessageManager = new ReportMessageManager(reportMessageScyllaDb, Metrics.globalRegistry);
       MessagesManager messagesManager = new MessagesManager(messagesScyllaDb, messagesCache, pushLatencyManager, reportMessageManager);
 
-      AccountsManager accountsManager = new AccountsManager(accounts, directory, cacheCluster, deletedAccounts, keysScyllaDb, messagesManager,usernamesManager, profilesManager, pendingAccountsManager);
+      AccountsManager accountsManager = new AccountsManager(accounts, directory, cacheCluster, deletedAccounts, keysScyllaDb, messagesManager,usernamesManager, profilesManager, pendingAccountsManager, clientPresenceManager);
 
       for (String user : users) {
         Optional<Account> existingAccount = accountsManager.get(user);

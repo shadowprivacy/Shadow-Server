@@ -49,13 +49,12 @@ import java.util.stream.Collectors;
 import static com.codahale.metrics.MetricRegistry.name;
 
 public class MessagesCache extends RedisClusterPubSubAdapter<String, String> implements Managed {
-  private final FaultTolerantRedisCluster insertCluster;
   private final FaultTolerantRedisCluster readDeleteCluster;
   private final FaultTolerantPubSubConnection<String, String> pubSubConnection;
 
   private final ExecutorService notificationExecutorService;
 
-  private final ClusterLuaScript insertScript;  
+  private final ClusterLuaScript insertScript;
   private final ClusterLuaScript removeByGuidScript;
   private final ClusterLuaScript getItemsScript;
   private final ClusterLuaScript removeQueueScript;
@@ -64,21 +63,21 @@ public class MessagesCache extends RedisClusterPubSubAdapter<String, String> imp
   private final Map<String, MessageAvailabilityListener> messageListenersByQueueName = new HashMap<>();
   private final Map<MessageAvailabilityListener, String> queueNamesByMessageListener = new IdentityHashMap<>();
 
-  private final Timer insertTimer = Metrics.timer(name(MessagesCache.class, "insert"), "ephemeral", "false");  
+  private final Timer insertTimer = Metrics.timer(name(MessagesCache.class, "insert"));
   private final Timer getMessagesTimer = Metrics.timer(name(MessagesCache.class, "get"));
   private final Timer getQueuesToPersistTimer = Metrics.timer(name(MessagesCache.class, "getQueuesToPersist"));
   private final Timer clearQueueTimer = Metrics.timer(name(MessagesCache.class, "clear"));
-  private final Timer takeEphemeralMessageTimer = Metrics.timer(name(MessagesCache.class, "takeEphemeral"));
   private final Counter pubSubMessageCounter = Metrics.counter(name(MessagesCache.class, "pubSubMessage"));
-  private final Counter newMessageNotificationCounter = Metrics.counter(name(MessagesCache.class, "newMessageNotification"), "ephemeral", "false");
-  private final Counter ephemeralMessageNotificationCounter = Metrics.counter(name(MessagesCache.class, "newMessageNotification"), "ephemeral", "true");
-  private final Counter queuePersistedNotificationCounter = Metrics.counter(name(MessagesCache.class, "queuePersisted"));
+  private final Counter newMessageNotificationCounter = Metrics.counter(name(MessagesCache.class, "newMessageNotification"));
+  private final Counter queuePersistedNotificationCounter = Metrics.counter(
+      name(MessagesCache.class, "queuePersisted"));
+  private final Counter staleEphemeralMessagesCounter = Metrics.counter(
+      name(MessagesCache.class, "staleEphemeralMessages"));
 
   static final String NEXT_SLOT_TO_PERSIST_KEY = "user_queue_persist_slot";
   private static final byte[] LOCK_VALUE = "1".getBytes(StandardCharsets.UTF_8);
 
   private static final String QUEUE_KEYSPACE_PREFIX = "__keyspace@0__:user_queue::";
-  private static final String EPHEMERAL_QUEUE_KEYSPACE_PREFIX = "__keyspace@0__:user_queue_ephemeral::";
   private static final String PERSISTING_KEYSPACE_PREFIX = "__keyspace@0__:user_queue_persisting::";
 
   private static final Duration MAX_EPHEMERAL_MESSAGE_DELAY = Duration.ofSeconds(10);
@@ -92,13 +91,12 @@ public class MessagesCache extends RedisClusterPubSubAdapter<String, String> imp
 
   public MessagesCache(final FaultTolerantRedisCluster insertCluster, final FaultTolerantRedisCluster readDeleteCluster, final ExecutorService notificationExecutorService) throws IOException {
 
-    this.insertCluster = insertCluster;
     this.readDeleteCluster = readDeleteCluster;
     this.pubSubConnection = readDeleteCluster.createPubSubConnection();
 
     this.notificationExecutorService = notificationExecutorService;
 
-    this.insertScript = ClusterLuaScript.fromResource(insertCluster, "lua/insert_item.lua", ScriptOutputType.INTEGER);   
+    this.insertScript = ClusterLuaScript.fromResource(insertCluster, "lua/insert_item.lua", ScriptOutputType.INTEGER);
     this.removeByGuidScript = ClusterLuaScript.fromResource(readDeleteCluster, "lua/remove_item_by_guid.lua", ScriptOutputType.MULTI);
     this.getItemsScript = ClusterLuaScript.fromResource(readDeleteCluster, "lua/get_items.lua", ScriptOutputType.MULTI);
     this.removeQueueScript = ClusterLuaScript.fromResource(readDeleteCluster, "lua/remove_queue.lua", ScriptOutputType.STATUS);
@@ -137,43 +135,42 @@ public class MessagesCache extends RedisClusterPubSubAdapter<String, String> imp
 
   public long insert(final UUID guid, final UUID destinationUuid, final long destinationDevice, final MessageProtos.Envelope message) {
     final MessageProtos.Envelope messageWithGuid = message.toBuilder().setServerGuid(guid.toString()).build();
-    return (long) insertTimer.record(() ->
-        insertScript.executeBinary(List.of(getMessageQueueKey(destinationUuid, destinationDevice),
+    return (long) insertTimer.record(() -> insertScript.executeBinary(List.of(getMessageQueueKey(destinationUuid, destinationDevice),
+        getMessageQueueMetadataKey(destinationUuid, destinationDevice),
+        getQueueIndexKey(destinationUuid, destinationDevice)),
+        List.of(messageWithGuid.toByteArray(),
+            String.valueOf(message.getTimestamp()).getBytes(StandardCharsets.UTF_8),
+            guid.toString().getBytes(StandardCharsets.UTF_8))));
+  }
+
+  public Optional<OutgoingMessageEntity> remove(final UUID destinationUuid, final long destinationDevice,
+      final UUID messageGuid) {
+    return remove(destinationUuid, destinationDevice, List.of(messageGuid)).stream().findFirst();
+  }
+
+  @SuppressWarnings("unchecked")
+  public List<OutgoingMessageEntity> remove(final UUID destinationUuid, final long destinationDevice,
+      final List<UUID> messageGuids) {
+    final List<byte[]> serialized = (List<byte[]>) Metrics.timer(REMOVE_TIMER_NAME, REMOVE_METHOD_TAG,
+        REMOVE_METHOD_UUID).record(
+            () -> removeByGuidScript.executeBinary(List.of(getMessageQueueKey(destinationUuid, destinationDevice),
                 getMessageQueueMetadataKey(destinationUuid, destinationDevice),
                 getQueueIndexKey(destinationUuid, destinationDevice)),
-            List.of(messageWithGuid.toByteArray(),
-                String.valueOf(message.getTimestamp()).getBytes(StandardCharsets.UTF_8),
-                guid.toString().getBytes(StandardCharsets.UTF_8))));
-  }
+                messageGuids.stream().map(guid -> guid.toString().getBytes(StandardCharsets.UTF_8))
+                    .collect(Collectors.toList())));
 
-public Optional<OutgoingMessageEntity> remove(final UUID destinationUuid, final long destinationDevice,
-    final UUID messageGuid) {
-  return remove(destinationUuid, destinationDevice, List.of(messageGuid)).stream().findFirst();
-}
+    final List<OutgoingMessageEntity> removedMessages = new ArrayList<>(serialized.size());
 
-@SuppressWarnings("unchecked")
-public List<OutgoingMessageEntity> remove(final UUID destinationUuid, final long destinationDevice,
-    final List<UUID> messageGuids) {
-  final List<byte[]> serialized = (List<byte[]>) Metrics.timer(REMOVE_TIMER_NAME, REMOVE_METHOD_TAG,
-      REMOVE_METHOD_UUID).record(() ->
-      removeByGuidScript.executeBinary(List.of(getMessageQueueKey(destinationUuid, destinationDevice),
-              getMessageQueueMetadataKey(destinationUuid, destinationDevice),
-              getQueueIndexKey(destinationUuid, destinationDevice)),
-          messageGuids.stream().map(guid -> guid.toString().getBytes(StandardCharsets.UTF_8))
-              .collect(Collectors.toList())));
-
-  final List<OutgoingMessageEntity> removedMessages = new ArrayList<>(serialized.size());
-
-  for (final byte[] bytes : serialized) {
-    try {
-      removedMessages.add(constructEntityFromEnvelope(0, MessageProtos.Envelope.parseFrom(bytes)));
-    } catch (final InvalidProtocolBufferException e) {
-      logger.warn("Failed to parse envelope", e);
+    for (final byte[] bytes : serialized) {
+      try {
+        removedMessages.add(constructEntityFromEnvelope(0, MessageProtos.Envelope.parseFrom(bytes)));
+      } catch (final InvalidProtocolBufferException e) {
+        logger.warn("Failed to parse envelope", e);
+      }
     }
-  }
 
-  return removedMessages;
-}
+    return removedMessages;
+  }
 
   public boolean hasMessages(final UUID destinationUuid, final long destinationDevice) {
     return readDeleteCluster.withBinaryCluster(connection -> connection.sync().zcard(getMessageQueueKey(destinationUuid, destinationDevice)) > 0);
@@ -186,7 +183,10 @@ public List<OutgoingMessageEntity> remove(final UUID destinationUuid, final long
           getPersistInProgressKey(destinationUuid, destinationDevice)),
           List.of(String.valueOf(limit).getBytes(StandardCharsets.UTF_8)));
 
+      final long earliestAllowableEphemeralTimestamp = System.currentTimeMillis() - MAX_EPHEMERAL_MESSAGE_DELAY.toMillis();
+
       final List<OutgoingMessageEntity> messageEntities;
+      final List<UUID> staleEphemeralMessageGuids = new ArrayList<>();
 
       if (queueItems.size() % 2 == 0) {
         messageEntities = new ArrayList<>(queueItems.size() / 2);
@@ -194,6 +194,11 @@ public List<OutgoingMessageEntity> remove(final UUID destinationUuid, final long
         for (int i = 0; i < queueItems.size() - 1; i += 2) {
           try {
             final MessageProtos.Envelope message = MessageProtos.Envelope.parseFrom(queueItems.get(i));
+            if (message.getEphemeral() && message.getTimestamp() < earliestAllowableEphemeralTimestamp) {
+              staleEphemeralMessageGuids.add(UUID.fromString(message.getServerGuid()));
+              continue;
+            }
+
             final long id = Long.parseLong(new String(queueItems.get(i + 1), StandardCharsets.UTF_8));
 
             messageEntities.add(constructEntityFromEnvelope(id, message));
@@ -204,6 +209,13 @@ public List<OutgoingMessageEntity> remove(final UUID destinationUuid, final long
       } else {
         logger.error("\"Get messages\" operation returned a list with a non-even number of elements.");
         messageEntities = Collections.emptyList();
+      }
+
+      try {
+        remove(destinationUuid, destinationDevice, staleEphemeralMessageGuids);
+        staleEphemeralMessagesCounter.increment(staleEphemeralMessageGuids.size());
+      } catch (final Throwable e) {
+        logger.warn("Could not remove stale ephemeral messages from cache", e);
       }
 
       return messageEntities;
@@ -226,34 +238,6 @@ public List<OutgoingMessageEntity> remove(final UUID destinationUuid, final long
 
       return envelopes;
     });
-  }
-
-  @Deprecated
-  public Optional<MessageProtos.Envelope> takeEphemeralMessage(final UUID destinationUuid, final long destinationDevice) {
-    return takeEphemeralMessage(destinationUuid, destinationDevice, System.currentTimeMillis());
-  }
-
-  @VisibleForTesting
-  Optional<MessageProtos.Envelope> takeEphemeralMessage(final UUID destinationUuid, final long destinationDevice, final long currentTimeMillis) {
-    final long earliestAllowableTimestamp = currentTimeMillis - MAX_EPHEMERAL_MESSAGE_DELAY.toMillis();
-
-    return takeEphemeralMessageTimer.record(() -> readDeleteCluster.withBinaryCluster(connection -> {
-      byte[] messageBytes;
-
-      while ((messageBytes = connection.sync().lpop(getEphemeralMessageQueueKey(destinationUuid, destinationDevice))) != null) {
-        try {
-          final MessageProtos.Envelope message = MessageProtos.Envelope.parseFrom(messageBytes);
-
-          if (message.getTimestamp() >= earliestAllowableTimestamp) {
-            return Optional.of(message);
-          }
-        } catch (final InvalidProtocolBufferException e) {
-          logger.warn("Failed to parse envelope", e);
-        }
-      }
-
-      return Optional.empty();
-    }));
   }
 
   public void clear(final UUID destinationUuid) {
@@ -336,7 +320,6 @@ public List<OutgoingMessageEntity> remove(final UUID destinationUuid, final long
   private static String[] getKeyspaceChannels(final String queueName) {
     return new String[] {
         QUEUE_KEYSPACE_PREFIX + "{" + queueName + "}",
-        EPHEMERAL_QUEUE_KEYSPACE_PREFIX + "{" + queueName + "}",
         PERSISTING_KEYSPACE_PREFIX + "{" + queueName + "}"
     };
   }
@@ -352,15 +335,6 @@ public List<OutgoingMessageEntity> remove(final UUID destinationUuid, final long
           findListener(channel).ifPresent(MessageAvailabilityListener::handleNewMessagesAvailable);
         } catch (final Exception e) {
           logger.warn("Unexpected error handling new message", e);
-        }
-      });
-    } else if (channel.startsWith(EPHEMERAL_QUEUE_KEYSPACE_PREFIX) && "rpush".equals(message)) {
-      ephemeralMessageNotificationCounter.increment();
-      notificationExecutorService.execute(() -> {
-        try {
-          findListener(channel).ifPresent(MessageAvailabilityListener::handleNewEphemeralMessageAvailable);
-        } catch (final Exception e) {
-          logger.warn("Unexpected error handling new ephemeral message", e);
         }
       });
     } else if (channel.startsWith(PERSISTING_KEYSPACE_PREFIX) && "del".equals(message)) {
@@ -414,10 +388,6 @@ public List<OutgoingMessageEntity> remove(final UUID destinationUuid, final long
   @VisibleForTesting
   static byte[] getMessageQueueKey(final UUID accountUuid, final long deviceId) {
     return ("user_queue::{" + accountUuid.toString() + "::" + deviceId + "}").getBytes(StandardCharsets.UTF_8);
-  }
-
-  static byte[] getEphemeralMessageQueueKey(final UUID accountUuid, final long deviceId) {
-    return ("user_queue_ephemeral::{" + accountUuid.toString() + "::" + deviceId + "}").getBytes(StandardCharsets.UTF_8);
   }
 
   private static byte[] getMessageQueueMetadataKey(final UUID accountUuid, final long deviceId) {

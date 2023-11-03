@@ -74,7 +74,7 @@ class CertificateControllerTest {
       .addProvider(new PolymorphicAuthValueFactoryProvider.Binder<>(ImmutableSet.of(AuthenticatedAccount.class, DisabledPermittedAuthenticatedAccount.class)))
       .setMapper(SystemMapper.getMapper())
       .setTestContainerFactory(new GrizzlyWebTestContainerFactory())
-      .addResource(new CertificateController(certificateGenerator, serverZkAuthOperations, true))
+      .addResource(new CertificateController(certificateGenerator, serverZkAuthOperations))
       .build();
 
   @Test

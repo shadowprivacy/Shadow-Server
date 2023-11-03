@@ -17,6 +17,7 @@ import org.slf4j.LoggerFactory;
 import java.util.HashSet;
 import java.util.Optional;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import io.dropwizard.Application;
 import io.dropwizard.cli.EnvironmentCommand;
@@ -30,6 +31,7 @@ import su.sres.shadowserver.configuration.MessageScyllaDbConfiguration;
 import su.sres.shadowserver.configuration.ScyllaDbConfiguration;
 import su.sres.shadowserver.metrics.PushLatencyManager;
 import su.sres.shadowserver.providers.RedisClientFactory;
+import su.sres.shadowserver.push.ClientPresenceManager;
 import su.sres.shadowserver.redis.FaultTolerantRedisCluster;
 import su.sres.shadowserver.redis.ReplicatedJedisPool;
 import su.sres.shadowserver.storage.Account;
@@ -128,6 +130,10 @@ public class DeleteUserCommand extends EnvironmentCommand<WhisperServerConfigura
       FaultTolerantRedisCluster messageInsertCacheCluster = new FaultTolerantRedisCluster("message_insert_cluster", configuration.getMessageCacheConfiguration().getRedisClusterConfiguration(), redisClusterClientResources);
       FaultTolerantRedisCluster messageReadDeleteCluster = new FaultTolerantRedisCluster("message_read_delete_cluster", configuration.getMessageCacheConfiguration().getRedisClusterConfiguration(), redisClusterClientResources);
       FaultTolerantRedisCluster metricsCluster = new FaultTolerantRedisCluster("metrics_cluster", configuration.getMetricsClusterConfiguration(), redisClusterClientResources);
+      FaultTolerantRedisCluster clientPresenceCluster    = new FaultTolerantRedisCluster("client_presence_cluster",
+          configuration.getClientPresenceClusterConfiguration(), redisClusterClientResources);
+      ClientPresenceManager clientPresenceManager = new ClientPresenceManager(clientPresenceCluster,
+          Executors.newSingleThreadScheduledExecutor(), keyspaceNotificationDispatchExecutor);
       MessagesCache messagesCache = new MessagesCache(messageInsertCacheCluster, messageReadDeleteCluster, keyspaceNotificationDispatchExecutor);
       PushLatencyManager pushLatencyManager = new PushLatencyManager(metricsCluster);
       UsernamesManager usernamesManager = new UsernamesManager(usernames, reservedUsernames, cacheCluster);
@@ -140,7 +146,7 @@ public class DeleteUserCommand extends EnvironmentCommand<WhisperServerConfigura
       DirectoryManager directory = new DirectoryManager(redisClient);
       final int lifetime = configuration.getLocalParametersConfiguration().getAccountLifetime();
       StoredVerificationCodeManager pendingAccountsManager = new StoredVerificationCodeManager(pendingAccounts, lifetime);
-      AccountsManager accountsManager = new AccountsManager(accounts, directory, cacheCluster, deletedAccounts, keysScyllaDb, messagesManager, usernamesManager, profilesManager, pendingAccountsManager);
+      AccountsManager accountsManager = new AccountsManager(accounts, directory, cacheCluster, deletedAccounts, keysScyllaDb, messagesManager, usernamesManager, profilesManager, pendingAccountsManager, clientPresenceManager);
 
       if (accountsManager.getAccountCreationLock() ||
           directory.getDirectoryReadLock() ||

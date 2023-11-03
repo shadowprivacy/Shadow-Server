@@ -90,7 +90,7 @@ class AuthEnablementRefreshRequirementProviderTest {
   private final ApplicationEventListener applicationEventListener = mock(ApplicationEventListener.class);
 
   private final Account account = new Account();
-  private Device authenticatedDevice = DevicesHelper.createDevice(1L);
+  private final Device authenticatedDevice = DevicesHelper.createDevice(1L);
 
   private final Supplier<Optional<TestPrincipal>> principalSupplier = () -> Optional.of(
       new TestPrincipal("test", account, authenticatedDevice));
@@ -122,9 +122,7 @@ class AuthEnablementRefreshRequirementProviderTest {
     final UUID uuid = UUID.randomUUID();
     account.setUuid(uuid);
     account.addDevice(authenticatedDevice);
-    LongStream.range(2, 4).forEach(deviceId -> {
-      account.addDevice(DevicesHelper.createDevice(deviceId));
-    });
+    LongStream.range(2, 4).forEach(deviceId -> account.addDevice(DevicesHelper.createDevice(deviceId)));
 
     account.getDevices()
         .forEach(device -> when(clientPresenceManager.isPresent(uuid, device.getId())).thenReturn(true));
@@ -161,46 +159,7 @@ class AuthEnablementRefreshRequirementProviderTest {
           }
         }));
   }
-
-  @ParameterizedTest
-  @MethodSource
-  void testAccountEnabledChanged(final long authenticatedDeviceId, final boolean initialEnabled,
-      final boolean finalEnabled) {
-
-    DevicesHelper.setEnabled(account.getMasterDevice().orElseThrow(), initialEnabled);
-
-    authenticatedDevice = account.getDevice(authenticatedDeviceId).orElseThrow();
-
-    final Response response = resources.getJerseyTest()
-        .target("/v1/test/account/enabled/" + finalEnabled)
-        .request()
-        .header("Authorization",
-            "Basic " + Base64.getEncoder().encodeToString("user:pass".getBytes(StandardCharsets.UTF_8)))
-        .put(Entity.entity("", MediaType.TEXT_PLAIN));
-
-    assertEquals(200, response.getStatus());
-
-    if (initialEnabled != finalEnabled) {
-      verify(clientPresenceManager, times(account.getDevices().size())).displacePresence(eq(account.getUuid()),
-          anyLong());
-    } else {
-      verifyNoInteractions(clientPresenceManager);
-    }
-  }
-
-  static Stream<Arguments> testAccountEnabledChanged() {
-    return Stream.of(
-        Arguments.of(1L, true, false),
-        Arguments.of(1L, false, true),
-        Arguments.of(1L, true, true),
-        Arguments.of(1L, false, false),
-        Arguments.of(2L, true, false),
-        Arguments.of(2L, false, true),
-        Arguments.of(2L, true, true),
-        Arguments.of(2L, false, false)
-    );
-  }
-
+   
   @ParameterizedTest
   @MethodSource
   void testDeviceEnabledChanged(final Map<Long, Boolean> initialEnabled, final Map<Long, Boolean> finalEnabled) {
@@ -219,22 +178,23 @@ class AuthEnablementRefreshRequirementProviderTest {
         .post(Entity.entity(finalEnabled, MediaType.APPLICATION_JSON));
 
     assertEquals(200, response.getStatus());
+    
+    final boolean expectDisplacedPresence = !initialEnabled.equals(finalEnabled);
 
     assertAll(
-        finalEnabled.entrySet().stream()
-            .map(deviceIdEnabled -> () -> {
-              final boolean expectDisplacedPresence =
-                  initialEnabled.get(deviceIdEnabled.getKey()) != deviceIdEnabled.getValue();
+        initialEnabled.keySet().stream()
+        .map(deviceId -> () -> verify(clientPresenceManager, times(expectDisplacedPresence ? 1 : 0))
+            .displacePresence(account.getUuid(), deviceId)));
 
-              verify(clientPresenceManager, times(expectDisplacedPresence ? 1 : 0)).displacePresence(account.getUuid(),
-                  deviceIdEnabled.getKey());
-            })
-    );
+assertAll(
+    finalEnabled.keySet().stream()
+        .map(deviceId -> () -> verify(clientPresenceManager, times(expectDisplacedPresence ? 1 : 0))
+            .displacePresence(account.getUuid(), deviceId)));
   }
 
   static Stream<Arguments> testDeviceEnabledChanged() {
     return Stream.of(
-        // Not testing device ID 1L because that will trigger "account enabled changed"
+        Arguments.of(Map.of(1L, false, 2L, false), Map.of(1L, true, 2L, false)),
         Arguments.of(Map.of(2L, false, 3L, false), Map.of(2L, true, 3L, true)),
         Arguments.of(Map.of(2L, true, 3L, true), Map.of(2L, false, 3L, false)),
         Arguments.of(Map.of(2L, true, 3L, true), Map.of(2L, true, 3L, true)),
@@ -261,13 +221,17 @@ class AuthEnablementRefreshRequirementProviderTest {
 
     assertEquals(initialDeviceCount + addedDeviceNames.size(), account.getDevices().size());
 
-    verifyNoInteractions(clientPresenceManager);
+    verify(clientPresenceManager).displacePresence(account.getUuid(), 1);
+    verify(clientPresenceManager).displacePresence(account.getUuid(), 2);
+    verify(clientPresenceManager).displacePresence(account.getUuid(), 3);
   }
 
   @ParameterizedTest
   @ValueSource(ints = {1, 2})
   void testDeviceRemoved(final int removedDeviceCount) {
     assert account.getMasterDevice().orElseThrow().isEnabled();
+    
+    final List<Long> initialDeviceIds = account.getDevices().stream().map(Device::getId).collect(Collectors.toList());
 
     final List<Long> deletedDeviceIds = account.getDevices().stream()
         .map(Device::getId)
@@ -289,8 +253,8 @@ class AuthEnablementRefreshRequirementProviderTest {
 
     assertEquals(200, response.getStatus());
 
-    deletedDeviceIds.forEach(deletedDeviceId ->
-        verify(clientPresenceManager).displacePresence(account.getUuid(), deletedDeviceId));
+    initialDeviceIds.forEach(deviceId ->
+    verify(clientPresenceManager).displacePresence(account.getUuid(), deviceId));
 
     verifyNoMoreInteractions(clientPresenceManager);
   }
@@ -371,33 +335,7 @@ class AuthEnablementRefreshRequirementProviderTest {
       when(session.getUpgradeRequest()).thenReturn(request);
 
       provider.onWebSocketConnect(session);
-    }
-
-    @ParameterizedTest
-    @MethodSource("su.sres.shadowserver.auth.AuthEnablementRefreshRequirementProviderTest#testAccountEnabledChanged")
-    void testAccountEnabledChangedWebSocket(final long authenticatedDeviceId, final boolean initialEnabled,
-        final boolean finalEnabled) throws Exception {
-
-      DevicesHelper.setEnabled(account.getMasterDevice().orElseThrow(), initialEnabled);
-
-      authenticatedDevice = account.getDevice(authenticatedDeviceId).orElseThrow();
-
-      byte[] message = new ProtobufWebSocketMessageFactory().createRequest(Optional.of(111L), "PUT",
-          "/v1/test/account/enabled/" + finalEnabled,
-          new LinkedList<>(), Optional.empty()).toByteArray();
-
-      provider.onWebSocketBinary(message, 0, message.length);
-
-      final SubProtocol.WebSocketResponseMessage response = verifyAndGetResponse(remoteEndpoint);
-
-      assertEquals(200, response.getStatus());
-      if (initialEnabled != finalEnabled) {
-        verify(clientPresenceManager, times(account.getDevices().size())).displacePresence(eq(account.getUuid()),
-            anyLong());
-      } else {
-        verifyNoInteractions(clientPresenceManager);
-      }
-    }
+    }    
 
     @Test
     void testOnEvent() throws Exception {

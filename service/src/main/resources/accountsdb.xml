@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
+<!-- ~ Original software: Copyright 2013-2021 Signal Messenger, LLC ~ Modified 
+  software: Copyright 2019-2023 Anton Alipov, sole trader ~ SPDX-License-Identifier: 
+  AGPL-3.0-only -->
+
 <databaseChangeLog
   xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -414,15 +418,20 @@
       </column>
     </addColumn>
   </changeSet>
-  
+
   <changeSet id="25" author="2A">
-    <sql>ALTER TABLE remote_config ALTER COLUMN uuids TYPE UUID[] USING array[uuids]::UUID[];</sql>
+    <sql>ALTER TABLE remote_config ALTER COLUMN uuids TYPE UUID[] USING
+      array[uuids]::UUID[];</sql>
   </changeSet>
-  
+
   <changeSet id="26" author="chris">
     <addColumn tableName="accounts">
-      <column name="version" type="int" defaultValue="0"/>
+      <column name="version" type="int" defaultValue="0" />
     </addColumn>
+  </changeSet>
+
+  <changeSet id="27" author="chris">
+    <dropTable tableName="accounts" />
   </changeSet>
 
 </databaseChangeLog>

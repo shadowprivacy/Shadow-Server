@@ -14,9 +14,6 @@ package su.sres.shadowserver.storage;
 public interface MessageAvailabilityListener {
 
   void handleNewMessagesAvailable();
-
-  @Deprecated
-  void handleNewEphemeralMessageAvailable();
-
+ 
   void handleMessagesPersisted();
 }

@@ -460,7 +460,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     PushLatencyManager pushLatencyManager = new PushLatencyManager(metricsCluster);
     ReportMessageManager reportMessageManager = new ReportMessageManager(reportMessageScyllaDb, Metrics.globalRegistry);
     MessagesManager messagesManager = new MessagesManager(messagesScyllaDb, messagesCache, pushLatencyManager, reportMessageManager);
-    AccountsManager accountsManager = new AccountsManager(accounts, directory, cacheCluster, deletedAccounts, keysScyllaDb, messagesManager, usernamesManager, profilesManager, pendingAccountsManager);
+    AccountsManager accountsManager = new AccountsManager(accounts, directory, cacheCluster, deletedAccounts, keysScyllaDb, messagesManager, usernamesManager, profilesManager, pendingAccountsManager, clientPresenceManager);
     RemoteConfigsManager remoteConfigsManager = new RemoteConfigsManager(remoteConfigs);
     DeadLetterHandler deadLetterHandler = new DeadLetterHandler(accountsManager, messagesManager);
     DispatchManager dispatchManager = new DispatchManager(pubSubClientFactory, Optional.of(deadLetterHandler));
@@ -548,8 +548,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 
     ServerSecretParams zkSecretParams = new ServerSecretParams(config.getZkConfig().getServerSecret());
     ServerZkProfileOperations zkProfileOperations = new ServerZkProfileOperations(zkSecretParams);
-    ServerZkAuthOperations zkAuthOperations = new ServerZkAuthOperations(zkSecretParams);
-    boolean isZkEnabled = config.getZkConfig().isEnabled();
+    ServerZkAuthOperations zkAuthOperations = new ServerZkAuthOperations(zkSecretParams);    
 
     GroupsManager groupsManager = new GroupsManager(groupsScyllaDb, groupLogsScyllaDb);
 
@@ -600,7 +599,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     final List<Object> commonControllers = List.of(
         new AttachmentControllerV1(rateLimiters, minioConfig.getAccessKey(), minioConfig.getAccessSecret(), minioConfig.getAttachmentBucket(), minioConfig.getUri()),
         new AttachmentControllerV2(rateLimiters, minioConfig.getAccessKey(), minioConfig.getAccessSecret(), minioConfig.getRegion(), minioConfig.getAttachmentBucket()),
-        new CertificateController(new CertificateGenerator(config.getDeliveryCertificate().getCertificate(), config.getDeliveryCertificate().getPrivateKey(), config.getDeliveryCertificate().getExpiresDays()), zkAuthOperations, isZkEnabled),
+        new CertificateController(new CertificateGenerator(config.getDeliveryCertificate().getCertificate(), config.getDeliveryCertificate().getPrivateKey(), config.getDeliveryCertificate().getExpiresDays()), zkAuthOperations),
         new ChallengeController(rateLimitChallengeManager),
         new DeviceController(pendingDevicesManager, accountsManager, messagesManager, keysScyllaDb, rateLimiters, config.getMaxDevices(), localParams.getVerificationCodeLifetime()),
         new PlainDirectoryController(rateLimiters, accountsManager),

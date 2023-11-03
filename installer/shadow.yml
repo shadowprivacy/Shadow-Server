@@ -24,16 +24,13 @@ scyllaDbMigrationCrawler:     # account migration crawler configuration
   chunkIntervalMs:                                                      # time per run, can be left empty
 
 metricsCluster:               # Redis server configuration for metrics cluster 
-  urls:
-    - "redis://localhost:6379/"
+  configurationUri: "redis://localhost:6379/"
 
 cacheCluster:                 # Redis server configuration for cache cluster
-  urls:
-    - "redis://localhost:6379/"
+  configurationUri: "redis://localhost:6379/"
 
 clientPresenceCluster:        # Redis server configuration for client presence cluster
-  urls:
-    - "redis://localhost:6379/"
+  configurationUri: "redis://localhost:6379/"
 
 directory:                    # Redis server configuration for directory
   url: "redis://localhost:6379"
@@ -44,12 +41,10 @@ messageCache:                 # Redis server configuration for message store cac
     persistDelayMinutes:                                                # persistence delay in minutes
 
     cluster:
-      urls:
-        - "redis://localhost:6379/"                                     # replication URL(s) 
+      configurationUri: "redis://localhost:6379/" 
 
 pushSchedulerCluster:         # Redis server configuration for push scheduler cluster
-  urls:
-    - "redis://localhost:6379/"                                         # fake/unused for now
+  configurationUri: "redis://localhost:6379/"                           # fake/unused for now
 
 
 pubsub:                       # Redis server configuration for publisher/subscriber cluster
@@ -58,8 +53,7 @@ pubsub:                       # Redis server configuration for publisher/subscri
               - "redis://localhost:6379"                                # dummy (or actual) replication URL(s)
               
 rateLimitersCluster:          # Redis server configuration for rate limiters cluster
-  urls:
-    - "redis://redis.example.com:6379/"
+  configurationUri: "redis://localhost:6379/"
 
 server:
   applicationConnectors:      # Shadow service configuration
@@ -231,7 +225,6 @@ limits:
 
 zkConfig:
    serverSecret: xxxx                                                   # server ZK private key   
-   enabled: true                                                        # whether the functionality is enabled
 
 remoteConfig:
   authorizedTokens:

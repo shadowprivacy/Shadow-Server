@@ -36,8 +36,6 @@ import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 
 import java.io.IOException;
-import java.net.MalformedURLException;
-import java.net.URL;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
@@ -97,15 +95,7 @@ class ProfileControllerTest {
   private static ServerZkProfileOperations zkProfileOperations = mock(ServerZkProfileOperations.class);
 
   private Account profileAccount;
-  
-  private static URL makeURL(String url) {
-    try {
-      return new URL(url);
-    } catch (MalformedURLException e) {
-      throw new AssertionError(e);
-    }
-  }
-
+    
   public static final ResourceExtension resources;
   
   static {
@@ -116,13 +106,13 @@ class ProfileControllerTest {
           .setMapper(SystemMapper.getMapper()).setTestContainerFactory(new GrizzlyWebTestContainerFactory())
           .addResource(new ProfileController(clock, rateLimiters, accountsManager, profilesManager, usernamesManager,
               (acceptableLanguages, accountBadges, isSelf) -> List.of(
-                  new Badge("TEST", "other", makeURL("https://example.com/badge/test"), "Test Badge", "This badge is in unit tests.")
+                  new Badge("TEST", "other", "Test Badge", "This badge is in unit tests.", "l", "m", "h", "x", "xx", "xxx", "s", "S")
               ),
               new BadgesConfiguration(List.of(
-                  new BadgeConfiguration("TEST", makeURL("https://example.com/badge/test"), "other"),
-                  new BadgeConfiguration("TEST1", makeURL("https://example.com/badge/1"), "testing"),
-                  new BadgeConfiguration("TEST2", makeURL("https://example.com/badge/2"), "testing"),
-                  new BadgeConfiguration("TEST3", makeURL("https://example.com/badge/3"), "testing")
+                  new BadgeConfiguration("TEST", "other", "l", "m", "h", "x", "xx", "xxx", "s", "S"),
+                  new BadgeConfiguration("TEST1", "testing", "l", "m", "h", "x", "xx", "xxx", "s", "S"),
+                  new BadgeConfiguration("TEST2", "testing", "l", "m", "h", "x", "xx", "xxx", "s", "S"),
+                  new BadgeConfiguration("TEST3", "testing", "l", "m", "h", "x", "xx", "xxx", "s", "S")
               ), List.of("TEST1")),
               minioClient, postPolicyGenerator, policySigner, "profiles", zkProfileOperations))
           .build();

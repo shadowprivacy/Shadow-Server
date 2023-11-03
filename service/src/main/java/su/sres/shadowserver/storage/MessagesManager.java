@@ -33,8 +33,7 @@ public class MessagesManager {
   private static final Meter cacheMissByGuidMeter = metricRegistry.meter(
       name(MessagesManager.class, "cacheMissByGuid"));
 
-  // migrated from MessagePersister, name is not a typo
-  private final Meter persistMessageMeter = metricRegistry.meter(name(MessagePersister.class, "persistMessage"));
+  private static final Meter persistMessageMeter = metricRegistry.meter(name(MessagesManager.class, "persistMessage"));
 
   private final MessagesScyllaDb messagesScyllaDb;
   private final MessagesCache messagesCache;
@@ -56,12 +55,7 @@ public class MessagesManager {
     if (message.hasSource() && !destinationUuid.toString().equals(message.getSourceUuid())) {
       reportMessageManager.store(message.getSource(), messageGuid);
     }
-  }
-
-  @Deprecated
-  public Optional<Envelope> takeEphemeralMessage(final UUID destinationUuid, final long destinationDevice) {
-    return messagesCache.takeEphemeralMessage(destinationUuid, destinationDevice);
-  }
+  }  
 
   public boolean hasCachedMessages(final UUID destinationUuid, final long destinationDevice) {
     return messagesCache.hasMessages(destinationUuid, destinationDevice);

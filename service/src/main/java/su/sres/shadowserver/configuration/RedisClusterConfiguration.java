@@ -18,7 +18,7 @@ public class RedisClusterConfiguration {
 
     @JsonProperty
     @NotEmpty
-    private List<String> urls;
+    private String configurationUri;
     
     @JsonProperty
     @NotNull
@@ -34,8 +34,8 @@ public class RedisClusterConfiguration {
     @Valid
     private RetryConfiguration retry = new RetryConfiguration();
     
-    public List<String> getUrls() {
-        return urls;
+    public String getConfigurationUri() {
+      return configurationUri;
     }
     
     public Duration getTimeout() {

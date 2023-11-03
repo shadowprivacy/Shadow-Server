@@ -14,7 +14,6 @@ import su.sres.shadowserver.auth.AuthenticatedAccount;
 import su.sres.shadowserver.auth.CertificateGenerator;
 import su.sres.shadowserver.entities.DeliveryCertificate;
 import su.sres.shadowserver.entities.GroupCredentials;
-import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.util.Util;
 
 import javax.ws.rs.GET;
@@ -40,15 +39,13 @@ public class CertificateController {
 
   private final CertificateGenerator certificateGenerator;
   private final ServerZkAuthOperations serverZkAuthOperations;
-  private final boolean isZkEnabled;
 
   private static final String GENERATE_DELIVERY_CERTIFICATE_COUNTER_NAME = name(CertificateGenerator.class, "generateCertificate");
   private static final String INCLUDE_USER_LOGIN_TAG_NAME = "includeUserLogin";
 
-  public CertificateController(CertificateGenerator certificateGenerator, ServerZkAuthOperations serverZkAuthOperations, boolean isZkEnabled) {
+  public CertificateController(CertificateGenerator certificateGenerator, ServerZkAuthOperations serverZkAuthOperations) {
     this.certificateGenerator = certificateGenerator;
     this.serverZkAuthOperations = serverZkAuthOperations;
-    this.isZkEnabled = isZkEnabled;
   }
 
   @Timed
@@ -76,9 +73,7 @@ public class CertificateController {
   public GroupCredentials getAuthenticationCredentials(@Auth AuthenticatedAccount auth,
       @PathParam("startRedemptionTime") int startRedemptionTime,
       @PathParam("endRedemptionTime") int endRedemptionTime) {
-    if (!isZkEnabled) {
-      throw new WebApplicationException(Response.Status.NOT_FOUND);
-    }
+
     if (startRedemptionTime > endRedemptionTime) {
       throw new WebApplicationException(Response.Status.BAD_REQUEST);
     }

@@ -20,27 +20,7 @@ public class ZkConfig {
   @NotNull
   private byte[] serverSecret;
 
-/*  @JsonProperty
-  @JsonSerialize(using = ByteArrayAdapter.Serializing.class)
-  @JsonDeserialize(using = ByteArrayAdapter.Deserializing.class)
-  @NotNull
-  private byte[] serverPublic;
-  */
-  
-  @JsonProperty
-  @NotNull
-  private Boolean enabled;
-
   public byte[] getServerSecret() {
     return serverSecret;
-  }
-
-/*  public byte[] getServerPublic() {
-    return serverPublic;
-  }
-  */
-  
-  public boolean isEnabled() {
-	    return enabled;
   }
 }

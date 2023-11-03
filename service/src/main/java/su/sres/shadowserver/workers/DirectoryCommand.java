@@ -12,6 +12,7 @@ import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import static com.codahale.metrics.MetricRegistry.name;
 
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import org.jdbi.v3.core.Jdbi;
 import org.slf4j.Logger;
@@ -29,6 +30,7 @@ import su.sres.shadowserver.configuration.MessageScyllaDbConfiguration;
 import su.sres.shadowserver.configuration.ScyllaDbConfiguration;
 import su.sres.shadowserver.metrics.PushLatencyManager;
 import su.sres.shadowserver.providers.RedisClientFactory;
+import su.sres.shadowserver.push.ClientPresenceManager;
 import su.sres.shadowserver.redis.FaultTolerantRedisCluster;
 import su.sres.shadowserver.redis.ReplicatedJedisPool;
 import su.sres.shadowserver.storage.AccountsManager;
@@ -99,8 +101,13 @@ public class DirectoryCommand extends EnvironmentCommand<WhisperServerConfigurat
       FaultTolerantRedisCluster messageInsertCacheCluster = new FaultTolerantRedisCluster("message_insert_cluster", configuration.getMessageCacheConfiguration().getRedisClusterConfiguration(), redisClusterClientResources);
       FaultTolerantRedisCluster messageReadDeleteCluster = new FaultTolerantRedisCluster("message_read_delete_cluster", configuration.getMessageCacheConfiguration().getRedisClusterConfiguration(), redisClusterClientResources);
       FaultTolerantRedisCluster metricsCluster = new FaultTolerantRedisCluster("metrics_cluster", configuration.getMetricsClusterConfiguration(), redisClusterClientResources);
-
-      ExecutorService keyspaceNotificationDispatchExecutor = environment.lifecycle().executorService(name(getClass(), "keyspaceNotification-%d")).maxThreads(4).build();    
+      
+      ExecutorService keyspaceNotificationDispatchExecutor = environment.lifecycle().executorService(name(getClass(), "keyspaceNotification-%d")).maxThreads(4).build();
+      
+      FaultTolerantRedisCluster clientPresenceCluster    = new FaultTolerantRedisCluster("client_presence_cluster",
+          configuration.getClientPresenceClusterConfiguration(), redisClusterClientResources);
+      ClientPresenceManager clientPresenceManager = new ClientPresenceManager(clientPresenceCluster,
+          Executors.newSingleThreadScheduledExecutor(), keyspaceNotificationDispatchExecutor);
           
       Accounts accounts = new Accounts(accountsClient, scyllaAccountsConfig.getTableName(), scyllaAccountsConfig.getUserLoginTableName(), scyllaAccountsConfig.getMiscTableName(), scyllaAccountsConfig.getScanPageSize());
       Usernames usernames = new Usernames(accountDatabase);
@@ -128,7 +135,7 @@ public class DirectoryCommand extends EnvironmentCommand<WhisperServerConfigurat
 
       final int lifetime = configuration.getLocalParametersConfiguration().getAccountLifetime();
       StoredVerificationCodeManager pendingAccountsManager = new StoredVerificationCodeManager(pendingAccounts, lifetime);
-      AccountsManager accountsManager = new AccountsManager(accounts, directory, cacheCluster, deletedAccounts, keysScyllaDb, messagesManager, usernamesManager, profilesManager, pendingAccountsManager);
+      AccountsManager accountsManager = new AccountsManager(accounts, directory, cacheCluster, deletedAccounts, keysScyllaDb, messagesManager, usernamesManager, profilesManager, pendingAccountsManager, clientPresenceManager);
 
       PlainDirectoryUpdater updater = new PlainDirectoryUpdater(accountsManager);
 

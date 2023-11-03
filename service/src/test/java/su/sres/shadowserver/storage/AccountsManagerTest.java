@@ -21,6 +21,7 @@ import org.mockito.stubbing.Answer;
 
 import su.sres.shadowserver.entities.AccountAttributes;
 import su.sres.shadowserver.entities.SignedPreKey;
+import su.sres.shadowserver.push.ClientPresenceManager;
 import su.sres.shadowserver.redis.ReplicatedJedisPool;
 import su.sres.shadowserver.storage.Device.DeviceCapabilities;
 import su.sres.shadowserver.util.JsonHelpers;
@@ -94,7 +95,8 @@ class AccountsManagerTest {
         messagesManager,        
         mock(UsernamesManager.class),
         profilesManager,
-        mock(StoredVerificationCodeManager.class));
+        mock(StoredVerificationCodeManager.class),
+        mock(ClientPresenceManager.class));
   }
 
   @Test

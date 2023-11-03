@@ -37,7 +37,9 @@ import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
 import su.sres.shadowserver.auth.AuthenticationCredentials;
 import su.sres.shadowserver.controllers.AccountController;
 import su.sres.shadowserver.entities.AccountAttributes;
+import su.sres.shadowserver.push.ClientPresenceManager;
 import su.sres.shadowserver.redis.FaultTolerantRedisCluster;
+import su.sres.shadowserver.redis.RedisOperation;
 import su.sres.shadowserver.storage.DirectoryManager.BatchOperationHandle;
 import su.sres.shadowserver.util.Constants;
 import su.sres.shadowserver.util.SystemMapper;
@@ -83,6 +85,7 @@ public class AccountsManager {
   private final UsernamesManager usernamesManager;
   private final ProfilesManager profilesManager;
   private final StoredVerificationCodeManager pendingAccounts;
+  private final ClientPresenceManager clientPresenceManager;
   private final ObjectMapper mapper;
 
   public enum DeletionReason {
@@ -106,7 +109,7 @@ public class AccountsManager {
   private final AtomicInteger accountCreateLock;
   
   public AccountsManager(Accounts accounts, DirectoryManager directory, FaultTolerantRedisCluster cacheCluster, final DeletedAccounts deletedAccounts, final KeysScyllaDb keysScyllaDb, final MessagesManager messagesManager, final UsernamesManager usernamesManager, final ProfilesManager profilesManager,
-      final StoredVerificationCodeManager pendingAccounts) {    
+      final StoredVerificationCodeManager pendingAccounts, final ClientPresenceManager clientPresenceManager) {    
     this.accounts = accounts;
     this.directory = directory;
     this.cacheCluster = cacheCluster;
@@ -116,6 +119,7 @@ public class AccountsManager {
     this.usernamesManager = usernamesManager;
     this.profilesManager = profilesManager;
     this.pendingAccounts = pendingAccounts;
+    this.clientPresenceManager = clientPresenceManager;
     this.mapper = SystemMapper.getMapper();
       
     accountCreateLock = new AtomicInteger(0);
@@ -381,6 +385,10 @@ public class AccountsManager {
         messagesManager.clear(account.getUuid());
         redisDelete(account);
         scyllaDelete(account, newDirectoryVersion);
+        
+        RedisOperation.unchecked(() ->
+        account.getDevices().forEach(device ->
+            clientPresenceManager.displacePresence(account.getUuid(), device.getId())));
 
         Metrics.counter(DELETE_COUNTER_NAME, DELETION_REASON_TAG_NAME, deletionReason.tagValue).increment();
 

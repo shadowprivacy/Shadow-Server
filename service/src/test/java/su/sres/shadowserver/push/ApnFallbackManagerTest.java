@@ -13,7 +13,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.mockito.ArgumentCaptor;
 import su.sres.shadowserver.redis.RedisClusterExtension;
-import su.sres.shadowserver.redis.RedisException;
 import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.storage.AccountsManager;
 import su.sres.shadowserver.storage.Device;
@@ -68,7 +67,7 @@ class ApnFallbackManagerTest {
   }
 
   @Test
-  void testClusterInsert() throws RedisException {
+  void testClusterInsert() {
     final String endpoint = apnFallbackManager.getEndpointKey(account, device);
 
     assertTrue(apnFallbackManager.getPendingDestinations(SlotHash.getSlot(endpoint), 1).isEmpty());
@@ -88,7 +87,7 @@ class ApnFallbackManagerTest {
   }
 
   @Test
-  void testProcessNextSlot() throws RedisException {
+  void testProcessNextSlot() {
     final ApnFallbackManager.NotificationWorker worker = apnFallbackManager.new NotificationWorker();
 
     apnFallbackManager.schedule(account, device, System.currentTimeMillis() - 30_000);

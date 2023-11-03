@@ -1,6 +1,6 @@
 /*
- * Original software: Copyright 2013-2020 Signal Messenger, LLC
- * Modified software: Copyright 2019-2022 Anton Alipov, sole trader
+ * Original software: Copyright 2013-2021 Signal Messenger, LLC
+ * Modified software: Copyright 2019-2023 Anton Alipov, sole trader
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 package su.sres.shadowserver.storage;
@@ -19,8 +19,8 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 
 import su.sres.shadowserver.configuration.dynamic.DynamicConfiguration;
 import su.sres.shadowserver.entities.MessageProtos;
+import su.sres.shadowserver.entities.MessageProtos.Envelope.Type;
 import su.sres.shadowserver.metrics.PushLatencyManager;
-import su.sres.shadowserver.redis.AbstractRedisClusterTest;
 import su.sres.shadowserver.redis.RedisClusterExtension;
 import su.sres.shadowserver.util.AttributeValues;
 import su.sres.shadowserver.util.MessagesDynamoDbExtension;
@@ -124,10 +124,6 @@ class MessagePersisterIntegrationTest {
       messagesManager.addMessageAvailabilityListener(account.getUuid(), 1, new MessageAvailabilityListener() {
         @Override
         public void handleNewMessagesAvailable() {
-        }
-
-        @Override
-        public void handleNewEphemeralMessageAvailable() {
         }
 
         @Override

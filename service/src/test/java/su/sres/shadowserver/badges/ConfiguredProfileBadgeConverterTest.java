@@ -13,8 +13,6 @@ import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import java.net.MalformedURLException;
-import java.net.URL;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -54,15 +52,7 @@ public class ConfiguredProfileBadgeConverterTest {
 
   private static String idFor(int i) {
     return "Badge-" + i;
-  }
-
-  private static URL imageUrlFor(int i) {
-    try {
-      return new URL("https://example.com/badge/" + i);
-    } catch (MalformedURLException e) {
-      throw new AssertionError(e);
-    }
-  }
+  }  
 
   private static String nameFor(int i) {
     return "TRANSLATED NAME " + i;
@@ -73,7 +63,7 @@ public class ConfiguredProfileBadgeConverterTest {
   }
 
   private static BadgeConfiguration newBadge(int i) {
-    return new BadgeConfiguration(idFor(i), imageUrlFor(i), "other");
+    return new BadgeConfiguration(idFor(i), "other", "l", "m", "h", "x", "xx", "xxx", "s", "S");
   }
 
   private BadgesConfiguration createBadges(int count) {
@@ -141,15 +131,15 @@ public class ConfiguredProfileBadgeConverterTest {
         arguments(idFor(0), expired, false, false, null),
         arguments(idFor(0), notExpired, false, false, null),
         arguments(idFor(0), expired, true, false, null),
-        arguments(idFor(0), notExpired, true, false, new Badge(idFor(0), "other", imageUrlFor(0), nameFor(0), desriptionFor(0))),
+        arguments(idFor(0), notExpired, true, false, new Badge(idFor(0), "other", nameFor(0), desriptionFor(0), "l", "m", "h", "x", "xx", "xxx", "s", "S")),
         arguments(idFor(1), expired, false, false, null),
         arguments(idFor(1), notExpired, false, false, null),
         arguments(idFor(1), expired, true, false, null),
         arguments(idFor(1), notExpired, true, false, null),
         arguments(idFor(0), expired, false, true, null),
-        arguments(idFor(0), notExpired, false, true, new SelfBadge(idFor(0), "other", imageUrlFor(0), nameFor(0), desriptionFor(0), notExpired, false)),
+        arguments(idFor(0), notExpired, false, true, new SelfBadge(idFor(0), "other", nameFor(0), desriptionFor(0), "l", "m", "h", "x", "xx", "xxx", "s", "S", notExpired, false)),
         arguments(idFor(0), expired, true, true, null),
-        arguments(idFor(0), notExpired, true, true, new SelfBadge(idFor(0), "other", imageUrlFor(0), nameFor(0), desriptionFor(0), notExpired, true)),
+        arguments(idFor(0), notExpired, true, true, new SelfBadge(idFor(0), "other", nameFor(0), desriptionFor(0), "l", "m", "h", "x", "xx", "xxx", "s", "S", notExpired, true)),
         arguments(idFor(1), expired, false, true, null),
         arguments(idFor(1), notExpired, false, true, null),
         arguments(idFor(1), expired, true, true, null),
