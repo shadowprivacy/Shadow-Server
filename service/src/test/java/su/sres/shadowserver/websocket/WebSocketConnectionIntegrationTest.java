@@ -135,7 +135,7 @@ class WebSocketConnectionIntegrationTest {
 
           persistedMessages.add(envelope);
           expectedMessages.add(envelope);
-    }
+        }
 
         messagesDynamoDb.store(persistedMessages, account.getUuid(), device.getId());
       }
@@ -148,48 +148,52 @@ class WebSocketConnectionIntegrationTest {
         expectedMessages.add(envelope);
       }
 
-    final WebSocketResponseMessage successResponse = mock(WebSocketResponseMessage.class);
-    final AtomicBoolean queueCleared = new AtomicBoolean(false);
+      final WebSocketResponseMessage successResponse = mock(WebSocketResponseMessage.class);
+      final AtomicBoolean queueCleared = new AtomicBoolean(false);
 
-    when(successResponse.getStatus()).thenReturn(200);
-    when(webSocketClient.sendRequest(eq("PUT"), eq("/api/v1/message"), anyList(), any())).thenReturn(CompletableFuture.completedFuture(successResponse));
+      when(successResponse.getStatus()).thenReturn(200);
+      when(webSocketClient.sendRequest(eq("PUT"), eq("/api/v1/message"), anyList(), any())).thenReturn(
+          CompletableFuture.completedFuture(successResponse));
 
-    when(webSocketClient.sendRequest(eq("PUT"), eq("/api/v1/queue/empty"), anyList(), any())).thenAnswer((Answer<CompletableFuture<WebSocketResponseMessage>>) invocation -> {
+      when(webSocketClient.sendRequest(eq("PUT"), eq("/api/v1/queue/empty"), anyList(), any())).thenAnswer(
+          (Answer<CompletableFuture<WebSocketResponseMessage>>) invocation -> {
+            synchronized (queueCleared) {
+              queueCleared.set(true);
+              queueCleared.notifyAll();
+            }
+
+            return CompletableFuture.completedFuture(successResponse);
+          });
+
+      webSocketConnection.processStoredMessages();
+
       synchronized (queueCleared) {
-        queueCleared.set(true);
-        queueCleared.notifyAll();
-      }
-
-      return CompletableFuture.completedFuture(successResponse);
-    });
-
-    webSocketConnection.processStoredMessages();
-
-    synchronized (queueCleared) {
-      while (!queueCleared.get()) {
-        queueCleared.wait();
-      }
-    }
-
-    @SuppressWarnings("unchecked")
-    final ArgumentCaptor<Optional<byte[]>> messageBodyCaptor = ArgumentCaptor.forClass(Optional.class);
-
-    verify(webSocketClient, times(persistedMessageCount + cachedMessageCount)).sendRequest(eq("PUT"), eq("/api/v1/message"), anyList(), messageBodyCaptor.capture());
-    verify(webSocketClient).sendRequest(eq("PUT"), eq("/api/v1/queue/empty"), anyList(), eq(Optional.empty()));
-
-    final List<MessageProtos.Envelope> sentMessages = new ArrayList<>();
-
-    for (final Optional<byte[]> maybeMessageBody : messageBodyCaptor.getAllValues()) {
-      maybeMessageBody.ifPresent(messageBytes -> {
-        try {
-          sentMessages.add(MessageProtos.Envelope.parseFrom(messageBytes));
-        } catch (final InvalidProtocolBufferException e) {
-          fail("Could not parse sent message");
+        while (!queueCleared.get()) {
+          queueCleared.wait();
         }
-      });
-    }
+      }
 
-    assertEquals(expectedMessages, sentMessages);
+      @SuppressWarnings("unchecked") final ArgumentCaptor<Optional<byte[]>> messageBodyCaptor = ArgumentCaptor.forClass(
+          Optional.class);
+
+      verify(webSocketClient, times(persistedMessageCount + cachedMessageCount)).sendRequest(eq("PUT"),
+          eq("/api/v1/message"), anyList(), messageBodyCaptor.capture());
+      verify(webSocketClient).sendRequest(eq("PUT"), eq("/api/v1/queue/empty"), anyList(), eq(Optional.empty()));
+
+      final List<MessageProtos.Envelope> sentMessages = new ArrayList<>();
+
+      for (final Optional<byte[]> maybeMessageBody : messageBodyCaptor.getAllValues()) {
+        maybeMessageBody.ifPresent(messageBytes -> {
+          try {
+            sentMessages.add(MessageProtos.Envelope.parseFrom(messageBytes));
+          } catch (final InvalidProtocolBufferException e) {
+            fail("Could not parse sent message");
+          }
+        });
+      }
+
+      assertEquals(expectedMessages, sentMessages);
+    });
   }
 
   @Test

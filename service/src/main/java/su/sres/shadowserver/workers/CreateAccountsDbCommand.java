@@ -26,7 +26,6 @@ import software.amazon.awssdk.services.dynamodb.model.KeyType;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
 import software.amazon.awssdk.services.dynamodb.waiters.DynamoDbWaiter;
 import su.sres.shadowserver.WhisperServerConfiguration;
-import su.sres.shadowserver.configuration.AccountsScyllaDbConfiguration;
 import su.sres.shadowserver.configuration.ScyllaDbConfiguration;
 import su.sres.shadowserver.providers.RedisClientFactory;
 import su.sres.shadowserver.redis.ReplicatedJedisPool;
@@ -66,13 +65,13 @@ public class CreateAccountsDbCommand extends EnvironmentCommand<WhisperServerCon
 
     environment.getObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-    AccountsScyllaDbConfiguration scyllaAccountsConfig = config.getAccountsScyllaDbConfiguration();
+    ScyllaDbConfiguration scyllaConfig = config.getScyllaDbConfiguration();
     
-    String accTableName = scyllaAccountsConfig.getTableName();
-    String userLoginTableName = scyllaAccountsConfig.getUserLoginTableName();
-    String miscTableName = scyllaAccountsConfig.getMiscTableName();
+    String accTableName = scyllaConfig.getAccountsTableName();
+    String userLoginTableName = scyllaConfig.getUserLoginTableName();
+    String miscTableName = scyllaConfig.getMiscTableName();
     
-    DynamoDbClient accountsScyllaDb = ScyllaDbFromConfig.client(scyllaAccountsConfig);
+    DynamoDbClient accountsScyllaDb = ScyllaDbFromConfig.client(scyllaConfig);
 
     List<AttributeDefinition> attributeDefinitionsAccount = new ArrayList<AttributeDefinition>();
     attributeDefinitionsAccount.add(AttributeDefinition.builder().attributeName(KEY_ACCOUNT_UUID).attributeType("B").build());

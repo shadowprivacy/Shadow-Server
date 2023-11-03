@@ -6,10 +6,6 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.amazonaws.ClientConfiguration;
-import com.amazonaws.auth.AWSStaticCredentialsProvider;
-import com.amazonaws.auth.BasicAWSCredentials;
-import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 
 import io.dropwizard.Application;
@@ -52,11 +48,11 @@ public class CreateReportMessageDbCommand extends EnvironmentCommand<WhisperServ
 
     environment.getObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-    ScyllaDbConfiguration reportMessageConfig = config.getReportMessageScyllaDbConfiguration();
+    ScyllaDbConfiguration scyllaConfig = config.getScyllaDbConfiguration();
 
-    String tableName = reportMessageConfig.getTableName();
+    String tableName = scyllaConfig.getReportMessageTableName();
 
-    DynamoDbClient pushChallengeScyllaDb = ScyllaDbFromConfig.client(reportMessageConfig);
+    DynamoDbClient pushChallengeScyllaDb = ScyllaDbFromConfig.client(scyllaConfig);
 
     List<AttributeDefinition> attributeDefinitions = new ArrayList<AttributeDefinition>();
     attributeDefinitions.add(AttributeDefinition.builder().attributeName(KEY_HASH).attributeType("B").build());

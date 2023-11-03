@@ -49,11 +49,11 @@ public class CreateGroupDbCommand extends EnvironmentCommand<WhisperServerConfig
 
     environment.getObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-    ScyllaDbConfiguration scyllaGroupConfig = config.getGroupsScyllaDbConfiguration();
+    ScyllaDbConfiguration scyllaConfig = config.getScyllaDbConfiguration();
 
-    String tableName = scyllaGroupConfig.getTableName();
+    String tableName = scyllaConfig.getGroupsTableName();
 
-    DynamoDbClient groupScyllaDb = ScyllaDbFromConfig.client(scyllaGroupConfig);
+    DynamoDbClient groupScyllaDb = ScyllaDbFromConfig.client(scyllaConfig);
 
     List<AttributeDefinition> attributeDefinitions = new ArrayList<AttributeDefinition>();
     attributeDefinitions.add(AttributeDefinition.builder().attributeName(KEY_GROUP_ID).attributeType("B").build());

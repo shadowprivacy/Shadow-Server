@@ -76,6 +76,25 @@ server:
       trustStorePath: /usr/lib/jvm/jre-11/lib/security/cacerts          # path to the system truststore
       trustStorePassword: changeit                                      # password to access the truststore
       needClientAuth: true                                              # uncommenting this effectively disables the web admin access
+
+scylla:                       # ScyllaDB access configuration
+  region: us-east-1
+  endpoint: "http://localhost:8083/"
+  accessKey: shadow                                                     # Scylla service access key
+  accessSecret: your_scylla_service_password                            # Scylla service secret key configured when installing ScyllaDB
+  accountsTableName: accounts
+  userLoginTableName: userlogins
+  miscTableName: misc
+  messagestableName: messagedb
+  keysTableName: keysdb
+  pushChallengeTableName: pushchallengedb
+  reportMessageTableName: reportmessagedb
+  pendingAccountsTableName: pendingaccountsdb
+  pendingDevicesTableName: pendingdevicesdb
+  deletedAccountsTableName: deletedaccountsdb
+  groupsTableName: groupsdb
+  groupLogstableName: grouplogsdb
+  
               
 accountsScyllaDb:             # ScyllaDB database configuration for accounts database
   region: us-east-1
@@ -199,10 +218,10 @@ recaptcha:
   secret: 123                                                           # fake/unused
   
 recaptchaV2:
-  scoreFloor: 1                                                          # fake/unused
-  projectPath: xxx                                                       # fake/unused
-  siteKey: xxx                                                           # fake/unused
-  credentialConfigurationJson: xxx                                       # fake/unused  
+  scoreFloor: 1                                                         # fake/unused
+  projectPath: xxx                                                      # fake/unused
+  siteKey: xxx                                                          # fake/unused
+  credentialConfigurationJson: xxx                                      # fake/unused  
 
 limits:
   contactQueries:

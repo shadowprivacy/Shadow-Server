@@ -29,7 +29,6 @@ import javax0.license3j.io.LicenseReader;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
 import su.sres.shadowserver.WhisperServerConfiguration;
-import su.sres.shadowserver.configuration.AccountsScyllaDbConfiguration;
 import su.sres.shadowserver.configuration.ScyllaDbConfiguration;
 
 public class ServerLicenseUtil {
@@ -128,12 +127,10 @@ public class ServerLicenseUtil {
 
   private static int actualUsers(WhisperServerConfiguration config) {
     
-    AccountsScyllaDbConfiguration scyllaAccountsConfig = config.getAccountsScyllaDbConfiguration();
-    ScyllaDbConfiguration scyllaPendingAccountsConfig = config.getPendingAccountsScyllaDbConfiguration();
-    DynamoDbClient accountsScyllaDbClient = ScyllaDbFromConfig.client(scyllaAccountsConfig);
-    DynamoDbClient pendingAccountsScyllaDbClient = ScyllaDbFromConfig.client(scyllaPendingAccountsConfig);
-    String accountsTableName = config.getAccountsScyllaDbConfiguration().getTableName();
-    String pendingAccountsTableName = config.getPendingAccountsScyllaDbConfiguration().getTableName();
+    ScyllaDbConfiguration scyllaConfig = config.getScyllaDbConfiguration();    
+    DynamoDbClient scyllaDbClient = ScyllaDbFromConfig.client(scyllaConfig);    
+    String accountsTableName = scyllaConfig.getAccountsTableName();
+    String pendingAccountsTableName = scyllaConfig.getPendingAccountsTableName();
         
     final ScanRequest.Builder accountsScanRequestBuilder = ScanRequest.builder();
     final ScanRequest.Builder pendingAccountsScanRequestBuilder = ScanRequest.builder();
@@ -141,8 +138,8 @@ public class ServerLicenseUtil {
     accountsScanRequestBuilder.tableName(accountsTableName);
     pendingAccountsScanRequestBuilder.tableName(pendingAccountsTableName);  
     
-    int activeUsers = (int) accountsScyllaDbClient.scanPaginator(accountsScanRequestBuilder.build()).items().stream().count();    
-    int pendingUsers = (int) pendingAccountsScyllaDbClient.scanPaginator(pendingAccountsScanRequestBuilder.build()).items().stream().count();    
+    int activeUsers = (int) scyllaDbClient.scanPaginator(accountsScanRequestBuilder.build()).items().stream().count();    
+    int pendingUsers = (int) scyllaDbClient.scanPaginator(pendingAccountsScanRequestBuilder.build()).items().stream().count();    
 
     return (activeUsers + pendingUsers);
   }

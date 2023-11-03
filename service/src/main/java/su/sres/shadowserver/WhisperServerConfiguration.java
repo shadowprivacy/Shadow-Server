@@ -87,52 +87,7 @@ public class WhisperServerConfiguration extends Configuration {
   @Valid
   @NotNull
   @JsonProperty
-  private MessageScyllaDbConfiguration messageScyllaDb;
-
-  @Valid
-  @NotNull
-  @JsonProperty
-  private ScyllaDbConfiguration keysScyllaDb;
-  
-  @Valid
-  @NotNull
-  @JsonProperty
-  private AccountsScyllaDbConfiguration accountsScyllaDb;
-      
-  @Valid
-  @NotNull
-  @JsonProperty
-  private ScyllaDbConfiguration deletedAccountsScyllaDb;
-  
-  @Valid
-  @NotNull
-  @JsonProperty
-  private ScyllaDbConfiguration pushChallengeScyllaDb;
-  
-  @Valid
-  @NotNull
-  @JsonProperty
-  private ScyllaDbConfiguration reportMessageScyllaDb;
-  
-  @Valid
-  @NotNull
-  @JsonProperty
-  private ScyllaDbConfiguration pendingAccountsScyllaDb;
-
-  @Valid
-  @NotNull
-  @JsonProperty
-  private ScyllaDbConfiguration pendingDevicesScyllaDb;
-
-  @Valid
-  @NotNull
-  @JsonProperty
-  private ScyllaDbConfiguration groupsScyllaDb;
-
-  @Valid
-  @NotNull
-  @JsonProperty
-  private ScyllaDbConfiguration groupLogsScyllaDb;
+  private ScyllaDbConfiguration scylla;   
 
   @Valid
   @NotNull
@@ -299,29 +254,9 @@ public class WhisperServerConfiguration extends Configuration {
     return rateLimitersCluster;
   }
 
-  public MessageScyllaDbConfiguration getMessageScyllaDbConfiguration() {
-    return messageScyllaDb;
-  }
-
-  public ScyllaDbConfiguration getKeysScyllaDbConfiguration() {
-    return keysScyllaDb;
-  }
-
-  public ScyllaDbConfiguration getGroupsScyllaDbConfiguration() {
-    return groupsScyllaDb;
-  }
-
-  public ScyllaDbConfiguration getGroupLogsScyllaDbConfiguration() {
-    return groupLogsScyllaDb;
-  }
-  
-  public AccountsScyllaDbConfiguration getAccountsScyllaDbConfiguration() {
-    return accountsScyllaDb;
+  public ScyllaDbConfiguration getScyllaDbConfiguration() {
+    return scylla;
   }  
-  
-  public ScyllaDbConfiguration getDeletedAccountsScyllaDbConfiguration() {
-    return deletedAccountsScyllaDb;
-  }
   
   public DatabaseConfiguration getAbuseDatabaseConfiguration() {
     return abuseDatabase;
@@ -405,23 +340,7 @@ public class WhisperServerConfiguration extends Configuration {
 
   public GroupConfiguration getGroupConfiguration() {
     return group;
-  }
-  
-  public ScyllaDbConfiguration getPushChallengeScyllaDbConfiguration() {
-    return pushChallengeScyllaDb;
-  }
-  
-  public ScyllaDbConfiguration getReportMessageScyllaDbConfiguration() {
-    return reportMessageScyllaDb;
-  }
-  
-  public ScyllaDbConfiguration getPendingAccountsScyllaDbConfiguration() {
-    return pendingAccountsScyllaDb;
-  }
-
-  public ScyllaDbConfiguration getPendingDevicesScyllaDbConfiguration() {
-    return pendingDevicesScyllaDb;
-  }
+  }  
   
   public BadgesConfiguration getBadges() {
     return badges;

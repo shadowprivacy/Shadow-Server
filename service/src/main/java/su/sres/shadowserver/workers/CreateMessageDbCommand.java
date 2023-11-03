@@ -24,7 +24,7 @@ import software.amazon.awssdk.services.dynamodb.model.Projection;
 import software.amazon.awssdk.services.dynamodb.model.ProjectionType;
 import software.amazon.awssdk.services.dynamodb.waiters.DynamoDbWaiter;
 import su.sres.shadowserver.WhisperServerConfiguration;
-import su.sres.shadowserver.configuration.MessageScyllaDbConfiguration;
+import su.sres.shadowserver.configuration.ScyllaDbConfiguration;
 import su.sres.shadowserver.util.ScyllaDbFromConfig;
 
 public class CreateMessageDbCommand extends EnvironmentCommand<WhisperServerConfiguration> {
@@ -63,11 +63,11 @@ public class CreateMessageDbCommand extends EnvironmentCommand<WhisperServerConf
 
     environment.getObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-    MessageScyllaDbConfiguration scyllaMessageConfig = config.getMessageScyllaDbConfiguration();
+    ScyllaDbConfiguration scyllaConfig = config.getScyllaDbConfiguration();
 
-    String tableName = scyllaMessageConfig.getTableName();
+    String tableName = scyllaConfig.getMessagesTableName();
 
-    DynamoDbClient messageScyllaDb = ScyllaDbFromConfig.client(scyllaMessageConfig);
+    DynamoDbClient messageScyllaDb = ScyllaDbFromConfig.client(scyllaConfig);
 
     List<AttributeDefinition> attributeDefinitions = new ArrayList<AttributeDefinition>();
     attributeDefinitions.add(AttributeDefinition.builder().attributeName(KEY_PARTITION).attributeType("B").build());

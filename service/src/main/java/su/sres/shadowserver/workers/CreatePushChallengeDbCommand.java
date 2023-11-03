@@ -50,11 +50,11 @@ public class CreatePushChallengeDbCommand extends EnvironmentCommand<WhisperServ
 
     environment.getObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-    ScyllaDbConfiguration scyllaPushChallengeConfig = config.getPushChallengeScyllaDbConfiguration();
+    ScyllaDbConfiguration scyllaConfig = config.getScyllaDbConfiguration();
 
-    String tableName = scyllaPushChallengeConfig.getTableName();
+    String tableName = scyllaConfig.getPushChallengeTableName();
 
-    DynamoDbClient pushChallengeScyllaDb = ScyllaDbFromConfig.client(scyllaPushChallengeConfig);
+    DynamoDbClient pushChallengeScyllaDb = ScyllaDbFromConfig.client(scyllaConfig);
 
     List<AttributeDefinition> attributeDefinitions = new ArrayList<AttributeDefinition>();
     attributeDefinitions.add(AttributeDefinition.builder().attributeName(KEY_ACCOUNT_UUID).attributeType("B").build());

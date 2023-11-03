@@ -50,11 +50,11 @@ public class CreateGroupLogsDbCommand extends EnvironmentCommand<WhisperServerCo
 
     environment.getObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-    ScyllaDbConfiguration scyllaGroupLogsConfig = config.getGroupLogsScyllaDbConfiguration();
+    ScyllaDbConfiguration scyllaConfig = config.getScyllaDbConfiguration();
 
-    String tableName = scyllaGroupLogsConfig.getTableName();
+    String tableName = scyllaConfig.getGroupLogsTableName();
 
-    DynamoDbClient groupLogsScyllaDb = ScyllaDbFromConfig.client(scyllaGroupLogsConfig);
+    DynamoDbClient groupLogsScyllaDb = ScyllaDbFromConfig.client(scyllaConfig);
 
     List<AttributeDefinition> attributeDefinitions = new ArrayList<AttributeDefinition>();
     attributeDefinitions.add(AttributeDefinition.builder().attributeName(KEY_GROUP_ID).attributeType("B").build());

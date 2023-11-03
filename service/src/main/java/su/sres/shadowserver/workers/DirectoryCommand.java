@@ -25,8 +25,6 @@ import io.dropwizard.setup.Environment;
 import io.lettuce.core.resource.ClientResources;
 import io.micrometer.core.instrument.Metrics;
 import su.sres.shadowserver.WhisperServerConfiguration;
-import su.sres.shadowserver.configuration.AccountsScyllaDbConfiguration;
-import su.sres.shadowserver.configuration.MessageScyllaDbConfiguration;
 import su.sres.shadowserver.configuration.ScyllaDbConfiguration;
 import su.sres.shadowserver.metrics.PushLatencyManager;
 import su.sres.shadowserver.providers.RedisClientFactory;
@@ -64,7 +62,7 @@ public class DirectoryCommand extends EnvironmentCommand<WhisperServerConfigurat
       public void run(WhisperServerConfiguration configuration, Environment environment) throws Exception {
 
       }
-    }, "directory", "Update directory from PostgreSQL. WARNING: This will flush all your incremental updates!");
+    }, "directory", "Update directory from Scylla. WARNING: This will flush all your incremental updates!");
   }
 
   @Override
@@ -78,24 +76,13 @@ public class DirectoryCommand extends EnvironmentCommand<WhisperServerConfigurat
       FaultTolerantDatabase accountDatabase = new FaultTolerantDatabase("account_database_directory", accountJdbi, configuration.getAccountsDatabaseConfiguration().getCircuitBreakerConfiguration());
 
       ClientResources redisClusterClientResources = ClientResources.builder().build();
-
-      MessageScyllaDbConfiguration scyllaMessageConfig = configuration.getMessageScyllaDbConfiguration();
-      ScyllaDbConfiguration scyllaKeysConfig = configuration.getKeysScyllaDbConfiguration();
-      AccountsScyllaDbConfiguration scyllaAccountsConfig = configuration.getAccountsScyllaDbConfiguration();
-      ScyllaDbConfiguration scyllaDeletedAccountsConfig = configuration.getDeletedAccountsScyllaDbConfiguration();      
-      ScyllaDbConfiguration scyllaPendingAccountsConfig = configuration.getPendingAccountsScyllaDbConfiguration();          
       
-      ScyllaDbConfiguration scyllaReportMessageConfig = configuration.getReportMessageScyllaDbConfiguration(); 
-          
-      DynamoDbClient reportMessagesScyllaDb = ScyllaDbFromConfig.client(scyllaReportMessageConfig);
-      DynamoDbClient messageScyllaDb = ScyllaDbFromConfig.client(scyllaMessageConfig);
-      DynamoDbClient preKeysScyllaDb = ScyllaDbFromConfig.client(scyllaKeysConfig);
-      DynamoDbClient accountsClient = ScyllaDbFromConfig.client(scyllaAccountsConfig);
-      DynamoDbClient deletedAccountsScyllaDbClient = ScyllaDbFromConfig.client(scyllaDeletedAccountsConfig);     
-      DynamoDbClient pendingAccountsScyllaDbClient = ScyllaDbFromConfig.client(scyllaPendingAccountsConfig);
-      
-      DeletedAccounts deletedAccounts = new DeletedAccounts(deletedAccountsScyllaDbClient, scyllaDeletedAccountsConfig.getTableName());      
-      VerificationCodeStore pendingAccounts = new VerificationCodeStore(pendingAccountsScyllaDbClient, scyllaPendingAccountsConfig.getTableName());
+      ScyllaDbConfiguration scyllaConfig = configuration.getScyllaDbConfiguration();
+                
+      DynamoDbClient scyllaDbClient = ScyllaDbFromConfig.client(scyllaConfig);
+           
+      DeletedAccounts deletedAccounts = new DeletedAccounts(scyllaDbClient, scyllaConfig.getDeletedAccountsTableName());      
+      VerificationCodeStore pendingAccounts = new VerificationCodeStore(scyllaDbClient, scyllaConfig.getPendingAccountsTableName());
   
       FaultTolerantRedisCluster cacheCluster = new FaultTolerantRedisCluster("main_cache_cluster", configuration.getCacheClusterConfiguration(), redisClusterClientResources);
       FaultTolerantRedisCluster messageInsertCacheCluster = new FaultTolerantRedisCluster("message_insert_cluster", configuration.getMessageCacheConfiguration().getRedisClusterConfiguration(), redisClusterClientResources);
@@ -109,12 +96,13 @@ public class DirectoryCommand extends EnvironmentCommand<WhisperServerConfigurat
       ClientPresenceManager clientPresenceManager = new ClientPresenceManager(clientPresenceCluster,
           Executors.newSingleThreadScheduledExecutor(), keyspaceNotificationDispatchExecutor);
           
-      Accounts accounts = new Accounts(accountsClient, scyllaAccountsConfig.getTableName(), scyllaAccountsConfig.getUserLoginTableName(), scyllaAccountsConfig.getMiscTableName(), scyllaAccountsConfig.getScanPageSize());
+      Accounts accounts = new Accounts(scyllaDbClient, scyllaConfig.getAccountsTableName(), scyllaConfig.getUserLoginTableName(), scyllaConfig.getMiscTableName(), scyllaConfig.getScanPageSize());
       Usernames usernames = new Usernames(accountDatabase);
       Profiles profiles = new Profiles(accountDatabase);
       ReservedUsernames reservedUsernames = new ReservedUsernames(accountDatabase);
-      KeysScyllaDb keysScyllaDb = new KeysScyllaDb(preKeysScyllaDb, configuration.getKeysScyllaDbConfiguration().getTableName());
-      MessagesScyllaDb messagesScyllaDb = new MessagesScyllaDb(messageScyllaDb, scyllaMessageConfig.getTableName(), scyllaMessageConfig.getTimeToLive());
+      KeysScyllaDb keysScyllaDb = new KeysScyllaDb(scyllaDbClient, scyllaConfig.getKeysTableName());
+      MessagesScyllaDb messagesScyllaDb = new MessagesScyllaDb(scyllaDbClient, scyllaConfig.getMessagesTableName(), scyllaConfig.getTimeToLive());
+      ReportMessageScyllaDb reportMessageScyllaDb = new ReportMessageScyllaDb(scyllaDbClient, scyllaConfig.getReportMessageTableName());
 
       ReplicatedJedisPool redisClient = new RedisClientFactory("directory_cache_directory_command",
           configuration.getDirectoryConfiguration().getUrl(),
@@ -128,8 +116,7 @@ public class DirectoryCommand extends EnvironmentCommand<WhisperServerConfigurat
 
       UsernamesManager usernamesManager = new UsernamesManager(usernames, reservedUsernames, cacheCluster);
       ProfilesManager profilesManager = new ProfilesManager(profiles, cacheCluster);
-      ReportMessageScyllaDb reportMessageScyllaDb = new ReportMessageScyllaDb(reportMessagesScyllaDb, scyllaReportMessageConfig.getTableName());
-      
+            
       ReportMessageManager reportMessageManager = new ReportMessageManager(reportMessageScyllaDb, Metrics.globalRegistry);
       MessagesManager messagesManager = new MessagesManager(messagesScyllaDb, messagesCache, pushLatencyManager, reportMessageManager);
 

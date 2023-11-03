@@ -70,9 +70,7 @@ import su.sres.shadowserver.auth.ExternalGroupCredentialGenerator;
 import su.sres.shadowserver.auth.TurnTokenGenerator;
 import su.sres.shadowserver.badges.ConfiguredProfileBadgeConverter;
 import su.sres.shadowserver.badges.ProfileBadgeConverter;
-import su.sres.shadowserver.configuration.AccountsScyllaDbConfiguration;
 import su.sres.shadowserver.configuration.LocalParametersConfiguration;
-import su.sres.shadowserver.configuration.MessageScyllaDbConfiguration;
 import su.sres.shadowserver.configuration.MinioConfiguration;
 import su.sres.shadowserver.configuration.ScyllaDbConfiguration;
 import su.sres.shadowserver.configuration.dynamic.DynamicConfiguration;
@@ -340,70 +338,39 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     FaultTolerantDatabase abuseDatabase = new FaultTolerantDatabase("abuse_database", abuseJdbi, config.getAbuseDatabaseConfiguration().getCircuitBreakerConfiguration());
 
     LocalParametersConfiguration localParams = config.getLocalParametersConfiguration();
-    MessageScyllaDbConfiguration scyllaMessageConfig = config.getMessageScyllaDbConfiguration();
-    ScyllaDbConfiguration scyllaKeysConfig = config.getKeysScyllaDbConfiguration();
-    AccountsScyllaDbConfiguration scyllaAccountsConfig = config.getAccountsScyllaDbConfiguration();    
-    ScyllaDbConfiguration scyllaPushChallengeConfig = config.getPushChallengeScyllaDbConfiguration();
-    ScyllaDbConfiguration scyllaReportMessageConfig = config.getReportMessageScyllaDbConfiguration();    
-    ScyllaDbConfiguration scyllaPendingAccountsConfig = config.getPendingAccountsScyllaDbConfiguration();
-    ScyllaDbConfiguration scyllaPendingDevicesConfig = config.getPendingDevicesScyllaDbConfiguration();
-    ScyllaDbConfiguration scyllaDeletedAccountsConfig = config.getDeletedAccountsScyllaDbConfiguration();
+    ScyllaDbConfiguration scyllaConfig = config.getScyllaDbConfiguration();   
 
-    ScyllaDbConfiguration scyllaGroupsConfig = config.getGroupsScyllaDbConfiguration();
-    ScyllaDbConfiguration scyllaGroupLogsConfig = config.getGroupLogsScyllaDbConfiguration();
+    DynamoDbClient scyllaDbClient = ScyllaDbFromConfig.client(scyllaConfig);    
 
-    DynamoDbClient messageScyllaDb = ScyllaDbFromConfig.client(scyllaMessageConfig);
-
-    DynamoDbClient preKeyScyllaDb = ScyllaDbFromConfig.client(scyllaKeysConfig);
-
-    DynamoDbClient accountsClient = ScyllaDbFromConfig.client(scyllaAccountsConfig);
-
-    AmazonDynamoDBClientBuilder groupsScyllaDbClientBuilder = AmazonDynamoDBClientBuilder
+    AmazonDynamoDBClientBuilder scyllaDbClientBuilder = AmazonDynamoDBClientBuilder
         .standard()
-        .withEndpointConfiguration(new EndpointConfiguration(scyllaGroupsConfig.getEndpoint(), scyllaGroupsConfig.getRegion()))
-        .withClientConfiguration(new ClientConfiguration().withClientExecutionTimeout(((int) scyllaGroupsConfig.getClientExecutionTimeout().toMillis()))
-            .withRequestTimeout((int) scyllaGroupsConfig.getClientRequestTimeout().toMillis()))
-        .withCredentials(new AWSStaticCredentialsProvider(new BasicAWSCredentials(scyllaGroupsConfig.getAccessKey(), scyllaGroupsConfig.getAccessSecret())));
+        .withEndpointConfiguration(new EndpointConfiguration(scyllaConfig.getEndpoint(), scyllaConfig.getRegion()))
+        .withClientConfiguration(new ClientConfiguration().withClientExecutionTimeout(((int) scyllaConfig.getClientExecutionTimeout().toMillis()))
+            .withRequestTimeout((int) scyllaConfig.getClientRequestTimeout().toMillis()))
+        .withCredentials(new AWSStaticCredentialsProvider(new BasicAWSCredentials(scyllaConfig.getAccessKey(), scyllaConfig.getAccessSecret())));     
 
-    AmazonDynamoDBClientBuilder groupLogsScyllaDbClientBuilder = AmazonDynamoDBClientBuilder
-        .standard()
-        .withEndpointConfiguration(new EndpointConfiguration(scyllaGroupLogsConfig.getEndpoint(), scyllaGroupLogsConfig.getRegion()))
-        .withClientConfiguration(new ClientConfiguration().withClientExecutionTimeout(((int) scyllaGroupLogsConfig.getClientExecutionTimeout().toMillis()))
-            .withRequestTimeout((int) scyllaGroupLogsConfig.getClientRequestTimeout().toMillis()))
-        .withCredentials(new AWSStaticCredentialsProvider(new BasicAWSCredentials(scyllaGroupLogsConfig.getAccessKey(), scyllaGroupLogsConfig.getAccessSecret())));
+    DynamoDB groupsDynamoDb = new DynamoDB(scyllaDbClientBuilder.build());
+    DynamoDB groupLogsDynamoDb = new DynamoDB(scyllaDbClientBuilder.build());
+
+    DeletedAccounts deletedAccounts = new DeletedAccounts(scyllaDbClient, scyllaConfig.getDeletedAccountsTableName());
     
-    DynamoDbClient deletedAccountsScyllaDbClient = ScyllaDbFromConfig.client(scyllaDeletedAccountsConfig);
-    
-    DynamoDbClient pushChallengeScyllaDbClient = ScyllaDbFromConfig.client(scyllaPushChallengeConfig);
-
-    DynamoDbClient reportMessageScyllaDbClient = ScyllaDbFromConfig.client(scyllaReportMessageConfig);
-    
-    DynamoDbClient pendingAccountsScyllaDbClient = ScyllaDbFromConfig.client(scyllaPendingAccountsConfig);
-
-    DynamoDbClient pendingDevicesScyllaDbClient = ScyllaDbFromConfig.client(scyllaPendingDevicesConfig);
-
-    DynamoDB groupsDynamoDb = new DynamoDB(groupsScyllaDbClientBuilder.build());
-    DynamoDB groupLogsDynamoDb = new DynamoDB(groupLogsScyllaDbClientBuilder.build());
-
-    DeletedAccounts deletedAccounts = new DeletedAccounts(deletedAccountsScyllaDbClient, scyllaDeletedAccountsConfig.getTableName());
-    
-    Accounts accounts = new Accounts(accountsClient, scyllaAccountsConfig.getTableName(), scyllaAccountsConfig.getUserLoginTableName(), scyllaAccountsConfig.getMiscTableName(), scyllaAccountsConfig.getScanPageSize());
+    Accounts accounts = new Accounts(scyllaDbClient, scyllaConfig.getAccountsTableName(), scyllaConfig.getUserLoginTableName(), scyllaConfig.getMiscTableName(), scyllaConfig.getScanPageSize());
     
     Usernames usernames = new Usernames(accountDatabase);
     ReservedUsernames reservedUsernames = new ReservedUsernames(accountDatabase);
     Profiles profiles = new Profiles(accountDatabase);
-    KeysScyllaDb keysScyllaDb = new KeysScyllaDb(preKeyScyllaDb, scyllaKeysConfig.getTableName());
-    MessagesScyllaDb messagesScyllaDb = new MessagesScyllaDb(messageScyllaDb, scyllaMessageConfig.getTableName(), scyllaMessageConfig.getTimeToLive());
-    GroupsScyllaDb groupsScyllaDb = new GroupsScyllaDb(groupsDynamoDb, scyllaGroupsConfig.getTableName());
-    GroupLogsScyllaDb groupLogsScyllaDb = new GroupLogsScyllaDb(groupLogsDynamoDb, scyllaGroupLogsConfig.getTableName());
+    KeysScyllaDb keysScyllaDb = new KeysScyllaDb(scyllaDbClient, scyllaConfig.getKeysTableName());
+    MessagesScyllaDb messagesScyllaDb = new MessagesScyllaDb(scyllaDbClient, scyllaConfig.getMessagesTableName(), scyllaConfig.getTimeToLive());
+    GroupsScyllaDb groupsScyllaDb = new GroupsScyllaDb(groupsDynamoDb, scyllaConfig.getGroupsTableName());
+    GroupLogsScyllaDb groupLogsScyllaDb = new GroupLogsScyllaDb(groupLogsDynamoDb, scyllaConfig.getGroupLogsTableName());
     AbusiveHostRules abusiveHostRules = new AbusiveHostRules(abuseDatabase);
     RemoteConfigs remoteConfigs = new RemoteConfigs(accountDatabase);
 
-    PushChallengeScyllaDb pushChallengeScyllaDb = new PushChallengeScyllaDb(pushChallengeScyllaDbClient, scyllaPushChallengeConfig.getTableName());
-    ReportMessageScyllaDb reportMessageScyllaDb = new ReportMessageScyllaDb(reportMessageScyllaDbClient, scyllaReportMessageConfig.getTableName());
+    PushChallengeScyllaDb pushChallengeScyllaDb = new PushChallengeScyllaDb(scyllaDbClient, scyllaConfig.getPushChallengeTableName());
+    ReportMessageScyllaDb reportMessageScyllaDb = new ReportMessageScyllaDb(scyllaDbClient, scyllaConfig.getReportMessageTableName());
 
-    VerificationCodeStore pendingAccounts = new VerificationCodeStore(pendingAccountsScyllaDbClient, scyllaPendingAccountsConfig.getTableName());
-    VerificationCodeStore pendingDevices = new VerificationCodeStore(pendingDevicesScyllaDbClient, scyllaPendingDevicesConfig.getTableName());
+    VerificationCodeStore pendingAccounts = new VerificationCodeStore(scyllaDbClient, scyllaConfig.getPendingAccountsTableName());
+    VerificationCodeStore pendingDevices = new VerificationCodeStore(scyllaDbClient, scyllaConfig.getPendingDevicesTableName());
 
     RedisClientFactory pubSubClientFactory = new RedisClientFactory("pubsub_cache", config.getPubsubCacheConfiguration().getUrl(), config.getPubsubCacheConfiguration().getReplicaUrls(), config.getPubsubCacheConfiguration().getCircuitBreakerConfiguration());
     RedisClientFactory directoryClientFactory = new RedisClientFactory("directory_cache", config.getDirectoryConfiguration().getUrl(), config.getDirectoryConfiguration().getReplicaUrls(), config.getDirectoryConfiguration().getCircuitBreakerConfiguration());

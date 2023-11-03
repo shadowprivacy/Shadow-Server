@@ -6,10 +6,6 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.amazonaws.ClientConfiguration;
-import com.amazonaws.auth.AWSStaticCredentialsProvider;
-import com.amazonaws.auth.BasicAWSCredentials;
-import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 
 import io.dropwizard.Application;
@@ -53,11 +49,11 @@ public class CreateKeysDbCommand extends EnvironmentCommand<WhisperServerConfigu
 
     environment.getObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-    ScyllaDbConfiguration scyllaKeysConfig = config.getKeysScyllaDbConfiguration();
+    ScyllaDbConfiguration scyllaConfig = config.getScyllaDbConfiguration();
 
-    String tableName = scyllaKeysConfig.getTableName();
+    String tableName = scyllaConfig.getKeysTableName();
 
-    DynamoDbClient keysScyllaDb = ScyllaDbFromConfig.client(scyllaKeysConfig);
+    DynamoDbClient keysScyllaDb = ScyllaDbFromConfig.client(scyllaConfig);
 
     List<AttributeDefinition> attributeDefinitions = new ArrayList<AttributeDefinition>();
     attributeDefinitions.add(AttributeDefinition.builder().attributeName(KEY_ACCOUNT_UUID).attributeType("B").build());

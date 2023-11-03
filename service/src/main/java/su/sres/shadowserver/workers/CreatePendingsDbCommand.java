@@ -55,15 +55,13 @@ public class CreatePendingsDbCommand extends EnvironmentCommand<WhisperServerCon
 
     environment.getObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-    ScyllaDbConfiguration accountsConfig = config.getPendingAccountsScyllaDbConfiguration();
-    ScyllaDbConfiguration devicesConfig = config.getPendingDevicesScyllaDbConfiguration();
+    ScyllaDbConfiguration scyllaConfig = config.getScyllaDbConfiguration();
+    
+    String accountsTableName = scyllaConfig.getPendingAccountsTableName();
+    String devicesTableName = scyllaConfig.getPendingDevicesTableName();
 
-    String accountsTableName = accountsConfig.getTableName();
-    String devicesTableName = devicesConfig.getTableName();
-
-    DynamoDbClient acc = ScyllaDbFromConfig.client(accountsConfig);
-    DynamoDbClient dev = ScyllaDbFromConfig.client(devicesConfig);
-
+    DynamoDbClient scyllaClient = ScyllaDbFromConfig.client(scyllaConfig);
+    
     List<AttributeDefinition> attributeDefinitions = new ArrayList<AttributeDefinition>();
     attributeDefinitions.add(AttributeDefinition.builder().attributeName(KEY_USER_LOGIN).attributeType("S").build());
     attributeDefinitions.add(AttributeDefinition.builder().attributeName(ATTR_STORED_CODE).attributeType("S").build());
@@ -88,25 +86,23 @@ public class CreatePendingsDbCommand extends EnvironmentCommand<WhisperServerCon
 
     logger.info("Creating the pendingaccountsdb table...");
 
-    DynamoDbWaiter waiter1 = acc.waiter();
+    DynamoDbWaiter waiter = scyllaClient.waiter();
 
-    acc.createTable(accRequest);
+    scyllaClient.createTable(accRequest);
 
-    WaiterResponse<DescribeTableResponse> waiterResponse1 = waiter1.waitUntilTableExists(r -> r.tableName(accountsTableName));
+    WaiterResponse<DescribeTableResponse> waiterResponse = waiter.waitUntilTableExists(r -> r.tableName(accountsTableName));
 
-    if (waiterResponse1.matched().response().isPresent()) {
+    if (waiterResponse.matched().response().isPresent()) {
       logger.info("Done");
     }
 
     logger.info("Creating the pendingdevicesdb table...");
+    
+    scyllaClient.createTable(devRequest);
 
-    DynamoDbWaiter waiter2 = dev.waiter();
+    waiterResponse = waiter.waitUntilTableExists(r -> r.tableName(devicesTableName));
 
-    dev.createTable(devRequest);
-
-    WaiterResponse<DescribeTableResponse> waiterResponse2 = waiter2.waitUntilTableExists(r -> r.tableName(devicesTableName));
-
-    if (waiterResponse2.matched().response().isPresent()) {
+    if (waiterResponse.matched().response().isPresent()) {
       logger.info("Done");
     }
 

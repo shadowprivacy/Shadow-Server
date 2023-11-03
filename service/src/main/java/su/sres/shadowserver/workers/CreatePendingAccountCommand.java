@@ -1,6 +1,6 @@
 /*
- * Original software: Copyright 2013-2020 Signal Messenger, LLC
- * Modified software: Copyright 2019-2022 Anton Alipov, sole trader
+ * Original software: Copyright 2013-2021 Signal Messenger, LLC
+ * Modified software: Copyright 2019-2023 Anton Alipov, sole trader
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 package su.sres.shadowserver.workers;
@@ -31,8 +31,6 @@ import io.lettuce.core.resource.ClientResources;
 import io.micrometer.core.instrument.Metrics;
 import su.sres.shadowserver.WhisperServerConfiguration;
 import su.sres.shadowserver.auth.StoredVerificationCode;
-import su.sres.shadowserver.configuration.AccountsScyllaDbConfiguration;
-import su.sres.shadowserver.configuration.MessageScyllaDbConfiguration;
 import su.sres.shadowserver.configuration.ScyllaDbConfiguration;
 import su.sres.shadowserver.metrics.PushLatencyManager;
 import su.sres.shadowserver.providers.RedisClientFactory;
@@ -166,21 +164,11 @@ public class CreatePendingAccountCommand extends EnvironmentCommand<WhisperServe
 
       ClientResources redisClusterClientResources = ClientResources.builder().build();          
 
-      MessageScyllaDbConfiguration scyllaMessageConfig = configuration.getMessageScyllaDbConfiguration();
-      ScyllaDbConfiguration scyllaKeysConfig = configuration.getKeysScyllaDbConfiguration();
-      AccountsScyllaDbConfiguration scyllaAccountsConfig = configuration.getAccountsScyllaDbConfiguration();            
-      ScyllaDbConfiguration scyllaDeletedAccountsConfig = configuration.getDeletedAccountsScyllaDbConfiguration();      
-      ScyllaDbConfiguration scyllaReportMessageConfig = configuration.getReportMessageScyllaDbConfiguration();
-      ScyllaDbConfiguration scyllaPendingAccountsConfig = configuration.getPendingAccountsScyllaDbConfiguration();
-                  
-      DynamoDbClient reportMessagesScyllaDb = ScyllaDbFromConfig.client(scyllaReportMessageConfig);
-      DynamoDbClient messageScyllaDb = ScyllaDbFromConfig.client(scyllaMessageConfig);
-      DynamoDbClient preKeysScyllaDb = ScyllaDbFromConfig.client(scyllaKeysConfig);
-      DynamoDbClient accountsClient = ScyllaDbFromConfig.client(scyllaAccountsConfig);
-      DynamoDbClient deletedAccountsScyllaDbClient = ScyllaDbFromConfig.client(scyllaDeletedAccountsConfig);      
-      DynamoDbClient pendingAccountsScyllaDbClient = ScyllaDbFromConfig.client(scyllaPendingAccountsConfig);
-      
-      DeletedAccounts deletedAccounts = new DeletedAccounts(deletedAccountsScyllaDbClient, scyllaDeletedAccountsConfig.getTableName());
+      ScyllaDbConfiguration scyllaConfig = configuration.getScyllaDbConfiguration();
+                        
+      DynamoDbClient scyllaDbClient = ScyllaDbFromConfig.client(scyllaConfig);
+            
+      DeletedAccounts deletedAccounts = new DeletedAccounts(scyllaDbClient, scyllaConfig.getDeletedAccountsTableName());
       
       FaultTolerantRedisCluster cacheCluster = new FaultTolerantRedisCluster("main_cache_cluster", configuration.getCacheClusterConfiguration(), redisClusterClientResources);
       FaultTolerantRedisCluster messageInsertCacheCluster = new FaultTolerantRedisCluster("message_insert_cluster", configuration.getMessageCacheConfiguration().getRedisClusterConfiguration(), redisClusterClientResources);
@@ -192,13 +180,13 @@ public class CreatePendingAccountCommand extends EnvironmentCommand<WhisperServe
       ReplicatedJedisPool redisClient = new RedisClientFactory("directory_cache_add_command", configuration.getDirectoryConfiguration().getUrl(), configuration.getDirectoryConfiguration().getReplicaUrls(), configuration.getDirectoryConfiguration().getCircuitBreakerConfiguration())
           .getRedisClientPool();
       
-      Accounts accounts = new Accounts(accountsClient, scyllaAccountsConfig.getTableName(), scyllaAccountsConfig.getUserLoginTableName(), scyllaAccountsConfig.getMiscTableName(), scyllaAccountsConfig.getScanPageSize());
-      VerificationCodeStore pendingAccounts = new VerificationCodeStore(pendingAccountsScyllaDbClient, scyllaPendingAccountsConfig.getTableName());
+      Accounts accounts = new Accounts(scyllaDbClient, scyllaConfig.getAccountsTableName(), scyllaConfig.getUserLoginTableName(), scyllaConfig.getMiscTableName(), scyllaConfig.getScanPageSize());
+      VerificationCodeStore pendingAccounts = new VerificationCodeStore(scyllaDbClient, scyllaConfig.getPendingAccountsTableName());
       Usernames usernames = new Usernames(accountDatabase);
       Profiles profiles = new Profiles(accountDatabase);
       ReservedUsernames reservedUsernames = new ReservedUsernames(accountDatabase);
-      KeysScyllaDb keysScyllaDb = new KeysScyllaDb(preKeysScyllaDb, scyllaKeysConfig.getTableName());
-      MessagesScyllaDb messagesScyllaDb = new MessagesScyllaDb(messageScyllaDb, scyllaMessageConfig.getTableName(), scyllaMessageConfig.getTimeToLive());
+      KeysScyllaDb keysScyllaDb = new KeysScyllaDb(scyllaDbClient, scyllaConfig.getKeysTableName());
+      MessagesScyllaDb messagesScyllaDb = new MessagesScyllaDb(scyllaDbClient, scyllaConfig.getMessagesTableName(), scyllaConfig.getTimeToLive());
             
       final int lifetime = configuration.getLocalParametersConfiguration().getAccountLifetime();
       StoredVerificationCodeManager pendingAccountsManager = new StoredVerificationCodeManager(pendingAccounts, lifetime);
@@ -214,7 +202,7 @@ public class CreatePendingAccountCommand extends EnvironmentCommand<WhisperServe
       UsernamesManager usernamesManager = new UsernamesManager(usernames, reservedUsernames, cacheCluster);
       ProfilesManager profilesManager = new ProfilesManager(profiles, cacheCluster);
       
-      ReportMessageScyllaDb reportMessageScyllaDb = new ReportMessageScyllaDb(reportMessagesScyllaDb, scyllaReportMessageConfig.getTableName());
+      ReportMessageScyllaDb reportMessageScyllaDb = new ReportMessageScyllaDb(scyllaDbClient, scyllaConfig.getReportMessageTableName());
       
       ReportMessageManager reportMessageManager = new ReportMessageManager(reportMessageScyllaDb, Metrics.globalRegistry);
       MessagesManager messagesManager = new MessagesManager(messagesScyllaDb, messagesCache, pushLatencyManager, reportMessageManager);

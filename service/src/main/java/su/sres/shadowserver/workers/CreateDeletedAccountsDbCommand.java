@@ -49,10 +49,10 @@ public class CreateDeletedAccountsDbCommand extends EnvironmentCommand<WhisperSe
 
     environment.getObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-    ScyllaDbConfiguration scyllaDeletedAccountsConfig = config.getDeletedAccountsScyllaDbConfiguration();
-    String tableName = scyllaDeletedAccountsConfig.getTableName();
+    ScyllaDbConfiguration scyllaConfig = config.getScyllaDbConfiguration();
+    String tableName = scyllaConfig.getDeletedAccountsTableName();
 
-    DynamoDbClient deletedAccountsScyllaDbClient = ScyllaDbFromConfig.client(scyllaDeletedAccountsConfig);
+    DynamoDbClient deletedAccountsScyllaDbClient = ScyllaDbFromConfig.client(scyllaConfig);
 
     List<AttributeDefinition> attributeDefinitions = new ArrayList<AttributeDefinition>();
     attributeDefinitions.add(AttributeDefinition.builder().attributeName(ATTR_ACCOUNT_UUID).attributeType("B").build());
