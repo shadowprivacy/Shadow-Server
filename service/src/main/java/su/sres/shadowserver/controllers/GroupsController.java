@@ -59,7 +59,6 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -451,7 +450,8 @@ public class GroupsController {
     Optional<Member> member = GroupAuth.getMember(user, group.get());
 
     if (member.isPresent()) {
-      String token = externalGroupCredentialGenerator.generateFor(member.get().getUserId(), user.getGroupId());
+      String token = externalGroupCredentialGenerator.generateFor(
+          member.get().getUserId(), user.getGroupId(), GroupAuth.isAllowedToInitiateGroupCall(user, group.get()));
       ExternalGroupCredential credential = ExternalGroupCredential.newBuilder().setToken(token).build();
 
       return Response.ok(credential).build();
