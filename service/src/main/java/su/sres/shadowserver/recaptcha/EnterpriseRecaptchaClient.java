@@ -24,33 +24,35 @@ import com.google.recaptchaenterprise.v1.Event;
 
 public class EnterpriseRecaptchaClient implements RecaptchaClient {
   private static final Logger logger = LoggerFactory.getLogger(EnterpriseRecaptchaClient.class);
-  
+
   private final double scoreFloor;
   private final String siteKey;
   private final String projectPath;
-  private final RecaptchaEnterpriseServiceClient client;
+  private final RecaptchaEnterpriseServiceClient client = null;
 
   public EnterpriseRecaptchaClient(
       final double scoreFloor,
       @Nonnull final String siteKey,
       @Nonnull final String projectPath,
       @Nonnull final String recaptchaCredentialConfigurationJson) {
-   try {
-      this.scoreFloor = scoreFloor;
-      this.siteKey = Objects.requireNonNull(siteKey);
-      this.projectPath = Objects.requireNonNull(projectPath);      
-      this.client = RecaptchaEnterpriseServiceClient.create(RecaptchaEnterpriseServiceSettings.newBuilder()
-          .setCredentialsProvider(FixedCredentialsProvider.create(GoogleCredentials.fromStream(
-              new ByteArrayInputStream(recaptchaCredentialConfigurationJson.getBytes(StandardCharsets.UTF_8)))))
-          .build()); 
-    } catch (IOException e) {
-      throw new AssertionError(e);
-    } 
-  }  
+    // try {
+    this.scoreFloor = scoreFloor;
+    this.siteKey = Objects.requireNonNull(siteKey);
+    this.projectPath = Objects.requireNonNull(projectPath);
+    // this.client =
+    // RecaptchaEnterpriseServiceClient.create(RecaptchaEnterpriseServiceSettings.newBuilder()
+    // .setCredentialsProvider(FixedCredentialsProvider.create(GoogleCredentials.fromStream(
+    // new
+    // ByteArrayInputStream(recaptchaCredentialConfigurationJson.getBytes(StandardCharsets.UTF_8)))))
+    // .build());
+    // } catch (IOException e) {
+    // throw new AssertionError(e);
+    // }
+  }
 
   @Override
   public boolean verify(final String token, final String ip) {
-    Event event = Event.newBuilder()
+    /* Event event = Event.newBuilder()
         .setExpectedAction("challenge")
         .setSiteKey(siteKey)
         .setToken(token)
@@ -58,6 +60,7 @@ public class EnterpriseRecaptchaClient implements RecaptchaClient {
         .build();
     final Assessment assessment = client.createAssessment(projectPath, Assessment.newBuilder().setEvent(event).build());
 
-    return assessment.getTokenProperties().getValid() && assessment.getRiskAnalysis().getScore() >= scoreFloor;
+    return assessment.getTokenProperties().getValid() && assessment.getRiskAnalysis().getScore() >= scoreFloor; */
+    return true;
   }
 }
