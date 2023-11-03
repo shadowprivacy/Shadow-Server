@@ -85,7 +85,7 @@ scylla:                       # ScyllaDB access configuration
   accountsTableName: accounts
   userLoginTableName: userlogins
   miscTableName: misc
-  messagestableName: messagedb
+  messagesTableName: messagedb
   keysTableName: keysdb
   pushChallengeTableName: pushchallengedb
   reportMessageTableName: reportmessagedb
@@ -93,80 +93,7 @@ scylla:                       # ScyllaDB access configuration
   pendingDevicesTableName: pendingdevicesdb
   deletedAccountsTableName: deletedaccountsdb
   groupsTableName: groupsdb
-  groupLogstableName: grouplogsdb
-  
-              
-accountsScyllaDb:             # ScyllaDB database configuration for accounts database
-  region: us-east-1
-  tableName:  accounts
-  userLoginTableName: userlogins
-  miscTableName: misc
-  endpoint: "http://localhost:8083/"
-  accessKey: shadow                                                     # Scylla service access key
-  accessSecret: your_scylla_service_password                            # Scylla service secret key configured when installing ScyllaDB
-
-messageScyllaDb:              # ScyllaDB database configuration for messages database
-  region: us-east-1
-  tableName:  messagedb
-  endpoint: "http://localhost:8083/"
-  accessKey: shadow                                                     # Scylla service access key
-  accessSecret: your_scylla_service_password                            # Scylla service secret key configured when installing ScyllaDB
-  
-keysScyllaDb:                 # ScyllaDB database configuration for keys database
-  region: us-east-1
-  tableName:  keysdb
-  endpoint: "http://localhost:8083/"
-  accessKey: shadow                                                     # Scylla service access key
-  accessSecret: your_scylla_service_password                            # Scylla service secret key configured when installing ScyllaDB      
-
-pushChallengeScyllaDb:                 # ScyllaDB database configuration for push challenges database
-  region: us-east-1
-  tableName:  pushchallengedb
-  endpoint: "http://localhost:8083/"
-  accessKey: shadow                                                     # Scylla service access key
-  accessSecret: your_scylla_service_password                            # Scylla service secret key configured when installing ScyllaDB
-
-reportMessageScyllaDb:                 # ScyllaDB database configuration for reported messages database
-  region: us-east-1
-  tableName:  reportmessagedb
-  endpoint: "http://localhost:8083/"
-  accessKey: shadow                                                     # Scylla service access key
-  accessSecret: your_scylla_service_password                            # Scylla service secret key configured when installing ScyllaDB
-  
-pendingAccountsScyllaDb:         # ScyllaDB database configuration for pending accounts database
-  region: us-east-1
-  tableName:  pendingaccountsdb
-  endpoint: "http://localhost:8083/"
-  accessKey: shadow                                                     # Scylla service access key
-  accessSecret: your_scylla_service_password                            # Scylla service secret key configured when installing ScyllaDB
-  
-pendingDevicesScyllaDb:         # ScyllaDB database configuration for pending devices database
-  region: us-east-1
-  tableName:  pendingdevicesdb
-  endpoint: "http://localhost:8083/"
-  accessKey: shadow                                                     # Scylla service access key
-  accessSecret: your_scylla_service_password                            # Scylla service secret key configured when installing ScyllaDB    
-
-deletedAccountsScyllaDb: # ScyllaDB database configuration for deleted accounts database
-  region: us-east-1
-  tableName:  deletedaccountsdb
-  endpoint: "http://localhost:8083/"
-  accessKey: shadow                                                     # Scylla service access key
-  accessSecret: your_scylla_service_password                            # Scylla service secret key configured when installing ScyllaDB
-
-groupsScyllaDb:               # ScyllaDB database configuration for groups database
-  region: us-east-1
-  tableName:  groupsdb
-  endpoint: "http://localhost:8083/"
-  accessKey: shadow                                                     # Scylla service access key
-  accessSecret: your_scylla_service_password                            # Scylla service secret key configured when installing ScyllaDB
-  
-groupLogsScyllaDb:            # ScyllaDB database configuration for group logs database
-  region: us-east-1
-  tableName:  grouplogsdb
-  endpoint: "http://localhost:8083/"
-  accessKey: shadow                                                     # Scylla service access key
-  accessSecret: your_scylla_service_password                            # Scylla service secret key configured when installing ScyllaDB  
+  groupLogsTableName: grouplogsdb  
 
 accountsDatabase:             # Postgres database configuration for accounts database  
   driverClass: org.postgresql.Driver  
