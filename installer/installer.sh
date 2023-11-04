@@ -329,6 +329,8 @@ then
     java -jar ShadowServer-${SHADOW_SERVER_VERSION}.jar createaccountsdb ${SERVER_PATH}/config/shadow.yml
     java -jar ShadowServer-${SHADOW_SERVER_VERSION}.jar createpushchallengedb ${SERVER_PATH}/config/shadow.yml
     java -jar ShadowServer-${SHADOW_SERVER_VERSION}.jar createreportmessagedb ${SERVER_PATH}/config/shadow.yml
+    java -jar ShadowServer-${SHADOW_SERVER_VERSION}.jar createdeletedaccountsdb ${SERVER_PATH}/config/shadow.yml
+    java -jar ShadowServer-${SHADOW_SERVER_VERSION}.jar creatependingsdb ${SERVER_PATH}/config/shadow.yml
     
     chown ${USER_SH} /var/log/shadow.log
     
