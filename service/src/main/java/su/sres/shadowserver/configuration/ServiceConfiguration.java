@@ -28,6 +28,10 @@ public class ServiceConfiguration {
   @JsonProperty
   @NotEmpty
   private String storageUri;
+  
+  @JsonProperty
+  @NotEmpty
+  private String sfuUri;
 
   @JsonProperty
   @JsonSerialize(using = ByteArrayAdapter.Serializing.class)
@@ -80,6 +84,10 @@ public class ServiceConfiguration {
 
   public String getStorageUri() {
     return storageUri;
+  }
+  
+  public String getSfuUri() {
+    return sfuUri;
   }
 
   public byte[] getUnidentifiedDeliveryCaPublicKey() {

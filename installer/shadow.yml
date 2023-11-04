@@ -207,6 +207,7 @@ serviceConfiguration:         # client-server parameters
  cloudUri: https://shadow.example.com:9000                              # Minio server URL as accessible from the Internet                             
  statusUri: shadowuptime.example.com                                    # offline alarm signaling URL
  storageUri: https://shadow.example.com:8080                            # Shadow server URL as accessible from the Internet
+ sfuUri: https://sfu.example.com:8080                                   # SFU (conferencing) server URL as accessible from the Internet   
  unidentifiedDeliveryCaPublicKey: xxxxx                                 # public key of the unidentified access CA 
  serverZkPublic: xxxxx                                                  # server ZK public key
  fcmSenderId: 12345                                                     # the sender ID of your Firebase project 
