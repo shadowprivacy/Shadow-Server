@@ -1,6 +1,6 @@
 /*
- * Original software: Copyright 2013-2021 Signal Messenger, LLC
- * Modified software: Copyright 2019-2023 Anton Alipov, sole trader
+ * Original software: Copyright 2013-2020 Signal Messenger, LLC
+ * Modified software: Copyright 2019-2022 Anton Alipov, sole trader
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 package su.sres.shadowserver.workers;
@@ -20,15 +20,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import redis.clients.jedis.Jedis;
 import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
 
-import static su.sres.shadowserver.storage.DirectoryManager.DIRECTORY_VERSION;
-
 import java.util.HashMap;
 import java.util.List;
 import java.util.Set;
 
-import javax.annotation.Nullable;
-
 public class PlainDirectoryUpdater {
+
+  private static final int CHUNK_SIZE = 1000;
 
   private final Logger logger = LoggerFactory.getLogger(PlainDirectoryUpdater.class);
 
@@ -51,13 +49,13 @@ public class PlainDirectoryUpdater {
 
     BatchOperationHandle batchOperation = directory.startBatchOperation();
 
-    // removing all entries from Redis which are not found among existing active accounts
+    // removing all entries from Redis which are not found among existing accounts
     logger.info("Cleaning up inexisting accounts.");
     HashMap<String, String> accountsInDirectory = directory.retrievePlainDirectory();
     if (!accountsInDirectory.isEmpty()) {
       Set<String> usernamesInDirectory = accountsInDirectory.keySet();
       for (String entry : usernamesInDirectory) {
-        if (!accountsManager.get(entry).isPresent() || !accountsManager.get(entry).get().isEnabled()) {
+        if (!accountsManager.get(entry).isPresent()) {
           directory.redisRemoveFromPlainDirectory(batchOperation, entry);
           contactsRemoved++;
         }
@@ -71,7 +69,7 @@ public class PlainDirectoryUpdater {
       List<Account> accounts = accountsManager.getAll(accountsScanRequestBuilder);
 
       for (Account account : accounts) {
-        if (!account.isEnabled()) continue;
+
         directory.redisUpdatePlainDirectory(batchOperation, account.getUserLogin(), objectMapper.writeValueAsString(new PlainDirectoryEntryValue(account.getUuid())));
         contactsAdded++;
       }
@@ -90,31 +88,7 @@ public class PlainDirectoryUpdater {
       directory.flushIncrementalUpdates(backoff, jedis);
     }
 
-    logger.info("All incremental updates flushed.");
-    
-    // syncing the directory version with scylla
-    
-    try(Jedis jedis = directory.accessDirectoryCache().getWriteResource()){
-      
-      long currentVersion;
-      
-      @Nullable String currentVersionFromRedis = jedis.get(DIRECTORY_VERSION);
-      long currentVersionFromScylla = accountsManager.getDirectoryVersionFromScylla(); 
-      
-      if (currentVersionFromRedis == null || "nil".equals(currentVersionFromRedis)) {
-        currentVersion = currentVersionFromScylla;
-      } else {
-        currentVersion = Math.max(currentVersionFromScylla, Long.parseLong(currentVersionFromRedis));
-      }
-      
-      // reconcile directory versions to the current version plus one, to trigger updates on clients
-      directory.setDirectoryVersion(currentVersion + 1L);
-      accountsManager.setDirectoryVersionInScylla(currentVersion +1L);     
-      
-    } 
-    
-    logger.info("Directory version updated to " + accountsManager.getDirectoryVersion());
-     
+    logger.info(String.format("All incremental updates flushed."));
 
     accountsManager.releaseDirectoryRestoreLock();
   }
