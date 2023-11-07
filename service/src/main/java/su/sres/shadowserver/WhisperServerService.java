@@ -159,6 +159,7 @@ import su.sres.shadowserver.workers.DeleteUserCommand;
 import su.sres.shadowserver.workers.DirectoryCommand;
 import su.sres.shadowserver.workers.GenerateQRCodeCommand;
 import su.sres.shadowserver.workers.LicenseHashCommand;
+import su.sres.shadowserver.workers.RecreateAccountCommand;
 import su.sres.shadowserver.workers.ServerVersionCommand;
 import su.sres.shadowserver.workers.SetCrawlerAccelerationTask;
 import su.sres.shadowserver.workers.SetRequestLoggingEnabledTask;
@@ -201,6 +202,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     bootstrap.addCommand(new DirectoryCommand());
     bootstrap.addCommand(new GenerateQRCodeCommand());
     bootstrap.addCommand(new LicenseHashCommand());
+    bootstrap.addCommand(new RecreateAccountCommand());
     bootstrap.addCommand(new ServerVersionCommand());
     bootstrap.addCommand(new ShowLicenseCommand());
     bootstrap.addCommand(new VacuumCommand());
