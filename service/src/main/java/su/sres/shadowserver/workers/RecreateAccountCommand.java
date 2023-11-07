@@ -3,6 +3,7 @@
  * Modified software: Copyright 2019-2023 Anton Alipov, sole trader
  * SPDX-License-Identifier: AGPL-3.0-only
  */
+
 package su.sres.shadowserver.workers;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -60,28 +61,27 @@ import su.sres.shadowserver.storage.VerificationCodeStore;
 import su.sres.shadowserver.util.Pair;
 import su.sres.shadowserver.util.ScyllaDbFromConfig;
 import su.sres.shadowserver.util.ServerLicenseUtil;
-import su.sres.shadowserver.util.Util;
 import su.sres.shadowserver.util.VerificationCode;
 import su.sres.shadowserver.util.ServerLicenseUtil.LicenseStatus;
 
-public class CreatePendingAccountCommand extends EnvironmentCommand<WhisperServerConfiguration> {
+public class RecreateAccountCommand extends EnvironmentCommand<WhisperServerConfiguration> {
 
-  private final Logger logger = LoggerFactory.getLogger(CreatePendingAccountCommand.class);
+  private final Logger logger = LoggerFactory.getLogger(RecreateAccountCommand.class);
 
-  public CreatePendingAccountCommand() {
+  public RecreateAccountCommand() {
     super(new Application<WhisperServerConfiguration>() {
       @Override
       public void run(WhisperServerConfiguration configuration, Environment environment) throws Exception {
 
       }
-    }, "adduser", "add new user as pending (unverified) account");
+    }, "restoreuser", "reinstall the deleted user as pending (unverified) account");
   }
 
   @Override
   public void configure(Subparser subparser) {
     super.configure(subparser);
     subparser.addArgument("-u", "--user") // supplies a comma-separated list of users
-        .dest("user").type(String.class).required(true).help("The user login of the user to add. Must be 3 characters or more. Allowed characters are: lowercase Latin letters, digits and hypen.");
+        .dest("user").type(String.class).required(true).help("The user login of the user to recreate.");
   }
 
   @Override
@@ -211,20 +211,17 @@ public class CreatePendingAccountCommand extends EnvironmentCommand<WhisperServe
       AccountsManager accountsManager = new AccountsManager(accounts, directory, cacheCluster, deletedAccounts, keysScyllaDb, messagesManager, usernamesManager, profilesManager, pendingAccountsManager, clientPresenceManager);
 
       for (String user : users) {
+
         Optional<UUID> oUUID = deletedAccounts.findUuid(user);
 
-        if (oUUID.isPresent()) {
-          logger.warn("The user login " + user + " is present in the system, skipping.");
+        if (oUUID.isEmpty()) {
+          logger.warn("No such user login to restore: " + user + ", skipping.");
           continue;
         }
 
         Optional<Account> existingAccount = accountsManager.get(user);
 
-        if (!Util.isValidUserLogin(user)) {
-          logger.warn("Invalid user login " + user + ". This user was not added. Correct the user login and try again.");
-        }
-
-        else if (!existingAccount.isPresent()) {
+        if (!existingAccount.isPresent()) {
 
           VerificationCode verificationCode = generateVerificationCode();
           StoredVerificationCode storedVerificationCode = new StoredVerificationCode(verificationCode.getVerificationCode(),
@@ -232,24 +229,10 @@ public class CreatePendingAccountCommand extends EnvironmentCommand<WhisperServe
               null);
           pendingAccountsManager.store(user, storedVerificationCode);
 
-          logger.info("Added new user " + user + " to pending accounts with code " + storedVerificationCode.getCode());
+          logger.info("Restored the user " + user + " to pending accounts with code " + storedVerificationCode.getCode());
 
-        }
-
-        else if ((existingAccount.isPresent() && !existingAccount.get().isEnabled())) {
-
-          VerificationCode verificationCode = generateVerificationCode();
-          StoredVerificationCode storedVerificationCode = new StoredVerificationCode(verificationCode.getVerificationCode(),
-              System.currentTimeMillis(),
-              null);
-          pendingAccountsManager.store(user, storedVerificationCode);
-
-          logger.info("Added existing inactive user " + user + " to pending accounts with code " + storedVerificationCode.getCode());
-
-        }
-
-        else {
-          logger.warn("Operation failed: user " + user + " already exists and is active.");
+        } else {
+          logger.error("Operation failed: user " + user + " already exists.");
         }
       }
     } catch (Exception ex) {
@@ -266,5 +249,4 @@ public class CreatePendingAccountCommand extends EnvironmentCommand<WhisperServe
     int randomInt = 100000 + random.nextInt(900000);
     return new VerificationCode(randomInt);
   }
-
 }
