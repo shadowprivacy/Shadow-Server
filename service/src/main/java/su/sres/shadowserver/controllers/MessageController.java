@@ -631,7 +631,8 @@ public class MessageController {
       messageSender.sendMessage(destinationAccount, destinationDevice, messageBuilder.build(), online);
     } catch (NotPushRegisteredException e) {
       if (destinationDevice.isMaster()) {
-        throw new NoSuchUserException(e);
+        // this triggers mark unregistered on the client side
+        throw new NoSuchUserException(e);        
       } else {
         logger.debug("Not registered", e);
       }

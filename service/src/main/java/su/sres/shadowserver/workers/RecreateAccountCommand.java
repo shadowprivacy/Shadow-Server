@@ -224,16 +224,14 @@ public class RecreateAccountCommand extends EnvironmentCommand<WhisperServerConf
                 null);
             pendingAccountsManager.store(user, storedVerificationCode);
 
-            logger.info("Added existing inactive user " + user + " to pending accounts with code " + storedVerificationCode.getCode());
+            logger.info("Added existing inactive user " + user + " to pending accounts with code " + storedVerificationCode.getCode());            
 
           } else {
 
             logger.warn("No such user login to restore: " + user + ", skipping.");
-            continue;
+            
           }
-        }
-
-        if (!existingAccount.isPresent()) {
+        } else if (!existingAccount.isPresent()) {
 
           VerificationCode verificationCode = generateVerificationCode();
           StoredVerificationCode storedVerificationCode = new StoredVerificationCode(verificationCode.getVerificationCode(),

@@ -417,6 +417,27 @@ public class AccountsManager {
       releaseAccountRemovalLock();
     }
   }
+  
+  public void deleteFromDirectory(String userLogin) {
+    long directoryVersion = getDirectoryVersion();
+    long newDirectoryVersion = directoryVersion + 1L;
+    
+    setAccountRemovalLock();    
+    
+    if(directory.retrievePlainDirectory().containsKey(userLogin)) {
+      directory.buildHistoricDirectories(directoryVersion);
+      directory.setDirectoryVersion(newDirectoryVersion);
+      directory.redisRemoveFromPlainDirectory(userLogin);
+      directory.buildIncrementalUpdates(newDirectoryVersion);
+      
+      setDirectoryVersionInScylla(newDirectoryVersion);
+      
+      logger.info("Removed soft-deleted account from directory: " + userLogin);      
+    } 
+    
+    releaseAccountRemovalLock();
+    
+  }
 
   private String getAccountMapKey(String userLogin) {
     return "AccountMap::" + userLogin;
@@ -498,7 +519,7 @@ public class AccountsManager {
 
       try {
 
-        long tmp = accounts.restoreDirectoryVersion();         
+        long tmp = getDirectoryVersionFromScylla();         
 
         // restoring the recovered version to redis
         directory.setDirectoryVersion(tmp);
@@ -528,7 +549,7 @@ public class AccountsManager {
     int contactsProcessed = 0;
 
     try {
-      logger.info("Restoring plain directory from PostgreSQL...");
+      logger.info("Restoring plain directory from Scylla...");
                   
       final ScanRequest.Builder accountsScanRequestBuilder = ScanRequest.builder();
       
@@ -536,6 +557,7 @@ public class AccountsManager {
         contactsProcessed = accounts.size();
 
         for (Account account : accounts) {
+          if (!account.isEnabled()) continue;
           directory.redisUpdatePlainDirectory(batchOperation, account.getUserLogin(), mapper.writeValueAsString(new PlainDirectoryEntryValue(account.getUuid())));          
         }        
       
@@ -547,6 +569,14 @@ public class AccountsManager {
 
     logger.info(String.format("Local directory restoration complete (%d contacts processed).", contactsProcessed));
     releaseDirectoryRestoreLock();
+  }
+  
+  public long getDirectoryVersionFromScylla() {
+    return accounts.retrieveDirectoryVersion();
+  }
+  
+  public void setDirectoryVersionInScylla(long version) {
+    accounts.setDirectoryVersion(version);
   }
 
   public DirectoryManager getDirectoryManager() {

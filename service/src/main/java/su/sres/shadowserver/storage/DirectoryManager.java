@@ -84,6 +84,12 @@ public class DirectoryManager {
       }
     }
   }
+  
+  void redisRemoveFromPlainDirectory(String userLogin) {
+    try (Jedis jedis = redisPool.getWriteResource()) {
+        jedis.hdel(DIRECTORY_PLAIN, userLogin);      
+    }
+  }
 
   public void redisRemoveFromPlainDirectory(BatchOperationHandle handle, String userLogin) {
     handle.pipeline.hdel(DIRECTORY_PLAIN, userLogin);

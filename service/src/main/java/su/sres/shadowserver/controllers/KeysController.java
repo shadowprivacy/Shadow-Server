@@ -169,9 +169,10 @@ public class KeysController {
       }
     }
 
-    if (responseItems.isEmpty())
+    if (responseItems.isEmpty()) {
+      // this triggers mark unregistered on the client side
       return Response.status(404).build();
-    else
+    } else
       return Response.ok().entity(new PreKeyResponse(target.get().getIdentityKey(), responseItems)).build();
   }
 

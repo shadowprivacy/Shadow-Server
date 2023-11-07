@@ -42,7 +42,7 @@ public class DeletedAccounts extends AbstractScyllaDbStore {
         .build());
   }
   
-  Optional<UUID> findUuid(final String userLogin) {
+  public Optional<UUID> findUuid(final String userLogin) {
     final GetItemResponse response = db().getItem(GetItemRequest.builder()
         .tableName(tableName)
         .consistentRead(true)

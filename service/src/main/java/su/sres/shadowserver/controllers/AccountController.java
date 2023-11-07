@@ -396,11 +396,17 @@ public class AccountController {
     Account account = disabledPermittedAuth.getAccount();
     Device device = disabledPermittedAuth.getAuthenticatedDevice();
 
+    String userLogin = account.getUserLogin();
+    boolean noApnId = account.getMasterDevice().get().getApnId() == null;
+
     accounts.updateDevice(account, device.getId(), d -> {
       d.setGcmId(null);
       d.setFetchesMessages(false);
       d.setUserAgent("OWA");
     });
+
+    if (noApnId)
+      accounts.deleteFromDirectory(userLogin);
   }
 
   @Timed
@@ -427,6 +433,9 @@ public class AccountController {
     Account account = disabledPermittedAuth.getAccount();
     Device device = disabledPermittedAuth.getAuthenticatedDevice();
 
+    String userLogin = account.getUserLogin();
+    boolean noGcmId = account.getMasterDevice().get().getGcmId() == null;
+
     accounts.updateDevice(account, device.getId(), d -> {
       d.setApnId(null);
       d.setFetchesMessages(false);
@@ -436,6 +445,9 @@ public class AccountController {
         d.setUserAgent("OWP");
       }
     });
+
+    if (noGcmId)
+      accounts.deleteFromDirectory(userLogin);
   }
 
   @Timed

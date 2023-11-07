@@ -55,14 +55,14 @@ public class Accounts extends AbstractScyllaDbStore {
   static final String DIRECTORY_VERSION_PARAMETER_NAME = "directory_version";
 
   private final DynamoDbClient client;
-  
+
   // this table stores userLogin to UUID pairs
   private final String userLoginsTableName;
   private final String accountsTableName;
   private final String miscTableName;
-  
+
   private final int scanPageSize;
-  
+
   private static final Timer CREATE_TIMER = Metrics.timer(name(Accounts.class, "create"));
   private static final Timer UPDATE_TIMER = Metrics.timer(name(Accounts.class, "update"));
   private static final Timer GET_BY_USER_LOGIN_TIMER = Metrics.timer(name(Accounts.class, "getByUserLogin"));
@@ -70,17 +70,17 @@ public class Accounts extends AbstractScyllaDbStore {
   private static final Timer GET_ALL_FROM_START_TIMER = Metrics.timer(name(Accounts.class, "getAllFrom"));
   private static final Timer GET_ALL_FROM_OFFSET_TIMER = Metrics.timer(name(Accounts.class, "getAllFromOffset"));
   private static final Timer DELETE_TIMER = Metrics.timer(name(Accounts.class, "delete"));
-    
+
   public Accounts(DynamoDbClient client, String accountsTableName, String userLoginsTableName, String miscTableName, final int scanPageSize) {
     super(client);
 
     this.client = client;
     this.accountsTableName = accountsTableName;
     this.userLoginsTableName = userLoginsTableName;
-    this.miscTableName = miscTableName;    
+    this.miscTableName = miscTableName;
     this.scanPageSize = scanPageSize;
   }
-  
+
   public boolean create(Account account, long directoryVersion) {
 
     return CREATE_TIMER.record(() -> {
@@ -98,7 +98,9 @@ public class Accounts extends AbstractScyllaDbStore {
         try {
           client.putItem(accountPut);
         } catch (ConditionalCheckFailedException e) {
+
           throw new IllegalArgumentException("uuid present with different user login");
+
         }
 
         try {
@@ -106,11 +108,16 @@ public class Accounts extends AbstractScyllaDbStore {
         } catch (ConditionalCheckFailedException e) {
 
           // if the user login is found with an uuid that differs that means that the
-          // account is not new, and the new uuid is reset to the old one
+          // account is not new (rather it's soft-deleted), and the new uuid is reset to
+          // the old one. The fresh entry in the accounts table is removed in favour of
+          // the already existing one.
+          
+          DeleteItemRequest accountDelete = DeleteItemRequest.builder()
+              .tableName(accountsTableName)
+              .key(Map.of(KEY_ACCOUNT_UUID, AttributeValues.fromUUID(account.getUuid())))
+              .build();
 
-          // TODO: if directory holds more than just usernames in future we shall need to
-          // update the directory version as well.
-          // Meanwhile the account is updated without incrementing the directory version
+          client.deleteItem(accountDelete);          
 
           Optional<Account> exAcc = get(account.getUserLogin());
           UUID uuid = exAcc.get().getUuid();
@@ -120,11 +127,13 @@ public class Accounts extends AbstractScyllaDbStore {
           account.setVersion(version);
 
           update(account);
+          client.putItem(miscPut);
 
           return false;
 
         } catch (TransactionConflictException e) {
-       // this should only happen if two clients manage to make concurrent create() calls
+          // this should only happen if two clients manage to make concurrent create()
+          // calls
           throw new ContestedOptimisticLockException();
         }
 
@@ -176,7 +185,7 @@ public class Accounts extends AbstractScyllaDbStore {
         .build();
   }
 
-  // TODO: VD change  
+  // TODO: VD change
   public void update(Account account) throws ContestedOptimisticLockException {
     UPDATE_TIMER.record(() -> {
       UpdateItemRequest updateItemRequest;
@@ -216,7 +225,7 @@ public class Accounts extends AbstractScyllaDbStore {
       }
     });
   }
-  
+
   public Optional<Account> get(String userLogin) {
 
     return GET_BY_USER_LOGIN_TIMER.record(() -> {
@@ -241,12 +250,12 @@ public class Accounts extends AbstractScyllaDbStore {
         .build());
     return r.item().isEmpty() ? null : r.item();
   }
-  
+
   public Optional<Account> get(UUID uuid) {
     return GET_BY_UUID_TIMER.record(() -> Optional.ofNullable(accountByUuid(AttributeValues.fromUUID(uuid)))
         .map(Accounts::fromItem));
   }
- 
+
   public AccountCrawlChunk getAllFrom(final UUID from, final int maxCount) {
     final ScanRequest.Builder scanRequestBuilder = ScanRequest.builder()
         .limit(scanPageSize)
@@ -273,7 +282,7 @@ public class Accounts extends AbstractScyllaDbStore {
 
     return new AccountCrawlChunk(accounts, accounts.size() > 0 ? accounts.get(accounts.size() - 1).getUuid() : null);
   }
-  
+
   public void delete(UUID uuid, long directoryVersion) {
     DELETE_TIMER.record(() -> {
       Optional<Account> maybeAccount = get(uuid);
@@ -292,13 +301,13 @@ public class Accounts extends AbstractScyllaDbStore {
 
         client.deleteItem(userLoginDelete);
         client.deleteItem(accountDelete);
-        
-          PutItemRequest miscPut = buildPutWriteItemForMisc(directoryVersion);
-          client.putItem(miscPut);
-        
+
+        PutItemRequest miscPut = buildPutWriteItemForMisc(directoryVersion);
+        client.putItem(miscPut);
+
       });
     });
-  }  
+  }
 
   // TODO: extract VD
   @VisibleForTesting
@@ -322,8 +331,9 @@ public class Accounts extends AbstractScyllaDbStore {
       throw new RuntimeException("Could not read stored account data", e);
     }
   }
-  
-  // for simplicity, this one gets all accounts in one pass for directories of practical size
+
+  // for simplicity, this one gets all accounts in one pass for directories of
+  // practical size
   protected List<Account> getAll(final ScanRequest.Builder scanRequestBuilder) {
 
     scanRequestBuilder.tableName(accountsTableName);
@@ -331,17 +341,23 @@ public class Accounts extends AbstractScyllaDbStore {
     return scan(scanRequestBuilder.build())
         .stream()
         .map(Accounts::fromItem)
-        .collect(Collectors.toList());    
+        .collect(Collectors.toList());
   }
-  
-  public Long restoreDirectoryVersion() {    
 
-      final GetItemResponse response = client.getItem(GetItemRequest.builder()
-          .tableName(miscTableName)
-          .key(Map.of(KEY_PARAMETER_NAME, AttributeValues.fromString(DIRECTORY_VERSION_PARAMETER_NAME)))
-          .build());
+  protected Long retrieveDirectoryVersion() {
 
-      return AttributeValues.getLong(response.item(), KEY_PARAMETER_NAME, 0);
-    
+    final GetItemResponse response = client.getItem(GetItemRequest.builder()
+        .tableName(miscTableName)
+        .key(Map.of(KEY_PARAMETER_NAME, AttributeValues.fromString(DIRECTORY_VERSION_PARAMETER_NAME)))
+        .build());
+
+    return Long.parseLong(AttributeValues.getString(response.item(), ATTR_PARAMETER_VALUE, "0"));
+
+  }
+
+  protected void setDirectoryVersion(long version) {
+
+    PutItemRequest miscPut = buildPutWriteItemForMisc(version);
+    client.putItem(miscPut);
   }
 }
