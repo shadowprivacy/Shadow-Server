@@ -214,7 +214,7 @@ public class CreatePendingAccountCommand extends EnvironmentCommand<WhisperServe
         Optional<UUID> oUUID = deletedAccounts.findUuid(user);
 
         if (oUUID.isPresent()) {
-          logger.warn("The user login " + user + " is present in the system, skipping.");
+          logger.warn("The user login " + user + " is present in the system as previously deleted, skipping.");
           continue;
         }
 
@@ -233,19 +233,10 @@ public class CreatePendingAccountCommand extends EnvironmentCommand<WhisperServe
           pendingAccountsManager.store(user, storedVerificationCode);
 
           logger.info("Added new user " + user + " to pending accounts with code " + storedVerificationCode.getCode());
-
         }
 
         else if ((existingAccount.isPresent() && !existingAccount.get().isEnabled())) {
-
-          VerificationCode verificationCode = generateVerificationCode();
-          StoredVerificationCode storedVerificationCode = new StoredVerificationCode(verificationCode.getVerificationCode(),
-              System.currentTimeMillis(),
-              null);
-          pendingAccountsManager.store(user, storedVerificationCode);
-
-          logger.info("Added existing inactive user " + user + " to pending accounts with code " + storedVerificationCode.getCode());
-
+          logger.warn("Operation failed: user " + user + " already exists and is inactive (soft-deleted).");
         }
 
         else {
