@@ -37,7 +37,7 @@
     <commons-io.version>2.9.0</commons-io.version>
     <dropwizard.version>2.0.22</dropwizard.version>
     <dropwizard-metrics-datadog.version>1.1.13</dropwizard-metrics-datadog.version>
-    <guava.version>30.1.1-jre</guava.version>
+    <guava.version>32.0.0-jre</guava.version>
     <jaxb.version>2.3.1</jaxb.version>
     <jedis.version>2.9.0</jedis.version>
     <lettuce.version>6.0.4.RELEASE</lettuce.version>
