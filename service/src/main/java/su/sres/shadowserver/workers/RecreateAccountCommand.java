@@ -212,14 +212,28 @@ public class RecreateAccountCommand extends EnvironmentCommand<WhisperServerConf
 
       for (String user : users) {
 
+        Optional<Account> existingAccount = accountsManager.get(user);
+
         Optional<UUID> oUUID = deletedAccounts.findUuid(user);
 
         if (oUUID.isEmpty()) {
-          logger.warn("No such user login to restore: " + user + ", skipping.");
-          continue;
-        }
 
-        Optional<Account> existingAccount = accountsManager.get(user);
+          if ((existingAccount.isPresent() && !existingAccount.get().isEnabled())) {
+
+            VerificationCode verificationCode = generateVerificationCode();
+            StoredVerificationCode storedVerificationCode = new StoredVerificationCode(verificationCode.getVerificationCode(),
+                System.currentTimeMillis(),
+                null);
+            pendingAccountsManager.store(user, storedVerificationCode);
+
+            logger.info("Added existing inactive user " + user + " to pending accounts with code " + storedVerificationCode.getCode());
+
+          } else {
+
+            logger.warn("No such user login to restore: " + user + ", skipping.");
+            continue;
+          }
+        }
 
         if (!existingAccount.isPresent()) {
 
