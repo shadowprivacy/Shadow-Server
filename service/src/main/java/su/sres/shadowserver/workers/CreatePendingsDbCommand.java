@@ -45,7 +45,7 @@ public class CreatePendingsDbCommand extends EnvironmentCommand<WhisperServerCon
           throws Exception {
 
       }
-    }, "creatependingsdb", "Creates the Alternator pendingaccountsdb and pendingdevicesdb tables");
+    }, "creatependingsdb", "Creates the Alternator pendingaccounts and pendingdevices tables");
   }
 
   @Override
@@ -84,7 +84,7 @@ public class CreatePendingsDbCommand extends EnvironmentCommand<WhisperServerCon
         .billingMode("PAY_PER_REQUEST")
         .build();
 
-    logger.info("Creating the pendingaccountsdb table...");
+    logger.info("Creating the pendingaccounts table...");
 
     DynamoDbWaiter waiter = scyllaClient.waiter();
 
@@ -96,7 +96,7 @@ public class CreatePendingsDbCommand extends EnvironmentCommand<WhisperServerCon
       logger.info("Done");
     }
 
-    logger.info("Creating the pendingdevicesdb table...");
+    logger.info("Creating the pendingdevices table...");
     
     scyllaClient.createTable(devRequest);
 

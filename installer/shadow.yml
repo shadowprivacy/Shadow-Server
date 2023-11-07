@@ -89,9 +89,9 @@ scylla:                       # ScyllaDB access configuration
   keysTableName: keysdb
   pushChallengeTableName: pushchallengedb
   reportMessageTableName: reportmessagedb
-  pendingAccountsTableName: pendingaccountsdb
-  pendingDevicesTableName: pendingdevicesdb
-  deletedAccountsTableName: deletedaccountsdb
+  pendingAccountsTableName: pendingaccounts
+  pendingDevicesTableName: pendingdevices
+  deletedAccountsTableName: deletedaccounts
   groupsTableName: groupsdb
   groupLogsTableName: grouplogsdb  
 

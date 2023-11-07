@@ -39,7 +39,7 @@ public class CreateDeletedAccountsDbCommand extends EnvironmentCommand<WhisperSe
           throws Exception {
 
       }
-    }, "createdeletedaccountsdb", "Creates the Alternator deletedaccountsdb table");
+    }, "createdeletedaccountsdb", "Creates the Alternator deletedaccounts table");
   }
 
   @Override
@@ -68,7 +68,7 @@ public class CreateDeletedAccountsDbCommand extends EnvironmentCommand<WhisperSe
         .billingMode("PAY_PER_REQUEST")
         .build();
 
-    logger.info("Creating the deletedaccountsdb table...");
+    logger.info("Creating the deletedaccounts table...");
 
     DynamoDbWaiter waiter = deletedAccountsScyllaDbClient.waiter();
 
