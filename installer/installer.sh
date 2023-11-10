@@ -257,13 +257,16 @@ cp shadow.yml ${SERVER_PATH}/config/
 
 # Request the server domain name
 
-echo "Enter the domain name of your server as accessible by your Shadow clients (e.g. shadow.example.com) >>"
+echo "Enter the domain name of your Shadow server as accessible by your Shadow clients (e.g. shadow.example.com) >>"
 read SERVER_DOMAIN
+echo "Enter the domain name of your private cloud (Minio) server as accessible by your Shadow clients (e.g. minio.example.com) >>"
+read MINIO_DOMAIN
+echo "Enter the domain name of your SFU frontend server as accessible by your Shadow clients (e.g. sfu.example.com) >>"
+read SFU_DOMAIN
 
 # ----- CREDENTIALS -------
 
-./gencreds.sh $SERVER_DOMAIN
-
+./gencreds.sh $SERVER_DOMAIN $MINIO_DOMAIN $SFU_DOMAIN
 
 # ----- MINIO -------
 

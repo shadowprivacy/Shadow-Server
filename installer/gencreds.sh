@@ -3,6 +3,8 @@
 . ./lib.sh
 
 SERVER_DOMAIN=$1
+MINIO_DOMAIN=$2
+SFU_DOMAIN=$3
 
 cd ${SERVER_PATH}
 
@@ -38,6 +40,11 @@ openssl genrsa -out shadow_a.key 4096
 echo "Generating the Minio server private key..."
 openssl genrsa -out cloud_a.key 4096
 
+# Create the SFU frontend private key
+
+echo "Generating the SFU frontend private key..."
+openssl genrsa -out sfu_a.key 4096
+
 # Create the CSR for Shadow
 
 echo "Creating the CSR for the Shadow server..."
@@ -46,7 +53,13 @@ openssl req -new -key shadow_a.key -out shadow_a.csr -subj "/C=$COUNTRY_NAME/ST=
 # Create the CSR for Minio
 
 echo "Creating the CSR for the Minio server..."
-openssl req -new -key cloud_a.key -out cloud_a.csr -subj "/C=$COUNTRY_NAME/ST=$PROVINCE_NAME/L=$LOCALITY_NAME/O=$ORGANIZATION_NAME/OU=$ORGANIZATIONAL_UNIT/CN=$SERVER_DOMAIN"
+openssl req -new -key cloud_a.key -out cloud_a.csr -subj "/C=$COUNTRY_NAME/ST=$PROVINCE_NAME/L=$LOCALITY_NAME/O=$ORGANIZATION_NAME/OU=$ORGANIZATIONAL_UNIT/CN=$MINIO_DOMAIN"
+
+# Create the CSR for SFU frontend
+
+echo "Creating the CSR for the SFU frontend server..."
+openssl req -new -key sfu_a.key -out sfu_a.csr -subj "/C=$COUNTRY_NAME/ST=$PROVINCE_NAME/L=$LOCALITY_NAME/O=$ORGANIZATION_NAME/OU=$ORGANIZATIONAL_UNIT/CN=$SFU_DOMAIN"
+
 
 # Sign the Shadow certificate with the root CA
 
@@ -74,8 +87,23 @@ subjectKeyIdentifier=hash
 authorityKeyIdentifier=keyid,issuer
 subjectAltName=@alt_names
 [ alt_names ]
-DNS.1 = $SERVER_DOMAIN
+DNS.1 = $MINIO_DOMAIN
 DNS.2 = localhost
+EOF
+)
+
+# Sign the SFU frontend certificate with the root CA
+
+echo "Enter the SFU frontend server certificate validity period in days (e.g. 365 for one year) >>"
+read SFU_CERT_VALIDITY_PERIOD
+openssl x509 -req -in sfu_a.csr -CA rootCA.crt -CAkey rootCA.key -CAcreateserial -days "$SFU_CERT_VALIDITY_PERIOD" -out sfu_a.crt -extensions extensions -extfile <(cat <<-EOF
+[ extensions ]
+basicConstraints=CA:FALSE
+subjectKeyIdentifier=hash
+authorityKeyIdentifier=keyid,issuer
+subjectAltName=@alt_names
+[ alt_names ]
+DNS.1 = $SFU_DOMAIN
 EOF
 )
 
@@ -115,6 +143,11 @@ sed -i "s/keyStorePassword\: your_aux_keystore_password/keyStorePassword\: '${AU
 echo "Writing the Minio server certificate to the auxiliary keystore..."
 keytool -importcert -file cloud_a.crt -alias cloud_a -keystore ${SERVER_PATH}/auxiliary.keystore -storepass "$AUX_STORE_PASS" -noprompt
 
+# Write the SFU frontend key and certificate to auxiliary.keystore
+
+echo "Writing the SFU frontend server certificate to the auxiliary keystore..."
+keytool -importcert -file sfu_a.crt -alias sfu_a -keystore ${SERVER_PATH}/auxiliary.keystore -storepass "$AUX_STORE_PASS" -noprompt
+
 # Add the root CA as trusted
 
 echo "Adding the root CA as trusted in this system..."
@@ -143,4 +176,4 @@ sed -i "s/trustStorePassword\: changeit/trustStorePassword\: '${CACERTS_PASS_CON
 
 echo "Cleanup..."
 
-rm -f cloud_a.csr shadow_a.csr
+rm -f cloud_a.csr shadow_a.csr sfu_a.csr
