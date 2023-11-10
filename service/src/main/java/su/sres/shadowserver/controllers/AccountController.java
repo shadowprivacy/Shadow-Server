@@ -50,7 +50,6 @@ import io.micrometer.core.instrument.Tag;
 import su.sres.shadowserver.auth.AuthenticatedAccount;
 import su.sres.shadowserver.auth.BasicAuthorizationHeader;
 import su.sres.shadowserver.auth.DisabledPermittedAuthenticatedAccount;
-import su.sres.shadowserver.auth.InvalidAuthorizationHeaderException;
 import su.sres.shadowserver.auth.StoredVerificationCode;
 import su.sres.shadowserver.auth.TurnToken;
 import su.sres.shadowserver.auth.TurnTokenGenerator;
