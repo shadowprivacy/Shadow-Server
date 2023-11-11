@@ -270,11 +270,10 @@ read SFU_DOMAIN
 
 # ----- MINIO -------
 
-
 read -p "Do you want to install Minio now [y/n]? If you don't, you will have to do that manually on this or another machine >> " -n 1 -r
 if [[ $REPLY =~ ^[Yy]$ ]]
 then
-    ./install_minio.sh $SERVER_DOMAIN
+    ./install_minio.sh $MINIO_DOMAIN
 fi
 
 # ----- COTURN -------
@@ -283,6 +282,14 @@ read -p "Do you want to install Coturn now [y/n]? If you don't, you will have to
 if [[ $REPLY =~ ^[Yy]$ ]]
 then
     ./install_coturn.sh $SERVER_DOMAIN
+fi
+
+# ----- SFU -------
+
+read -p "Do you want to install SFU (conferencing server) now [y/n]? If you don't, you will have to do that manually on this or another machine >> " -n 1 -r
+if [[ $REPLY =~ ^[Yy]$ ]]
+then
+    ./install_sfu.sh $SFU_DOMAIN
 fi
 
 # ----- SHADOW SERVER ------
