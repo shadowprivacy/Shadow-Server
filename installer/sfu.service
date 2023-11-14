@@ -1,0 +1,31 @@
+[Unit]
+Description=Signal-Calling-Service
+Documentation=https://github.com/signalapp/Signal-Calling-Service
+Wants=network-online.target
+After=network-online.target
+AssertFileIsExecutable=/home/shadow/sfu/target/release/calling_server
+
+[Service]
+WorkingDirectory=/home/shadow/sfu/target/release
+
+User=shadow
+Group=shadow
+
+EnvironmentFile=/etc/sfu.conf
+ExecStart=/usr/local/bin/tmux new -d -s sfu bash -c './calling_server ${ARG1} ${ARG2} ${ARG3} ${ARG4} ${ARG5} ${ARG6} ${ARG7}'
+
+# Let systemd restart this service always
+# Restart=always
+
+# Specifies the maximum file descriptor number that can be opened by this process
+LimitNOFILE=65536
+
+# Disable timeout logic and wait until process is stopped
+TimeoutStopSec=infinity
+SendSIGKILL=no
+
+Type=forking
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -24,7 +24,7 @@ function download_sticker_pack
 
 # -------- MAIN ------------
 
-SERVER_DOMAIN=$1
+MINIO_DOMAIN=$1
 
 mkdir ${MINIO_PATH}
 cp shadow.json ${MINIO_PATH}
@@ -157,6 +157,6 @@ chown -R ${USER_SH} ${DATA_PATH}/service/
 
 if test -f ${SERVER_PATH}/config/shadow.yml
     then      
-       sed -i "s|cloudUri\: https\://shadow.example.com|cloudUri\: https\://${SERVER_DOMAIN}|" ${SERVER_PATH}/config/shadow.yml
+       sed -i "s|cloudUri\: https\://shadow.example.com|cloudUri\: https\://${MINIO_DOMAIN}|" ${SERVER_PATH}/config/shadow.yml
     fi
     

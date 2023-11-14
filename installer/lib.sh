@@ -8,6 +8,7 @@ USER_PATH="/home/${USER_SH}"
 SERVER_PATH="${USER_PATH}/shadowserver"
 DATA_PATH="${USER_PATH}/data"
 MINIO_PATH="${USER_PATH}/minio"
+SFU_PATH="${USER_PATH}/sfu"
 
 function normalize_bash
 {        

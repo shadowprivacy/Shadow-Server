@@ -44,6 +44,7 @@ cp shadow.service /etc/systemd/system/
 chmod +x gencreds.sh
 chmod +x install_minio.sh
 chmod +x install_coturn.sh
+chmod +x install_sfu.sh
 
 if [ $(check_app wget) -ne 0 ] 
 then 
@@ -240,6 +241,8 @@ then
    cqlsh -u cassandra -p cassandra -f scyllatext       
 fi
 
+printf "\nProcessing, please wait..."
+
 # Cleanup
 
 systemctl restart scylla-server
@@ -257,11 +260,11 @@ cp shadow.yml ${SERVER_PATH}/config/
 
 # Request the server domain name
 
-echo "Enter the domain name of your Shadow server as accessible by your Shadow clients (e.g. shadow.example.com) >>"
+printf "\nEnter the domain name of your Shadow server as accessible by your Shadow clients (e.g. shadow.example.com) >> "
 read SERVER_DOMAIN
-echo "Enter the domain name of your private cloud (Minio) server as accessible by your Shadow clients (e.g. minio.example.com) >>"
+echo "Enter the domain name of your private cloud (Minio) server as accessible by your Shadow clients (e.g. minio.example.com) >> "
 read MINIO_DOMAIN
-echo "Enter the domain name of your SFU frontend server as accessible by your Shadow clients (e.g. sfu.example.com) >>"
+echo "Enter the domain name of your SFU frontend server as accessible by your Shadow clients (e.g. sfu.example.com) >> "
 read SFU_DOMAIN
 
 # ----- CREDENTIALS -------
@@ -278,6 +281,7 @@ fi
 
 # ----- COTURN -------
 
+printf "\n"
 read -p "Do you want to install Coturn now [y/n]? If you don't, you will have to do that manually on this or another machine, or use an external (perhaps public) service >> " -n 1 -r
 if [[ $REPLY =~ ^[Yy]$ ]]
 then
@@ -286,6 +290,7 @@ fi
 
 # ----- SFU -------
 
+printf "\n"
 read -p "Do you want to install SFU (conferencing server) now [y/n]? If you don't, you will have to do that manually on this or another machine >> " -n 1 -r
 if [[ $REPLY =~ ^[Yy]$ ]]
 then
@@ -355,7 +360,7 @@ chown -R ${USER_SH} ${SERVER_PATH}
 
 # Shadow service
 
-echo "Opening port 8080..."
+printf "\nOpening port 8080..."
 
 firewall-cmd --zone=public --permanent --add-port=8080/tcp
 firewall-cmd --reload
