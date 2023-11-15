@@ -3,6 +3,7 @@
 . ./lib.sh
 
 SFU_DOMAIN=$1
+ROTATION_ALIAS=$2
 
 sed -i "s|/home/shadow/sfu|${SFU_PATH}|" sfu.service
 sed -i "s/=shadow/=${USER_SH}/" sfu.service
@@ -36,8 +37,8 @@ fi
 setsebool -P httpd_can_network_connect 1
 
 mkdir /etc/nginx/ssl
-mv ${SERVER_PATH}/sfu_a.crt /etc/nginx/ssl
-mv ${SERVER_PATH}/sfu_a.key /etc/nginx/ssl
+mv ${SERVER_PATH}/${ROTATION_ALIAS}.crt /etc/nginx/ssl/sfu.crt
+mv ${SERVER_PATH}/${ROTATION_ALIAS}.key /etc/nginx/ssl/sfu.key
 restorecon -r /etc/nginx/ssl/  
 
 systemctl enable nginx.service

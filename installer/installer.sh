@@ -294,7 +294,8 @@ printf "\n"
 read -p "Do you want to install SFU (conferencing server) now [y/n]? If you don't, you will have to do that manually on this or another machine >> " -n 1 -r
 if [[ $REPLY =~ ^[Yy]$ ]]
 then
-    ./install_sfu.sh $SFU_DOMAIN
+    SFU_ROTATION_ALIAS="sfu_a"
+    ./install_sfu.sh $SFU_DOMAIN $SFU_ROTATION_ALIAS
 fi
 
 # ----- SHADOW SERVER ------
