@@ -7,8 +7,8 @@ package su.sres.shadowserver.controllers;
 
 import com.google.common.collect.ImmutableSet;
 import org.glassfish.jersey.test.grizzly.GrizzlyWebTestContainerFactory;
-import org.junit.After;
-import org.junit.Before;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
@@ -38,7 +38,6 @@ import su.sres.shadowserver.entities.AttachmentDescriptorV2;
 import su.sres.shadowserver.entities.AttachmentUri;
 import su.sres.shadowserver.limits.RateLimiter;
 import su.sres.shadowserver.limits.RateLimiters;
-import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.util.AuthHelper;
 import su.sres.shadowserver.util.SystemMapper;
 
@@ -57,25 +56,11 @@ class AttachmentControllerTest {
   private static RateLimiters rateLimiters = mock(RateLimiters.class);
   private static RateLimiter rateLimiter = mock(RateLimiter.class);
 
-  final S3Mock api = S3Mock.create(9000);
+  final static S3Mock api = S3Mock.create(9000);
 
   static {
     when(rateLimiters.getAttachmentLimiter()).thenReturn(rateLimiter);
-  }
-
-  @Before
-  public void init() throws MinioException, InvalidKeyException, NoSuchAlgorithmException, IllegalArgumentException, IOException {
-
-    api.start();
-
-    MinioClient client = MinioClient.builder().credentials(KEY, SECRET).endpoint(ENDPOINT).build();
-    client.makeBucket(MakeBucketArgs.builder().bucket(BUCKET).build());
-  }
-
-  @After
-  public void stop() {
-    api.stop();
-  }
+  }  
  
   public static final ResourceExtension resources = ResourceExtension.builder()
       .addProvider(AuthHelper.getAuthFilter())
@@ -85,6 +70,20 @@ class AttachmentControllerTest {
       .addResource(new AttachmentControllerV1(rateLimiters, KEY, SECRET, BUCKET, ENDPOINT))
       .addResource(new AttachmentControllerV2(rateLimiters, KEY, SECRET, "us-east-1", "attachmentv2-bucket"))
       .build();
+  
+  @BeforeAll
+  public static void init() throws MinioException, InvalidKeyException, NoSuchAlgorithmException, IllegalArgumentException, IOException {
+
+    api.start();
+
+    MinioClient client = MinioClient.builder().credentials(KEY, SECRET).endpoint(ENDPOINT).build();
+    client.makeBucket(MakeBucketArgs.builder().bucket(BUCKET).build());
+  }
+
+  @AfterAll
+  public static void stop() {
+    api.stop();
+  }
 
   @Test
   void testV2Form() throws IOException {

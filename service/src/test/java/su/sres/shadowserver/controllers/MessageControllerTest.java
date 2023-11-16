@@ -249,7 +249,7 @@ class MessageControllerTest {
   }
 
   @ParameterizedTest
-  @CsvSource({ "true, 5.1.0, 429", "true, 5.6.4, 428", "false, 5.6.4, 200" })
+  @CsvSource({ "true, true, 429", "true, false, 428", "false, false, 200" })
   void testUnsealedSenderCardinalityRateLimited(final boolean rateLimited, final boolean legacyClient, final int expectedStatusCode) throws Exception {
     final DynamicConfiguration dynamicConfiguration = mock(DynamicConfiguration.class);
     final DynamicMessageRateConfiguration messageRateConfiguration = mock(DynamicMessageRateConfiguration.class);
