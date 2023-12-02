@@ -73,6 +73,10 @@ public class ServiceConfiguration {
   @JsonProperty
   @NotEmpty
   private boolean updatesAllowed;
+  
+  @NotNull
+  @JsonProperty
+  private boolean paymentsEnabled;
 
   public String getCloudUri() {
     return cloudUri;
@@ -128,5 +132,9 @@ public class ServiceConfiguration {
 
   public boolean isUpdatesAllowed() {
     return updatesAllowed;
+  }
+  
+  public boolean isPaymentsEnabled() {
+    return paymentsEnabled;
   }
 }

@@ -73,6 +73,7 @@ import su.sres.shadowserver.badges.ProfileBadgeConverter;
 import su.sres.shadowserver.configuration.LocalParametersConfiguration;
 import su.sres.shadowserver.configuration.MinioConfiguration;
 import su.sres.shadowserver.configuration.ScyllaDbConfiguration;
+import su.sres.shadowserver.configuration.ServiceConfiguration;
 import su.sres.shadowserver.configuration.dynamic.DynamicConfiguration;
 import su.sres.shadowserver.controllers.*;
 import su.sres.shadowserver.currency.CoinMarketCapClient;
@@ -340,6 +341,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     FaultTolerantDatabase abuseDatabase = new FaultTolerantDatabase("abuse_database", abuseJdbi, config.getAbuseDatabaseConfiguration().getCircuitBreakerConfiguration());
 
     LocalParametersConfiguration localParams = config.getLocalParametersConfiguration();
+    ServiceConfiguration serviceConfig = config.getServiceConfiguration();
     ScyllaDbConfiguration scyllaConfig = config.getScyllaDbConfiguration();   
 
     DynamoDbClient scyllaDbClient = ScyllaDbFromConfig.client(scyllaConfig);    
@@ -504,7 +506,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     environment.lifecycle().manage(messagesCache);
     environment.lifecycle().manage(messagePersister);
     environment.lifecycle().manage(clientPresenceManager);
-    environment.lifecycle().manage(currencyManager);
+    if (serviceConfig.isPaymentsEnabled()) environment.lifecycle().manage(currencyManager);
     environment.lifecycle().manage(torExitNodeManager);
     environment.lifecycle().manage(asnManager);
 
@@ -563,7 +565,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     // supported yet on websocket
     environment.jersey().register(new AccountController(pendingAccountsManager, accountsManager, usernamesManager, abusiveHostRules, rateLimiters, turnTokenGenerator, config.getTestDevices(), transitionalRecaptchaClient, gcmSender
     // , apnSender
-        , localParams, config.getServiceConfiguration()));
+        , localParams, serviceConfig));
     environment.jersey().register(new KeysController(rateLimiters, keysScyllaDb, accountsManager, preKeyRateLimiter, rateLimitChallengeManager));
 
     final List<Object> commonControllers = List.of(
@@ -573,8 +575,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
         new ChallengeController(rateLimitChallengeManager),
         new DeviceController(pendingDevicesManager, accountsManager, messagesManager, keysScyllaDb, rateLimiters, config.getMaxDevices(), localParams.getVerificationCodeLifetime()),
         new PlainDirectoryController(rateLimiters, accountsManager),
-        new MessageController(rateLimiters, messageSender, receiptSender, accountsManager, messagesManager, unsealedSenderRateLimiter, null, dynamicConfig, rateLimitChallengeManager, reportMessageManager, metricsCluster, declinedMessageReceiptExecutor, multiRecipientMessageExecutor),
-        new PaymentsController(currencyManager, paymentsCredentialsGenerator),
+        new MessageController(rateLimiters, messageSender, receiptSender, accountsManager, messagesManager, unsealedSenderRateLimiter, null, dynamicConfig, rateLimitChallengeManager, reportMessageManager, metricsCluster, declinedMessageReceiptExecutor, multiRecipientMessageExecutor),        
         new ProfileController(clock, rateLimiters, accountsManager, profilesManager, usernamesManager, profileBadgeConverter, config.getBadges(), minioClient, profileCdnPolicyGenerator, profileCdnPolicySigner, minioConfig.getProfileBucket(), zkProfileOperations),
         new ProvisioningController(rateLimiters, provisioningManager),
         // new RemoteConfigController(remoteConfigsManager,
@@ -583,6 +584,9 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
         new SecureStorageController(storageCredentialsGenerator),
         new StickerController(rateLimiters, minioConfig.getAccessKey(), minioConfig.getAccessSecret(), minioConfig.getRegion(), minioConfig.getProfileBucket()),
         new DebugLogController(rateLimiters, minioConfig.getAccessKey(), minioConfig.getAccessSecret(), minioConfig.getRegion(), minioConfig.getDebuglogBucket()));
+    
+    if (serviceConfig.isPaymentsEnabled()) commonControllers.add(new PaymentsController(currencyManager, paymentsCredentialsGenerator));
+    
     for (Object controller : commonControllers) {
       environment.jersey().register(controller);
       webSocketEnvironment.jersey().register(controller);

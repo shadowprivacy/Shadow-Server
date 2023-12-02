@@ -164,11 +164,11 @@ remoteConfig:
   globalConfig: # keys and values that are given to clients on GET /v1/config
     {} # leave this empty          
 
-paymentsService:
+paymentsService:  
   userAuthenticationTokenSharedSecret: 6730674e1bd4f3a9cfdb2645159230b1 # fake/unused, hex-encoded 32-byte shared secret
-  fixerApiKey: 6730674e1bd4f3a9cfdb2645159230b1                         # insert your API key here
-  fixerPaid: false                                                      # whether your Fixer account is paid or free
-  coinMarketCapApiKey: 6730674e1bd4f3a9cfdb2645159230b2                 # insert your API key here
+  fixerApiKey: 6730674e1bd4f3a9cfdb2645159230b1                         # if using payments, insert your API key here, otherwise leave this fake value
+  fixerPaid: false                                                      # whether your Fixer account is paid or free, leave as is if not using payments
+  coinMarketCapApiKey: 6730674e1bd4f3a9cfdb2645159230b2                 # if using payments, insert your API key here, otherwise leave this fake value
   coinMarketCapCurrencyIds:
     MOB: 7878
   paymentCurrencies:                                                    # list of supported cryptocurrencies, only Mobilecoin supported for now 
@@ -220,4 +220,5 @@ serviceConfiguration:         # client-server parameters
  # maxAudioSize: 100                                                    # (optional) audio attachment size limit (MB)  
  # maxVideoSize: 100                                                    # (optional) video attachment size limit (MB)
  # maxDocSize: 100                                                      # (optional) document attachment size limit (MB)
- updatesAllowed: true                                                   # whether clients are allowed to update 
+ updatesAllowed: true                                                   # whether clients are allowed to update
+ paymentsEnabled: true                                                          # whether payments are enabled or not 

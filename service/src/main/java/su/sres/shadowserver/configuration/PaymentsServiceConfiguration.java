@@ -17,7 +17,7 @@ import javax.validation.constraints.NotEmpty;
 import javax.validation.constraints.NotNull;
 
 public class PaymentsServiceConfiguration {
-
+  
   @NotEmpty
   @JsonProperty
   private String userAuthenticationTokenSharedSecret;
@@ -40,7 +40,7 @@ public class PaymentsServiceConfiguration {
 
   @NotEmpty
   @JsonProperty
-  private List<String> paymentCurrencies;
+  private List<String> paymentCurrencies;  
 
   public byte[] getUserAuthenticationTokenSharedSecret() throws DecoderException {
     return Hex.decodeHex(userAuthenticationTokenSharedSecret.toCharArray());
