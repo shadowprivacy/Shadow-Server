@@ -166,10 +166,13 @@ remoteConfig:
 
 paymentsService:
   userAuthenticationTokenSharedSecret: 6730674e1bd4f3a9cfdb2645159230b1 # fake/unused, hex-encoded 32-byte shared secret
-  fixerApiKey: 6730674e1bd4f3a9cfdb2645159230b1                         # fake/unused
-  paymentCurrencies:                                                    # unused for now 
-    - USD
-    - RUB
+  fixerApiKey: 6730674e1bd4f3a9cfdb2645159230b1                         # insert your API key here
+  fixerPaid: false                                                      # whether your Fixer account is paid or free
+  coinMarketCapApiKey: 6730674e1bd4f3a9cfdb2645159230b2                 # insert your API key here
+  coinMarketCapCurrencyIds:
+    MOB: 7878
+  paymentCurrencies:                                                    # list of supported cryptocurrencies, only Mobilecoin supported for now 
+    - MOB    
 
 storageService:
   userAuthenticationTokenSharedSecret: 6730674e1bd4f3a9cfdb2645159230b1 # fake/unused

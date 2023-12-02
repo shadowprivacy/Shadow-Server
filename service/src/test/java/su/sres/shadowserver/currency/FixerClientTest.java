@@ -28,7 +28,7 @@ public class FixerClientTest {
     HttpClient httpClient = mock(HttpClient.class);
     when(httpClient.send(any(HttpRequest.class), any(BodyHandler.class))).thenReturn(httpResponse);
 
-    FixerClient fixerClient = new FixerClient(httpClient, "foo");
+    FixerClient fixerClient = new FixerClient(httpClient, "foo", false);
     Map<String, BigDecimal> conversions = fixerClient.getConversionsForBase("EUR");
     assertThat(conversions.get("CAD")).isEqualTo(new BigDecimal("1.560132"));
   }

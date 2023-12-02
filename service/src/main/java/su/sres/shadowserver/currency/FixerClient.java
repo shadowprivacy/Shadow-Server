@@ -15,15 +15,21 @@ public class FixerClient {
 
   private final String apiKey;
   private final HttpClient client;
+  private boolean paid;
 
-  public FixerClient(HttpClient client, String apiKey) {
+  public FixerClient(HttpClient client, String apiKey, boolean paid) {
     this.apiKey = apiKey;
     this.client = client;
+    this.paid = paid;
   }
 
+  //&base is unavailable on the free plan; EUR will be used as the default base irrespectively of what is passed herein
   public Map<String, BigDecimal> getConversionsForBase(String base) throws FixerException {
     try {
-      URI uri = URI.create("https://data.fixer.io/api/latest?access_key=" + apiKey + "&base=" + base);
+      
+      String scheme = paid ? "https://" : "http://";
+            
+      URI uri = URI.create(scheme + "data.fixer.io/api/latest?access_key=" + apiKey);
       HttpResponse<String> response = client.send(HttpRequest.newBuilder()
           .GET()
           .uri(uri)

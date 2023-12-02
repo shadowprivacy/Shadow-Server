@@ -75,9 +75,9 @@ import su.sres.shadowserver.configuration.MinioConfiguration;
 import su.sres.shadowserver.configuration.ScyllaDbConfiguration;
 import su.sres.shadowserver.configuration.dynamic.DynamicConfiguration;
 import su.sres.shadowserver.controllers.*;
+import su.sres.shadowserver.currency.CoinMarketCapClient;
 import su.sres.shadowserver.currency.CurrencyConversionManager;
 import su.sres.shadowserver.currency.FixerClient;
-import su.sres.shadowserver.currency.FtxClient;
 import su.sres.shadowserver.filters.ContentLengthFilter;
 import su.sres.shadowserver.filters.RemoteDeprecationFilter;
 import su.sres.shadowserver.filters.TimestampResponseFilter;
@@ -486,9 +486,10 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
       accountDatabaseCrawlerListeners.add(new AccountCleaner(accountsManager, localParams.getAccountExpirationPolicy(), localParams.getAccountLifetime()));
 
     HttpClient currencyClient = HttpClient.newBuilder().version(HttpClient.Version.HTTP_2).connectTimeout(Duration.ofSeconds(10)).build();
-    FixerClient fixerClient = new FixerClient(currencyClient, config.getPaymentsServiceConfiguration().getFixerApiKey());
-    FtxClient ftxClient = new FtxClient(currencyClient);
-    CurrencyConversionManager currencyManager = new CurrencyConversionManager(fixerClient, ftxClient, config.getPaymentsServiceConfiguration().getPaymentCurrencies());
+    FixerClient fixerClient = new FixerClient(currencyClient, config.getPaymentsServiceConfiguration().getFixerApiKey(),  config.getPaymentsServiceConfiguration().isFixerPaid());
+    CoinMarketCapClient coinMarketCapClient = new CoinMarketCapClient(currencyClient, config.getPaymentsServiceConfiguration().getCoinMarketCapApiKey(), config.getPaymentsServiceConfiguration().getCoinMarketCapCurrencyIds());
+    CurrencyConversionManager currencyManager = new CurrencyConversionManager(fixerClient, coinMarketCapClient,
+        cacheCluster, config.getPaymentsServiceConfiguration().getPaymentCurrencies(), Clock.systemUTC());
 
     AccountDatabaseCrawlerCache accountDatabaseCrawlerCache = new AccountDatabaseCrawlerCache(cacheCluster);
     AccountDatabaseCrawler accountDatabaseCrawler = new AccountDatabaseCrawler(accountsManager, accountDatabaseCrawlerCache, accountDatabaseCrawlerListeners, config.getAccountDatabaseCrawlerConfiguration().getChunkSize(), config.getAccountDatabaseCrawlerConfiguration().getChunkIntervalMs());
