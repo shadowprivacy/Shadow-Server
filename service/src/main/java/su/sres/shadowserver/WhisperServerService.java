@@ -194,7 +194,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     bootstrap.addCommand(new CreateGroupDbCommand());
     bootstrap.addCommand(new CreateGroupLogsDbCommand());
     bootstrap.addCommand(new CreateKeysDbCommand());
-    bootstrap.addCommand(new CreateMessageDbCommand());    
+    bootstrap.addCommand(new CreateMessageDbCommand());
     bootstrap.addCommand(new CreatePendingAccountCommand());
     bootstrap.addCommand(new CreatePendingsDbCommand());
     bootstrap.addCommand(new CreatePushChallengeDbCommand());
@@ -233,7 +233,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 
   @Override
   public void run(WhisperServerConfiguration config, Environment environment) throws Exception {
-    
+
     final Clock clock = Clock.systemUTC();
 
     UncaughtExceptionHandler.register();
@@ -342,24 +342,24 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 
     LocalParametersConfiguration localParams = config.getLocalParametersConfiguration();
     ServiceConfiguration serviceConfig = config.getServiceConfiguration();
-    ScyllaDbConfiguration scyllaConfig = config.getScyllaDbConfiguration();   
+    ScyllaDbConfiguration scyllaConfig = config.getScyllaDbConfiguration();
 
-    DynamoDbClient scyllaDbClient = ScyllaDbFromConfig.client(scyllaConfig);    
+    DynamoDbClient scyllaDbClient = ScyllaDbFromConfig.client(scyllaConfig);
 
     AmazonDynamoDBClientBuilder scyllaDbClientBuilder = AmazonDynamoDBClientBuilder
         .standard()
         .withEndpointConfiguration(new EndpointConfiguration(scyllaConfig.getEndpoint(), scyllaConfig.getRegion()))
         .withClientConfiguration(new ClientConfiguration().withClientExecutionTimeout(((int) scyllaConfig.getClientExecutionTimeout().toMillis()))
             .withRequestTimeout((int) scyllaConfig.getClientRequestTimeout().toMillis()))
-        .withCredentials(new AWSStaticCredentialsProvider(new BasicAWSCredentials(scyllaConfig.getAccessKey(), scyllaConfig.getAccessSecret())));     
+        .withCredentials(new AWSStaticCredentialsProvider(new BasicAWSCredentials(scyllaConfig.getAccessKey(), scyllaConfig.getAccessSecret())));
 
     DynamoDB groupsDynamoDb = new DynamoDB(scyllaDbClientBuilder.build());
     DynamoDB groupLogsDynamoDb = new DynamoDB(scyllaDbClientBuilder.build());
 
     DeletedAccounts deletedAccounts = new DeletedAccounts(scyllaDbClient, scyllaConfig.getDeletedAccountsTableName());
-    
+
     Accounts accounts = new Accounts(scyllaDbClient, scyllaConfig.getAccountsTableName(), scyllaConfig.getUserLoginTableName(), scyllaConfig.getMiscTableName(), scyllaConfig.getScanPageSize());
-    
+
     Usernames usernames = new Usernames(accountDatabase);
     ReservedUsernames reservedUsernames = new ReservedUsernames(accountDatabase);
     Profiles profiles = new Profiles(accountDatabase);
@@ -417,7 +417,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     // "apnSender-%d")).maxThreads(1).minThreads(1).build();
     ExecutorService gcmSenderExecutor = environment.lifecycle().executorService(name(getClass(), "gcmSender-%d")).maxThreads(1).minThreads(1).build();
     ExecutorService multiRecipientMessageExecutor = environment.lifecycle().executorService(name(getClass(), "multiRecipientMessage-%d")).minThreads(64).maxThreads(64).build();
-    
+
     ClientPresenceManager clientPresenceManager = new ClientPresenceManager(clientPresenceCluster, recurringJobExecutor, keyspaceNotificationDispatchExecutor);
 
     DynamicConfiguration dynamicConfig = new DynamicConfiguration();
@@ -488,25 +488,26 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
       accountDatabaseCrawlerListeners.add(new AccountCleaner(accountsManager, localParams.getAccountExpirationPolicy(), localParams.getAccountLifetime()));
 
     HttpClient currencyClient = HttpClient.newBuilder().version(HttpClient.Version.HTTP_2).connectTimeout(Duration.ofSeconds(10)).build();
-    FixerClient fixerClient = new FixerClient(currencyClient, config.getPaymentsServiceConfiguration().getFixerApiKey(),  config.getPaymentsServiceConfiguration().isFixerPaid());
+    FixerClient fixerClient = new FixerClient(currencyClient, config.getPaymentsServiceConfiguration().getFixerApiKey(), config.getPaymentsServiceConfiguration().isFixerPaid());
     CoinMarketCapClient coinMarketCapClient = new CoinMarketCapClient(currencyClient, config.getPaymentsServiceConfiguration().getCoinMarketCapApiKey(), config.getPaymentsServiceConfiguration().getCoinMarketCapCurrencyIds());
     CurrencyConversionManager currencyManager = new CurrencyConversionManager(fixerClient, coinMarketCapClient,
         cacheCluster, config.getPaymentsServiceConfiguration().getPaymentCurrencies(), Clock.systemUTC());
 
     AccountDatabaseCrawlerCache accountDatabaseCrawlerCache = new AccountDatabaseCrawlerCache(cacheCluster);
     AccountDatabaseCrawler accountDatabaseCrawler = new AccountDatabaseCrawler(accountsManager, accountDatabaseCrawlerCache, accountDatabaseCrawlerListeners, config.getAccountDatabaseCrawlerConfiguration().getChunkSize(), config.getAccountDatabaseCrawlerConfiguration().getChunkIntervalMs());
-       
+
     // apnSender.setApnFallbackManager(apnFallbackManager);
     environment.lifecycle().manage(new ApplicationShutdownMonitor());
     // environment.lifecycle().manage(apnFallbackManager);
     environment.lifecycle().manage(pubSubManager);
     environment.lifecycle().manage(messageSender);
-    environment.lifecycle().manage(accountDatabaseCrawler);    
+    environment.lifecycle().manage(accountDatabaseCrawler);
     environment.lifecycle().manage(remoteConfigsManager);
     environment.lifecycle().manage(messagesCache);
     environment.lifecycle().manage(messagePersister);
     environment.lifecycle().manage(clientPresenceManager);
-    if (serviceConfig.isPaymentsEnabled()) environment.lifecycle().manage(currencyManager);
+    if (serviceConfig.isPaymentsEnabled())
+      environment.lifecycle().manage(currencyManager);
     environment.lifecycle().manage(torExitNodeManager);
     environment.lifecycle().manage(asnManager);
 
@@ -520,7 +521,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 
     ServerSecretParams zkSecretParams = new ServerSecretParams(config.getZkConfig().getServerSecret());
     ServerZkProfileOperations zkProfileOperations = new ServerZkProfileOperations(zkSecretParams);
-    ServerZkAuthOperations zkAuthOperations = new ServerZkAuthOperations(zkSecretParams);    
+    ServerZkAuthOperations zkAuthOperations = new ServerZkAuthOperations(zkSecretParams);
 
     GroupsManager groupsManager = new GroupsManager(groupsScyllaDb, groupLogsScyllaDb);
 
@@ -568,14 +569,14 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
         , localParams, serviceConfig));
     environment.jersey().register(new KeysController(rateLimiters, keysScyllaDb, accountsManager, preKeyRateLimiter, rateLimitChallengeManager));
 
-    final List<Object> commonControllers = List.of(
+    final List<Object> coreCommonControllers = List.of(
         new AttachmentControllerV1(rateLimiters, minioConfig.getAccessKey(), minioConfig.getAccessSecret(), minioConfig.getAttachmentBucket(), minioConfig.getUri()),
         new AttachmentControllerV2(rateLimiters, minioConfig.getAccessKey(), minioConfig.getAccessSecret(), minioConfig.getRegion(), minioConfig.getAttachmentBucket()),
         new CertificateController(new CertificateGenerator(config.getDeliveryCertificate().getCertificate(), config.getDeliveryCertificate().getPrivateKey(), config.getDeliveryCertificate().getExpiresDays()), zkAuthOperations),
         new ChallengeController(rateLimitChallengeManager),
         new DeviceController(pendingDevicesManager, accountsManager, messagesManager, keysScyllaDb, rateLimiters, config.getMaxDevices(), localParams.getVerificationCodeLifetime()),
         new PlainDirectoryController(rateLimiters, accountsManager),
-        new MessageController(rateLimiters, messageSender, receiptSender, accountsManager, messagesManager, unsealedSenderRateLimiter, null, dynamicConfig, rateLimitChallengeManager, reportMessageManager, metricsCluster, declinedMessageReceiptExecutor, multiRecipientMessageExecutor),        
+        new MessageController(rateLimiters, messageSender, receiptSender, accountsManager, messagesManager, unsealedSenderRateLimiter, null, dynamicConfig, rateLimitChallengeManager, reportMessageManager, metricsCluster, declinedMessageReceiptExecutor, multiRecipientMessageExecutor),
         new ProfileController(clock, rateLimiters, accountsManager, profilesManager, usernamesManager, profileBadgeConverter, config.getBadges(), minioClient, profileCdnPolicyGenerator, profileCdnPolicySigner, minioConfig.getProfileBucket(), zkProfileOperations),
         new ProvisioningController(rateLimiters, provisioningManager),
         // new RemoteConfigController(remoteConfigsManager,
@@ -584,9 +585,15 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
         new SecureStorageController(storageCredentialsGenerator),
         new StickerController(rateLimiters, minioConfig.getAccessKey(), minioConfig.getAccessSecret(), minioConfig.getRegion(), minioConfig.getProfileBucket()),
         new DebugLogController(rateLimiters, minioConfig.getAccessKey(), minioConfig.getAccessSecret(), minioConfig.getRegion(), minioConfig.getDebuglogBucket()));
-    
-    if (serviceConfig.isPaymentsEnabled()) commonControllers.add(new PaymentsController(currencyManager, paymentsCredentialsGenerator));
-    
+
+    final List<Object> commonControllers = new ArrayList<>();
+    for (Object controller : coreCommonControllers) {
+      commonControllers.add(controller);
+    }
+
+    if (serviceConfig.isPaymentsEnabled())
+      commonControllers.add(new PaymentsController(currencyManager, paymentsCredentialsGenerator));
+
     for (Object controller : commonControllers) {
       environment.jersey().register(controller);
       webSocketEnvironment.jersey().register(controller);
