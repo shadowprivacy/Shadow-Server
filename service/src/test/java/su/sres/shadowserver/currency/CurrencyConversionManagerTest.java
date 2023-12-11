@@ -29,9 +29,9 @@ class CurrencyConversionManagerTest {
     FixerClient fixerClient = mock(FixerClient.class);
     CoinMarketCapClient coinMarketCapClient = mock(CoinMarketCapClient.class);
 
-    when(coinMarketCapClient.getSpotPrice(eq("FOO"), eq("USD"))).thenReturn(new BigDecimal("2.35"));
-    when(fixerClient.getConversionsForBase(eq("USD"))).thenReturn(Map.of(
-        "EUR", new BigDecimal("0.822876"),
+    when(coinMarketCapClient.getSpotPrice(eq("FOO"), eq("EUR"))).thenReturn(new BigDecimal("2.35"));
+    when(fixerClient.getConversionsForBase(eq("EUR"))).thenReturn(Map.of(
+        "USD", new BigDecimal("0.822876"),
         "FJD", new BigDecimal("2.0577"),
         "FKP", new BigDecimal("0.743446")));
 
@@ -45,8 +45,8 @@ class CurrencyConversionManagerTest {
     assertThat(conversions.getCurrencies().size()).isEqualTo(1);
     assertThat(conversions.getCurrencies().get(0).getBase()).isEqualTo("FOO");
     assertThat(conversions.getCurrencies().get(0).getConversions().size()).isEqualTo(4);
-    assertThat(conversions.getCurrencies().get(0).getConversions().get("USD")).isEqualTo(new BigDecimal("2.35"));
-    assertThat(conversions.getCurrencies().get(0).getConversions().get("EUR")).isEqualTo(new BigDecimal("1.9337586"));
+    assertThat(conversions.getCurrencies().get(0).getConversions().get("EUR")).isEqualTo(new BigDecimal("2.35"));
+    assertThat(conversions.getCurrencies().get(0).getConversions().get("USD")).isEqualTo(new BigDecimal("1.9337586"));
     assertThat(conversions.getCurrencies().get(0).getConversions().get("FJD")).isEqualTo(new BigDecimal("4.835595"));
     assertThat(conversions.getCurrencies().get(0).getConversions().get("FKP")).isEqualTo(new BigDecimal("1.7470981"));
   }
@@ -56,9 +56,9 @@ class CurrencyConversionManagerTest {
     FixerClient fixerClient = mock(FixerClient.class);
     CoinMarketCapClient coinMarketCapClient = mock(CoinMarketCapClient.class);
 
-    when(coinMarketCapClient.getSpotPrice(eq("FOO"), eq("USD"))).thenReturn(new BigDecimal("1.00000"));
-    when(fixerClient.getConversionsForBase(eq("USD"))).thenReturn(Map.of(
-        "EUR", new BigDecimal("0.200000"),
+    when(coinMarketCapClient.getSpotPrice(eq("FOO"), eq("EUR"))).thenReturn(new BigDecimal("1.00000"));
+    when(fixerClient.getConversionsForBase(eq("EUR"))).thenReturn(Map.of(
+        "USD", new BigDecimal("0.200000"),
         "FJD", new BigDecimal("3.00000"),
         "FKP", new BigDecimal("50.0000"),
         "CAD", new BigDecimal("700.000")));
@@ -73,8 +73,8 @@ class CurrencyConversionManagerTest {
     assertThat(conversions.getCurrencies().size()).isEqualTo(1);
     assertThat(conversions.getCurrencies().get(0).getBase()).isEqualTo("FOO");
     assertThat(conversions.getCurrencies().get(0).getConversions().size()).isEqualTo(5);
-    assertThat(conversions.getCurrencies().get(0).getConversions().get("USD")).isEqualTo(new BigDecimal("1"));
-    assertThat(conversions.getCurrencies().get(0).getConversions().get("EUR")).isEqualTo(new BigDecimal("0.2"));
+    assertThat(conversions.getCurrencies().get(0).getConversions().get("EUR")).isEqualTo(new BigDecimal("1"));
+    assertThat(conversions.getCurrencies().get(0).getConversions().get("USD")).isEqualTo(new BigDecimal("0.2"));
     assertThat(conversions.getCurrencies().get(0).getConversions().get("FJD")).isEqualTo(new BigDecimal("3"));
     assertThat(conversions.getCurrencies().get(0).getConversions().get("FKP")).isEqualTo(new BigDecimal("50"));
     assertThat(conversions.getCurrencies().get(0).getConversions().get("CAD")).isEqualTo(new BigDecimal("700"));
@@ -85,9 +85,9 @@ class CurrencyConversionManagerTest {
     FixerClient fixerClient = mock(FixerClient.class);
     CoinMarketCapClient coinMarketCapClient = mock(CoinMarketCapClient.class);
 
-    when(coinMarketCapClient.getSpotPrice(eq("FOO"), eq("USD"))).thenReturn(new BigDecimal("0.999999"));
-    when(fixerClient.getConversionsForBase(eq("USD"))).thenReturn(Map.of(
-        "EUR", new BigDecimal("1.000001"),
+    when(coinMarketCapClient.getSpotPrice(eq("FOO"), eq("EUR"))).thenReturn(new BigDecimal("0.999999"));
+    when(fixerClient.getConversionsForBase(eq("EUR"))).thenReturn(Map.of(
+        "USD", new BigDecimal("1.000001"),
         "FJD", new BigDecimal("0.000001"),
         "FKP", new BigDecimal("1")));
 
@@ -101,8 +101,8 @@ class CurrencyConversionManagerTest {
     assertThat(conversions.getCurrencies().size()).isEqualTo(1);
     assertThat(conversions.getCurrencies().get(0).getBase()).isEqualTo("FOO");
     assertThat(conversions.getCurrencies().get(0).getConversions().size()).isEqualTo(4);
-    assertThat(conversions.getCurrencies().get(0).getConversions().get("USD")).isEqualTo(new BigDecimal("0.999999"));
-    assertThat(conversions.getCurrencies().get(0).getConversions().get("EUR")).isEqualTo(new BigDecimal("0.999999999999"));
+    assertThat(conversions.getCurrencies().get(0).getConversions().get("EUR")).isEqualTo(new BigDecimal("0.999999"));
+    assertThat(conversions.getCurrencies().get(0).getConversions().get("USD")).isEqualTo(new BigDecimal("0.999999999999"));
     assertThat(conversions.getCurrencies().get(0).getConversions().get("FJD")).isEqualTo(new BigDecimal("0.000000999999"));
     assertThat(conversions.getCurrencies().get(0).getConversions().get("FKP")).isEqualTo(new BigDecimal("0.999999"));
 
@@ -113,9 +113,9 @@ class CurrencyConversionManagerTest {
     FixerClient fixerClient = mock(FixerClient.class);
     CoinMarketCapClient coinMarketCapClient = mock(CoinMarketCapClient.class);
 
-    when(coinMarketCapClient.getSpotPrice(eq("FOO"), eq("USD"))).thenReturn(new BigDecimal("2.35"));
-    when(fixerClient.getConversionsForBase(eq("USD"))).thenReturn(Map.of(
-        "EUR", new BigDecimal("0.822876"),
+    when(coinMarketCapClient.getSpotPrice(eq("FOO"), eq("EUR"))).thenReturn(new BigDecimal("2.35"));
+    when(fixerClient.getConversionsForBase(eq("EUR"))).thenReturn(Map.of(
+        "USD", new BigDecimal("0.822876"),
         "FJD", new BigDecimal("2.0577"),
         "FKP", new BigDecimal("0.743446")));
 
@@ -124,7 +124,7 @@ class CurrencyConversionManagerTest {
 
     manager.updateCacheIfNecessary();
 
-    when(coinMarketCapClient.getSpotPrice(eq("FOO"), eq("USD"))).thenReturn(new BigDecimal("3.50"));
+    when(coinMarketCapClient.getSpotPrice(eq("FOO"), eq("EUR"))).thenReturn(new BigDecimal("3.50"));
 
     manager.updateCacheIfNecessary();
 
@@ -133,8 +133,8 @@ class CurrencyConversionManagerTest {
     assertThat(conversions.getCurrencies().size()).isEqualTo(1);
     assertThat(conversions.getCurrencies().get(0).getBase()).isEqualTo("FOO");
     assertThat(conversions.getCurrencies().get(0).getConversions().size()).isEqualTo(4);
-    assertThat(conversions.getCurrencies().get(0).getConversions().get("USD")).isEqualTo(new BigDecimal("2.35"));
-    assertThat(conversions.getCurrencies().get(0).getConversions().get("EUR")).isEqualTo(new BigDecimal("1.9337586"));
+    assertThat(conversions.getCurrencies().get(0).getConversions().get("EUR")).isEqualTo(new BigDecimal("2.35"));
+    assertThat(conversions.getCurrencies().get(0).getConversions().get("USD")).isEqualTo(new BigDecimal("1.9337586"));
     assertThat(conversions.getCurrencies().get(0).getConversions().get("FJD")).isEqualTo(new BigDecimal("4.835595"));
     assertThat(conversions.getCurrencies().get(0).getConversions().get("FKP")).isEqualTo(new BigDecimal("1.7470981"));
   }
@@ -144,9 +144,9 @@ class CurrencyConversionManagerTest {
     FixerClient fixerClient = mock(FixerClient.class);
     CoinMarketCapClient coinMarketCapClient = mock(CoinMarketCapClient.class);
 
-    when(coinMarketCapClient.getSpotPrice(eq("FOO"), eq("USD"))).thenReturn(new BigDecimal("2.35"));
-    when(fixerClient.getConversionsForBase(eq("USD"))).thenReturn(Map.of(
-        "EUR", new BigDecimal("0.822876"),
+    when(coinMarketCapClient.getSpotPrice(eq("FOO"), eq("EUR"))).thenReturn(new BigDecimal("2.35"));
+    when(fixerClient.getConversionsForBase(eq("EUR"))).thenReturn(Map.of(
+        "USD", new BigDecimal("0.822876"),
         "FJD", new BigDecimal("2.0577"),
         "FKP", new BigDecimal("0.743446")));
 
@@ -157,7 +157,7 @@ class CurrencyConversionManagerTest {
 
     REDIS_CLUSTER_EXTENSION.getRedisCluster().useCluster(connection -> connection.sync().del(CurrencyConversionManager.COIN_MARKET_CAP_SHARED_CACHE_CURRENT_KEY));
 
-    when(coinMarketCapClient.getSpotPrice(eq("FOO"), eq("USD"))).thenReturn(new BigDecimal("3.50"));
+    when(coinMarketCapClient.getSpotPrice(eq("FOO"), eq("EUR"))).thenReturn(new BigDecimal("3.50"));
     manager.updateCacheIfNecessary();
 
     CurrencyConversionEntityList conversions = manager.getCurrencyConversions().orElseThrow();
@@ -165,8 +165,8 @@ class CurrencyConversionManagerTest {
     assertThat(conversions.getCurrencies().size()).isEqualTo(1);
     assertThat(conversions.getCurrencies().get(0).getBase()).isEqualTo("FOO");
     assertThat(conversions.getCurrencies().get(0).getConversions().size()).isEqualTo(4);
-    assertThat(conversions.getCurrencies().get(0).getConversions().get("USD")).isEqualTo(new BigDecimal("3.5"));
-    assertThat(conversions.getCurrencies().get(0).getConversions().get("EUR")).isEqualTo(new BigDecimal("2.880066"));
+    assertThat(conversions.getCurrencies().get(0).getConversions().get("EUR")).isEqualTo(new BigDecimal("3.5"));
+    assertThat(conversions.getCurrencies().get(0).getConversions().get("USD")).isEqualTo(new BigDecimal("2.880066"));
     assertThat(conversions.getCurrencies().get(0).getConversions().get("FJD")).isEqualTo(new BigDecimal("7.20195"));
     assertThat(conversions.getCurrencies().get(0).getConversions().get("FKP")).isEqualTo(new BigDecimal("2.602061"));
   }
@@ -176,9 +176,9 @@ class CurrencyConversionManagerTest {
     FixerClient fixerClient = mock(FixerClient.class);
     CoinMarketCapClient coinMarketCapClient = mock(CoinMarketCapClient.class);
 
-    when(coinMarketCapClient.getSpotPrice(eq("FOO"), eq("USD"))).thenReturn(new BigDecimal("2.35"));
-    when(fixerClient.getConversionsForBase(eq("USD"))).thenReturn(Map.of(
-        "EUR", new BigDecimal("0.822876"),
+    when(coinMarketCapClient.getSpotPrice(eq("FOO"), eq("EUR"))).thenReturn(new BigDecimal("2.35"));
+    when(fixerClient.getConversionsForBase(eq("EUR"))).thenReturn(Map.of(
+        "USD", new BigDecimal("0.822876"),
         "FJD", new BigDecimal("2.0577"),
         "FKP", new BigDecimal("0.743446")));
 
@@ -193,9 +193,9 @@ class CurrencyConversionManagerTest {
 
     manager.updateCacheIfNecessary();
 
-    when(coinMarketCapClient.getSpotPrice(eq("FOO"), eq("USD"))).thenReturn(new BigDecimal("3.50"));
-    when(fixerClient.getConversionsForBase(eq("USD"))).thenReturn(Map.of(
-        "EUR", new BigDecimal("0.922876"),
+    when(coinMarketCapClient.getSpotPrice(eq("FOO"), eq("EUR"))).thenReturn(new BigDecimal("3.50"));
+    when(fixerClient.getConversionsForBase(eq("EUR"))).thenReturn(Map.of(
+        "USD", new BigDecimal("0.922876"),
         "FJD", new BigDecimal("2.0577"),
         "FKP", new BigDecimal("0.743446")));
 
@@ -209,8 +209,8 @@ class CurrencyConversionManagerTest {
     assertThat(conversions.getCurrencies().size()).isEqualTo(1);
     assertThat(conversions.getCurrencies().get(0).getBase()).isEqualTo("FOO");
     assertThat(conversions.getCurrencies().get(0).getConversions().size()).isEqualTo(4);
-    assertThat(conversions.getCurrencies().get(0).getConversions().get("USD")).isEqualTo(new BigDecimal("2.35"));
-    assertThat(conversions.getCurrencies().get(0).getConversions().get("EUR")).isEqualTo(new BigDecimal("2.1687586"));
+    assertThat(conversions.getCurrencies().get(0).getConversions().get("EUR")).isEqualTo(new BigDecimal("2.35"));
+    assertThat(conversions.getCurrencies().get(0).getConversions().get("USD")).isEqualTo(new BigDecimal("2.1687586"));
     assertThat(conversions.getCurrencies().get(0).getConversions().get("FJD")).isEqualTo(new BigDecimal("4.835595"));
     assertThat(conversions.getCurrencies().get(0).getConversions().get("FKP")).isEqualTo(new BigDecimal("1.7470981"));
 
