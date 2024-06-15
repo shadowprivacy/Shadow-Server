@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SHADOW_SERVER_VERSION=2.6.0
+SHADOW_SERVER_VERSION=2.7.0
 
 USER_SH="shadow"
 USER_PATH="/home/${USER_SH}"
