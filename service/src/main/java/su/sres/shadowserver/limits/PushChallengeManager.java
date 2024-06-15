@@ -12,7 +12,7 @@ import org.apache.commons.lang3.StringUtils;
 import su.sres.shadowserver.push.APNSender;
 import su.sres.shadowserver.push.ApnMessage;
 import su.sres.shadowserver.push.ApnMessage.Type;
-import su.sres.shadowserver.push.GCMSender;
+import su.sres.shadowserver.push.FcmSender;
 import su.sres.shadowserver.push.GcmMessage;
 import su.sres.shadowserver.push.NotPushRegisteredException;
 import su.sres.shadowserver.storage.Account;
@@ -28,7 +28,7 @@ import static com.codahale.metrics.MetricRegistry.name;
 // TODO: iOS
 public class PushChallengeManager {
   // private final APNSender apnSender;
-  private final GCMSender gcmSender;
+  private final FcmSender fcmSender;
 
   private final PushChallengeScyllaDb pushChallengeScyllaDb;
 
@@ -46,11 +46,11 @@ public class PushChallengeManager {
 
   public PushChallengeManager(
       // final APNSender apnSender,
-      final GCMSender gcmSender,
+      final FcmSender fcmSender,
       final PushChallengeScyllaDb pushChallengeScyllaDb) {
 
     // this.apnSender = apnSender;
-    this.gcmSender = gcmSender;
+    this.fcmSender = fcmSender;
     this.pushChallengeScyllaDb = pushChallengeScyllaDb;
   }
 
@@ -72,7 +72,7 @@ public class PushChallengeManager {
       sent = true;
 
       if (StringUtils.isNotBlank(masterDevice.getGcmId())) {
-        gcmSender.sendMessage(new GcmMessage(masterDevice.getGcmId(), account.getUuid(), 0, GcmMessage.Type.RATE_LIMIT_CHALLENGE, Optional.of(tokenHex)));
+        fcmSender.sendMessage(new GcmMessage(masterDevice.getGcmId(), account.getUuid(), 0, GcmMessage.Type.RATE_LIMIT_CHALLENGE, Optional.of(tokenHex)));
         platform = ClientPlatform.ANDROID.name().toLowerCase();
       } else if (StringUtils.isNotBlank(masterDevice.getApnId())) {
         // TODO: iOS

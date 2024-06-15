@@ -67,7 +67,7 @@ import su.sres.shadowserver.limits.RateLimiters;
 import su.sres.shadowserver.mappers.RateLimitExceededExceptionMapper;
 // import su.sres.shadowserver.push.APNSender;
 import su.sres.shadowserver.push.ApnMessage;
-import su.sres.shadowserver.push.GCMSender;
+import su.sres.shadowserver.push.FcmSender;
 import su.sres.shadowserver.push.GcmMessage;
 import su.sres.shadowserver.recaptcha.RecaptchaClient;
 
@@ -119,7 +119,7 @@ class AccountControllerTest {
   private static Account senderHasStorage = mock(Account.class);
   private static Account senderTransfer = mock(Account.class);
   private static RecaptchaClient recaptchaClient = mock(RecaptchaClient.class);
-  private static GCMSender gcmSender = mock(GCMSender.class);
+  private static FcmSender fcmSender = mock(FcmSender.class);
   // private static APNSender apnSender = mock(APNSender.class);
   private static UsernamesManager usernamesManager = mock(UsernamesManager.class);
 
@@ -139,7 +139,7 @@ class AccountControllerTest {
       .setTestContainerFactory(new GrizzlyWebTestContainerFactory())
       .addResource(new AccountController(pendingAccountsManager, accountsManager, usernamesManager,
           abusiveHostRules, rateLimiters, turnTokenGenerator, new HashMap<>(),
-          recaptchaClient, gcmSender,
+          recaptchaClient, fcmSender,
           // apnSender,
           localParametersConfiguration, serviceConfiguration))
       .build();
@@ -234,7 +234,7 @@ class AccountControllerTest {
         senderHasStorage,
         senderTransfer,
         recaptchaClient,
-        gcmSender,
+        fcmSender,
         // apnSender,
         usernamesManager);
     
@@ -250,7 +250,7 @@ class AccountControllerTest {
 
     ArgumentCaptor<GcmMessage> captor = ArgumentCaptor.forClass(GcmMessage.class);
 
-    verify(gcmSender, times(1)).sendMessage(captor.capture());
+    verify(fcmSender, times(1)).sendMessage(captor.capture());
     assertThat(captor.getValue().getGcmId()).isEqualTo("mytoken");
     assertThat(captor.getValue().getData().isPresent()).isTrue();
     assertThat(captor.getValue().getData().get().length()).isEqualTo(32);
@@ -277,7 +277,7 @@ class AccountControllerTest {
         .contains("\"challenge\" : \"" + captor.getValue().getChallengeData().get() + "\"");
     assertThat(captor.getValue().isVoip()).isTrue();
 
-    verifyNoMoreInteractions(gcmSender);
+    verifyNoMoreInteractions(fcmSender);
   }
 
   @Test
@@ -301,7 +301,7 @@ class AccountControllerTest {
     assertThat(captor.getValue().getMessage()).contains("\"challenge\" : \"" + captor.getValue().getChallengeData().get() + "\"");
     assertThat(captor.getValue().isVoip()).isTrue();
 
-    verifyNoMoreInteractions(gcmSender);
+    verifyNoMoreInteractions(fcmSender);
   }
 
   @Test
@@ -325,7 +325,7 @@ class AccountControllerTest {
     assertThat(captor.getValue().getMessage()).contains("\"challenge\" : \"" + captor.getValue().getChallengeData().get() + "\"");
     assertThat(captor.getValue().isVoip()).isFalse();
 
-    verifyNoMoreInteractions(gcmSender);
+    verifyNoMoreInteractions(fcmSender);
   }
 
   @Test

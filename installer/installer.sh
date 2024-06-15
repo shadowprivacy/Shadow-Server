@@ -366,6 +366,10 @@ printf "\nOpening port 8080..."
 firewall-cmd --zone=public --permanent --add-port=8080/tcp
 firewall-cmd --reload
 
+echo "Creating Shadow environment file..."
+
+echo "GOOGLE_APPLICATION_CREDENTIALS=${SERVER_PATH}/config/google-services.json" > /etc/default/shadow_env
+
 echo "Creating and enabling Shadow service..."
 
 systemctl daemon-reload

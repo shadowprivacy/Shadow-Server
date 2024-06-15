@@ -117,6 +117,7 @@ import su.sres.shadowserver.providers.RedisClientFactory;
 import su.sres.shadowserver.providers.RedisClusterHealthCheck;
 import su.sres.shadowserver.providers.RedisHealthCheck;
 import su.sres.shadowserver.push.ClientPresenceManager;
+import su.sres.shadowserver.push.FcmSender;
 // import su.sres.shadowserver.push.APNSender;
 // import su.sres.shadowserver.push.ApnFallbackManager;
 import su.sres.shadowserver.push.GCMSender;
@@ -438,7 +439,8 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
     PubSubManager pubSubManager = new PubSubManager(pubsubClient, dispatchManager);
     // APNSender apnSender = new APNSender(apnSenderExecutor, accountsManager,
     // config.getApnConfiguration());
-    GCMSender gcmSender = new GCMSender(gcmSenderExecutor, accountsManager, config.getGcmConfiguration().getApiKey());
+    FcmSender fcmSender = new FcmSender(gcmSenderExecutor, accountsManager);
+    // GCMSender gcmSender = new GCMSender(gcmSenderExecutor, accountsManager, config.getGcmConfiguration().getApiKey(), config.getServiceConfiguration().getFcmSenderId());)
 
     RateLimiters rateLimiters = new RateLimiters(config.getLimitsConfiguration(), dynamicConfig.getLimits(), rateLimitersCluster);
     ProvisioningManager provisioningManager = new ProvisioningManager(pubSubManager);
@@ -458,7 +460,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 
 //    ApnFallbackManager       apnFallbackManager = new ApnFallbackManager(pushSchedulerCluster, apnSender, accountsManager);
 
-    MessageSender messageSender = new MessageSender(null, clientPresenceManager, messagesManager, gcmSender, null, pushLatencyManager);
+    MessageSender messageSender = new MessageSender(null, clientPresenceManager, messagesManager, fcmSender, null, pushLatencyManager);
     ReceiptSender receiptSender = new ReceiptSender(accountsManager, messageSender);
     TurnTokenGenerator turnTokenGenerator = new TurnTokenGenerator(config.getTurnConfiguration());
     LegacyRecaptchaClient legacyRecaptchaClient = new LegacyRecaptchaClient(config.getRecaptchaConfiguration().getSecret());
@@ -471,7 +473,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 
     PushChallengeManager pushChallengeManager = new PushChallengeManager(
         // apnSender,
-        gcmSender, pushChallengeScyllaDb);
+        fcmSender, pushChallengeScyllaDb);
     RateLimitChallengeManager rateLimitChallengeManager = new RateLimitChallengeManager(pushChallengeManager, transitionalRecaptchaClient, preKeyRateLimiter, unsealedSenderRateLimiter, rateLimiters, dynamicConfig.getRateLimitChallengeConfiguration());
 
     MessagePersister messagePersister = new MessagePersister(messagesCache, messagesManager, accountsManager, dynamicConfig, Duration.ofMinutes(config.getMessageCacheConfiguration().getPersistDelayMinutes()));
@@ -564,7 +566,7 @@ public class WhisperServerService extends Application<WhisperServerConfiguration
 
     // these should be common, but use @Auth DisabledPermittedAccount, which isn’t
     // supported yet on websocket
-    environment.jersey().register(new AccountController(pendingAccountsManager, accountsManager, usernamesManager, abusiveHostRules, rateLimiters, turnTokenGenerator, config.getTestDevices(), transitionalRecaptchaClient, gcmSender
+    environment.jersey().register(new AccountController(pendingAccountsManager, accountsManager, usernamesManager, abusiveHostRules, rateLimiters, turnTokenGenerator, config.getTestDevices(), transitionalRecaptchaClient, fcmSender
     // , apnSender
         , localParams, serviceConfig));
     environment.jersey().register(new KeysController(rateLimiters, keysScyllaDb, accountsManager, preKeyRateLimiter, rateLimitChallengeManager));

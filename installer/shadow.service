@@ -10,6 +10,8 @@ WorkingDirectory=/home/shadow/shadowserver/
 User=shadow
 Group=shadow
 
+EnvironmentFile=/etc/default/shadow_env
+
 ExecStart=/usr/local/bin/tmux new -d -s shadow bash -c 'java -jar ShadowServer-SHADOW_VER.jar server ./config/shadow.yml'
 
 # Specifies the maximum file descriptor number that can be opened by this process

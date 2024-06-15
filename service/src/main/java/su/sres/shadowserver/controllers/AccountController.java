@@ -67,7 +67,7 @@ import su.sres.shadowserver.providers.SystemCerts;
 import su.sres.shadowserver.providers.SystemCertsVersion;
 // import su.sres.shadowserver.push.APNSender;
 // import su.sres.shadowserver.push.ApnMessage;
-import su.sres.shadowserver.push.GCMSender;
+import su.sres.shadowserver.push.FcmSender;
 import su.sres.shadowserver.push.GcmMessage;
 import su.sres.shadowserver.recaptcha.RecaptchaClient;
 import su.sres.shadowserver.storage.AbusiveHostRule;
@@ -111,7 +111,7 @@ public class AccountController {
   private final TurnTokenGenerator turnTokenGenerator;
   private final Map<String, Integer> testDevices;
   private final RecaptchaClient recaptchaClient;
-  private final GCMSender gcmSender;
+  private final FcmSender fcmSender;
 //	  private final APNSender              apnSender;	
   private final LocalParametersConfiguration localParametersConfiguration;
   private final ServiceConfiguration serviceConfiguration;
@@ -119,7 +119,7 @@ public class AccountController {
   public AccountController(StoredVerificationCodeManager pendingAccounts, AccountsManager accounts,
       UsernamesManager usernames, AbusiveHostRules abusiveHostRules, RateLimiters rateLimiters,
       TurnTokenGenerator turnTokenGenerator, Map<String, Integer> testDevices,
-      RecaptchaClient recaptchaClient, GCMSender gcmSender,
+      RecaptchaClient recaptchaClient, FcmSender fcmSender,
       // APNSender apnSender,
       LocalParametersConfiguration localParametersConfiguration, ServiceConfiguration serviceConfiguration) {
     this.pendingAccounts = pendingAccounts;
@@ -130,7 +130,7 @@ public class AccountController {
     this.testDevices = testDevices;
     this.turnTokenGenerator = turnTokenGenerator;
     this.recaptchaClient = recaptchaClient;
-    this.gcmSender = gcmSender;
+    this.fcmSender = fcmSender;
 //    this.apnSender          = apnSender;		
     this.localParametersConfiguration = localParametersConfiguration;
     this.serviceConfiguration = serviceConfiguration;
@@ -165,7 +165,7 @@ public class AccountController {
     pendingAccounts.store(userLogin, presetVerificationCode.get());
 
     if ("fcm".equals(pushType)) {
-      gcmSender.sendMessage(new GcmMessage(pushToken, null, 0, GcmMessage.Type.CHALLENGE,
+      fcmSender.sendMessage(new GcmMessage(pushToken, null, 0, GcmMessage.Type.CHALLENGE,
           Optional.of(presetVerificationCode.get().getPushCode())));
 //    } else if ("apn".equals(pushType)) {
 //      apnSender.sendMessage(new ApnMessage(pushToken, null, 0, useVoip.orElse(true), ApnMessage.Type.CHALLENGE, Optional.of(presetVerificationCode.get().getPushCode())));

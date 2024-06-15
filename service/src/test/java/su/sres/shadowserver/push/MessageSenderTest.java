@@ -40,7 +40,7 @@ class MessageSenderTest {
 
   private ClientPresenceManager clientPresenceManager;
   private MessagesManager messagesManager;
-  private GCMSender gcmSender;
+  private FcmSender fcmSender;
   private APNSender apnSender;
   private MessageSender messageSender;
 
@@ -56,12 +56,12 @@ class MessageSenderTest {
 
     clientPresenceManager = mock(ClientPresenceManager.class);
     messagesManager = mock(MessagesManager.class);
-    gcmSender = mock(GCMSender.class);
+    fcmSender = mock(FcmSender.class);
     apnSender = mock(APNSender.class);
     messageSender = new MessageSender(mock(ApnFallbackManager.class),
         clientPresenceManager,
         messagesManager,
-        gcmSender,
+        fcmSender,
         apnSender,
         mock(PushLatencyManager.class));
 
@@ -83,7 +83,7 @@ class MessageSenderTest {
 
     assertTrue(envelopeArgumentCaptor.getValue().getEphemeral());
 
-    verifyNoInteractions(gcmSender);
+    verifyNoInteractions(fcmSender);
     verifyNoInteractions(apnSender);
   }
 
@@ -95,7 +95,7 @@ class MessageSenderTest {
     messageSender.sendMessage(account, device, message, true);
 
     verify(messagesManager, never()).insert(any(), anyLong(), any());
-    verifyNoInteractions(gcmSender);
+    verifyNoInteractions(fcmSender);
     verifyNoInteractions(apnSender);
   }
 
@@ -113,7 +113,7 @@ class MessageSenderTest {
 
     assertFalse(envelopeArgumentCaptor.getValue().getEphemeral());
     assertEquals(message, envelopeArgumentCaptor.getValue());
-    verifyNoInteractions(gcmSender);
+    verifyNoInteractions(fcmSender);
     verifyNoInteractions(apnSender);
   }
 
@@ -125,7 +125,7 @@ class MessageSenderTest {
     messageSender.sendMessage(account, device, message, false);
 
     verify(messagesManager).insert(ACCOUNT_UUID, DEVICE_ID, message);
-    verify(gcmSender).sendMessage(any());
+    verify(fcmSender).sendMessage(any());
     verifyNoInteractions(apnSender);
   }
 
@@ -137,7 +137,7 @@ class MessageSenderTest {
     messageSender.sendMessage(account, device, message, false);
 
     verify(messagesManager).insert(ACCOUNT_UUID, DEVICE_ID, message);
-    verifyNoInteractions(gcmSender);
+    verifyNoInteractions(fcmSender);
     verify(apnSender).sendMessage(any());
   }
 
@@ -149,7 +149,7 @@ class MessageSenderTest {
     messageSender.sendMessage(account, device, message, false);
 
     verify(messagesManager).insert(ACCOUNT_UUID, DEVICE_ID, message);
-    verifyNoInteractions(gcmSender);
+    verifyNoInteractions(fcmSender);
     verifyNoInteractions(apnSender);
   }
 

@@ -46,7 +46,7 @@ public class MessageSender implements Managed {
   private final ApnFallbackManager apnFallbackManager;
   private final ClientPresenceManager clientPresenceManager;
   private final MessagesManager messagesManager;
-  private final GCMSender gcmSender;
+  private final FcmSender fcmSender;
   private final APNSender apnSender;
   private final PushLatencyManager pushLatencyManager;
 
@@ -60,14 +60,14 @@ public class MessageSender implements Managed {
   public MessageSender(ApnFallbackManager apnFallbackManager,
       ClientPresenceManager clientPresenceManager,
       MessagesManager messagesManager,
-      GCMSender gcmSender,
+      FcmSender fcmSender,
       APNSender apnSender,
       PushLatencyManager pushLatencyManager) {
 
     this.apnFallbackManager = apnFallbackManager;
     this.clientPresenceManager = clientPresenceManager;
     this.messagesManager = messagesManager;
-    this.gcmSender = gcmSender;
+    this.fcmSender = fcmSender;
     this.apnSender = apnSender;
     this.pushLatencyManager = pushLatencyManager;
   }
@@ -135,7 +135,7 @@ public class MessageSender implements Managed {
     GcmMessage gcmMessage = new GcmMessage(device.getGcmId(), account.getUuid(),
         (int) device.getId(), GcmMessage.Type.NOTIFICATION, Optional.empty());
 
-    gcmSender.sendMessage(gcmMessage);
+    fcmSender.sendMessage(gcmMessage);
 
     RedisOperation.unchecked(() -> pushLatencyManager.recordPushSent(account.getUuid(), device.getId()));
   }
