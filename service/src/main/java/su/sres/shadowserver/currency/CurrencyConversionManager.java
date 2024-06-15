@@ -29,7 +29,7 @@ public class CurrencyConversionManager implements Managed {
   private static final Logger logger = LoggerFactory.getLogger(CurrencyConversionManager.class);
 
   @VisibleForTesting
-  static final Duration FIXER_REFRESH_INTERVAL = Duration.ofHours(2);
+  static final Duration FIXER_REFRESH_INTERVAL = Duration.ofHours(8);
 
   private static final Duration COIN_MARKET_CAP_REFRESH_INTERVAL = Duration.ofMinutes(5);
 
