@@ -368,7 +368,7 @@ firewall-cmd --reload
 
 echo "Creating Shadow environment file..."
 
-echo "GOOGLE_APPLICATION_CREDENTIALS=${SERVER_PATH}/config/google-services.json" > /etc/default/shadow_env
+echo "GOOGLE_APPLICATION_CREDENTIALS=${SERVER_PATH}/config/service-account.json" > /etc/default/shadow_env
 
 echo "Creating and enabling Shadow service..."
 
