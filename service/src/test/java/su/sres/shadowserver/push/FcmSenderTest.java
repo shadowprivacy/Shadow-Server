@@ -22,9 +22,9 @@ import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 
-import org.junit.Ignore;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import su.sres.shadowserver.storage.Account;
 import su.sres.shadowserver.storage.AccountsManager;
@@ -74,7 +74,7 @@ class FcmSenderTest {
     verify(firebaseMessaging).sendAsync(any(Message.class));
   }
 
-  @Ignore
+  @Disabled
   @Test
   void testSendUninstalled() {
     final UUID destinationUuid = UUID.randomUUID();
