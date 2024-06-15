@@ -2,26 +2,6 @@
 
 . ./lib.sh
 
-function download_sticker_pack
-{
-    PACK_ID=$1
-    PACK_MAX_ID=$2
-
-    mkdir -p ${DATA_PATH}/stickers/$PACK_ID/full
-
-    cd ${DATA_PATH}/stickers/$PACK_ID
-
-    wget https://cdn.signal.org/stickers/$PACK_ID/manifest.proto --no-check-certificate
-
-    cd ${DATA_PATH}/stickers/$PACK_ID/full
-
-    for i in $(seq 1 $PACK_MAX_ID)
-       do
-          wget https://cdn.signal.org/stickers/$PACK_ID/full/$i --no-check-certificate
-       done
-}
-
-
 # -------- MAIN ------------
 
 MINIO_DOMAIN=$1
