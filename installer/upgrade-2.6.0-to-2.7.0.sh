@@ -19,7 +19,7 @@ read -p "This will upgrade your Shadow server installation to the version ${SHAD
 - your current version of Shadow server is 2.6.0 
 - the Shadow server is stopped
 - the new jar file is in place
-- your default Google service account json file is downloaded, renamed to service-account.json and placed to /home/shadow/shadowserver/ 
+- your default Google service account json file is downloaded, renamed to service-account.json and placed to /home/shadow/shadowserver/config/ 
 - the configuration check command reports no errors? [y/n] >> " -n 1 -r
 if ! [[ $REPLY =~ ^[Yy]$ ]]
 then
