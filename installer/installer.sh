@@ -219,7 +219,7 @@ fi
 SCYLLA_PASSWORD_CONV=$(normalize_sql $SCYLLA_PASSWORD)
 echo "CREATE ROLE ${SCYLLA_USER} WITH PASSWORD = '${SCYLLA_PASSWORD_CONV}';" > scyllatext
 cqlsh -u cassandra -p cassandra -f scyllatext
-cqlsh -u cassandra -p cassandra -e "SELECT salted_hash from system_auth.roles WHERE role='${SCYLLA_USER}';" > scyllatext1
+cqlsh -u cassandra -p cassandra -e "SELECT salted_hash from system.roles WHERE role='${SCYLLA_USER}';" > scyllatext1
 sed -n '4p' scyllatext1 > scyllatext2
 SALTED_HASH=$(sed -e 's/\s\(.*\)/\1/' scyllatext2)
 
