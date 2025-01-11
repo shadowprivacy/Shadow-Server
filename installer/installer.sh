@@ -152,8 +152,8 @@ if [ $(check_app redis-server) -ne 0 ]
 then 
     dnf -y install epel-release
     dnf -y install redis
-    sed -i "s/^# cluster-enabled yes/cluster-enabled yes/" /etc/redis.conf
-    sed -i 's/^notify-keyspace-events ""/notify-keyspace-events K$lz/' /etc/redis.conf
+    sed -i "s/^# cluster-enabled yes/cluster-enabled yes/" /etc/redis/redis.conf
+    sed -i 's/^notify-keyspace-events ""/notify-keyspace-events K$lz/' /etc/redis/redis.conf
     systemctl enable redis
     systemctl start redis
     echo yes | redis-cli --cluster fix 127.0.0.1:6379
