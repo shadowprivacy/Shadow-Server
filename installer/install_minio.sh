@@ -113,8 +113,8 @@ su -c "${MINIO_PATH}/mc admin user add shadow ${MINIO_SERVICE_LOGIN} ${MINIO_SER
 
 echo "Setting up the access policy..."
 
-su -c "${MINIO_PATH}/mc admin policy add shadow shadow_policy ${MINIO_PATH}/shadow.json" - ${USER_SH}
-su -c "${MINIO_PATH}/mc admin policy set shadow shadow_policy user=${MINIO_SERVICE_LOGIN}" - ${USER_SH}
+su -c "${MINIO_PATH}/mc admin policy create shadow shadow_policy ${MINIO_PATH}/shadow.json" - ${USER_SH}
+su -c "${MINIO_PATH}/mc admin policy attach shadow shadow_policy --user ${MINIO_SERVICE_LOGIN}" - ${USER_SH}
 
 echo "Downloading stickers..."
 
