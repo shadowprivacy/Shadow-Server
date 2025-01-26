@@ -118,17 +118,26 @@ su -c "${MINIO_PATH}/mc admin policy attach shadow shadow_policy --user ${MINIO_
 
 echo "Downloading stickers..."
 
-download_sticker_pack fb535407d2f6497ec074df8b9c51dd1d 25
-download_sticker_pack 9acc9e8aba563d26a4994e69263e3b25 24
-download_sticker_pack e61fa0867031597467ccc036cc65d403 29
-download_sticker_pack cca32f5b905208b7d0f1e17f23fdc185 89
-download_sticker_pack cfc50156556893ef9838069d3890fe49 23
+if [ $(check_app dig) -ne 0 ] 
+then 
+    dnf -y install bind9.18-utils 
+else
+    echo "dig already installed" 
+fi
+
+SIGNAL_CDN_CNAME=$(dig cdn.signal.org cname +short)
+
+download_sticker_pack fb535407d2f6497ec074df8b9c51dd1d 25 ${SIGNAL_CDN_CNAME::-1}
+download_sticker_pack 9acc9e8aba563d26a4994e69263e3b25 24 ${SIGNAL_CDN_CNAME::-1}
+download_sticker_pack e61fa0867031597467ccc036cc65d403 29 ${SIGNAL_CDN_CNAME::-1}
+download_sticker_pack cca32f5b905208b7d0f1e17f23fdc185 89 ${SIGNAL_CDN_CNAME::-1}
+download_sticker_pack ccc89a05dc077856b57351e90697976c 24 ${SIGNAL_CDN_CNAME::-1}
 
 chown -R ${USER_SH} ${DATA_PATH}/stickers/
 
 cd ${DATA_PATH}/service
 
-wget https://check.torproject.org/torbulkexitlist --no-check-certificate
+wget https://shadowupdate.sres.su:19080/server/torbulkexitlist
 wget https://iptoasn.com/data/ip2asn-v4-u32.tsv.gz
 
 chown -R ${USER_SH} ${DATA_PATH}/service/

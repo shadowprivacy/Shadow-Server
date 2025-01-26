@@ -49,21 +49,34 @@ function extract_tld
     echo $(grep -o '[^.]*$' <<< "$1")
 }
 
+function check_app
+{
+    which "$1" > /dev/null 2> /dev/null
+    rs=$?
+    if [ $rs -eq 1 ]; 
+    then
+        echo 1
+    else 
+        echo 0
+    fi
+}
+
 function download_sticker_pack
 {
     PACK_ID=$1
     PACK_MAX_ID=$2
+    PACK_URL=$3
 
     mkdir -p ${DATA_PATH}/stickers/$PACK_ID/full
 
     cd ${DATA_PATH}/stickers/$PACK_ID
 
-    wget https://cdn.signal.org/stickers/$PACK_ID/manifest.proto --no-check-certificate
+    wget https://$PACK_URL/stickers/$PACK_ID/manifest.proto --no-check-certificate
 
     cd ${DATA_PATH}/stickers/$PACK_ID/full
 
     for i in $(seq 0 $PACK_MAX_ID)
        do
-          wget https://cdn.signal.org/stickers/$PACK_ID/full/$i --no-check-certificate
+          wget https://$PACK_URL/stickers/$PACK_ID/full/$i --no-check-certificate
        done
 }

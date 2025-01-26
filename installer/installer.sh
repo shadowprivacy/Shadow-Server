@@ -17,18 +17,6 @@ function error_quit
     exit 1
 }
 
-function check_app
-{
-    which "$1" > /dev/null 2> /dev/null
-    rs=$?
-    if [ $rs -eq 1 ]; 
-    then
-        echo 1
-    else 
-        echo 0
-    fi
-}
-
 # ----- MAIN ------- 
 
 check_root_and_exit
