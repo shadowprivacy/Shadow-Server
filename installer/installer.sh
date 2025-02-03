@@ -252,6 +252,8 @@ printf "\nEnter the domain name of your Shadow server as accessible by your Shad
 read SERVER_DOMAIN
 echo "Enter the domain name of your private cloud (Minio) server as accessible by your Shadow clients (e.g. minio.example.com) >> "
 read MINIO_DOMAIN
+echo "Enter the domain name of your NAT-T server as accessible by your Shadow clients (e.g. coturn.example.com) >> "
+read NATT_DOMAIN
 echo "Enter the domain name of your SFU frontend server as accessible by your Shadow clients (e.g. sfu.example.com) >> "
 read SFU_DOMAIN
 
@@ -273,7 +275,7 @@ printf "\n"
 read -p "Do you want to install Coturn now [y/n]? If you don't, you will have to do that manually on this or another machine, or use an external (perhaps public) service >> " -n 1 -r
 if [[ $REPLY =~ ^[Yy]$ ]]
 then
-    ./install_coturn.sh $SERVER_DOMAIN
+    ./install_coturn.sh $NATT_DOMAIN
 fi
 
 # ----- SFU -------

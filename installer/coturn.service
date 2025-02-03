@@ -3,15 +3,15 @@ Description=Coturn
 Documentation=https://github.com/coturn/coturn/wiki
 Wants=network-online.target
 After=network-online.target
-AssertFileIsExecutable=/usr/local/bin/turnserver
+AssertFileIsExecutable=/usr/bin/turnserver
 
 [Service]
-WorkingDirectory=/usr/local/
+WorkingDirectory=/usr/bin/
 
 User=shadow
 Group=shadow
 
-ExecStart=/usr/local/bin/turnserver -c /usr/local/etc/turnserver.conf
+ExecStart=/usr/bin/turnserver -c /etc/coturn/turnserver.conf
 
 # Let systemd restart this service always
 Restart=always
